@@ -1,0 +1,35 @@
+; Deimos - Doom RPG on retro consoles
+; Copyright (C) 2026 unfnknblvbl and contributors
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Free software under the GNU General Public License, version 2 or (at your
+; option) any later version, with NO WARRANTY: see the LICENSE file.
+
+; Doom RPG for the 3DS: the one vertex shader (the 3D view and the flat
+; pictures): position through mvp, the texture coordinate and the colour
+; as they are. Licence: GPL-2.0-or-later.
+;
+; Assembled by picasso (build.sh) and loaded by src/r3d.c, which sets the
+; uniform mvp (the projection times the view) before each batch and feeds
+; vertices of three attributes: v0 the position (x, y, z), v1 the texture
+; coordinate (u, v), v2 the colour (r, g, b, a, used as the light and the
+; tint by r3d.c's texture environment).
+.fvec mvp[4]                            ; the 4 x 4 matrix, one row a register
+.constf ones(1.0, 1.0, 1.0, 1.0)
+.out outpos position
+.out outtc0 texcoord0
+.out outclr color
+.alias inpos v0
+.alias intc v1
+.alias inclr v2
+; main: one vertex. Reads v0..v2 and mvp; writes the three outputs; uses r0.
+.proc main
+    mov r0.xyz, inpos                   ; (x, y, z, 1): the position as a point
+    mov r0.w, ones
+    dp4 outpos.x, mvp[0], r0            ; the clip-space position: mvp x r0
+    dp4 outpos.y, mvp[1], r0
+    dp4 outpos.z, mvp[2], r0
+    dp4 outpos.w, mvp[3], r0
+    mov outtc0, intc                    ; the texture coordinate, unchanged
+    mov outclr, inclr                   ; the colour, unchanged
+    end
+.end

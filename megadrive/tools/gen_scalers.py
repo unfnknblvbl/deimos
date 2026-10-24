@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+# Deimos - Doom RPG on retro consoles
+# Copyright (C) 2026 unfnknblvbl and contributors
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Free software under the GNU General Public License, version 2 or (at your
+# option) any later version, with NO WARRANTY: see the LICENSE file.
+
+"""
+Generates the wall "scalers": one small 68000 routine per on-screen wall
+height (1..MAX_H pixels), each drawing one byte-column (two screen columns)
+of a wall with that height. The vertical texture mapping is baked into the
+code, so drawing a row costs one move (12 cycles) and a new texel costs two
+lookups - instead of stepping a fixed-point coordinate per pixel.
+
+On entry:  a0 = texture column of the left pixel (64 bytes, colour indices)
+           a3 = texture column of the right pixel
+           a2 = remap tables, colour -> slot << 4 (left pixel)
+           a4 = remap tables, colour -> slot      (right pixel)
+           a1 = frame buffer column (row 0); rows are 4 bytes apart
+           a5 = the palettes of this tile column (VIEW_TH words: palette << 8)
+Uses d0, d1, d2.
+
+The remap tables of the three palettes are 256 bytes apart: d0's high
+byte holds the palette of the tile being drawn (loaded from a5 at the top
+and at every tile row whose palette differs from the last one, where the
+texel is looked up again).
+
+Geometry (render.s): a wall h pixels high has its top at HALF_H - 28 h / 64
+(eye 36 units up a 64-unit wall), rows 0..VIEW_H - 1 are on screen. The
+view is 208x128 (VIEW_H, HALF_H below must match src/render.s and md.h);
+a scaler's rows are clipped to it, so heights above VIEW_H cost no more
+than VIEW_H rows.
+
+(The renderer is now src/render.s, which calls the scalers through
+scaler_tab and, in low detail, dscaler_tab.)
+
+Output: build/gen/scalers.s   (the table `scaler_tab`: one address per height)
+Licence: GPL-2.0-or-later.
+"""
+import math
+import sys
+from pathlib import Path
+
+MAX_H = 320  # the tallest wall with a scaler, in pixels (render.s MAX_SCALER_H; taller walls go to the span loops)
+VIEW_H = 128  # view height in pixels (render.s VIEW_H)
+HALF_H = VIEW_H // 2  # the horizon row (render.s HALF_H)
+
+
+def rows(h):
+    """The rows a wall h pixels high covers on screen, clipped to the view:
+    [(y, v)] with v the texture row (0..63) at the centre of pixel row y.
+    """
+    top = HALF_H - 28.0 * h / 64.0  # eye 36 units up a 64-unit wall: 28 units of wall above the horizon
+    y0 = max(0, math.ceil(top))
+    y1 = min(VIEW_H, math.ceil(top + h))
+    out = []
+    for y in range(y0, y1):
+        v = int(math.floor((y + 0.5 - top) * 64.0 / h))
+        out.append((y, min(63, max(0, v))))
+    return out
+
+
+def body(h, how):
+    """the rows of one scaler: the texel looked up again where the texture
+    row changes, and at a tile row whose palette differs from the last
+    (d2: the palette << 8 in use; d0's high byte the same). how[1]: "or3"
+    the right pixel from the second texture column (a3), "or4" the same
+    texel (doubled).
+
+    h: the wall height. Returns the assembler lines (generated code). A
+    lookup leaves the byte to store in d1: the left pixel's slot << 4
+    or'ed with the right pixel's slot. (how[0] is not used.)
+    """
+    out = []
+
+    def lookup(v):
+        """Appends the lines that fetch texel row v of both columns and remap them into d1."""
+        out.append(f"    move.b {v}(a0),d0")
+        out.append("    move.b 0(a2,d0.w),d1")
+        if how[1] == "or3":
+            out.append(f"    move.b {v}(a3),d0")
+        out.append("    or.b 0(a4,d0.w),d1")
+
+    prev = None
+    for i, (y, v) in enumerate(rows(h)):
+        off = (y >> 3) * 2  # a5 holds one palette word per 8-row tile row
+        if i == 0:
+            out.append(f"    move.w {off}(a5),d2")
+            out.append("    move.w d2,d0")
+            lookup(v)
+            prev = v
+        elif y % 8 == 0:
+            if v != prev:                   # looked up anyway
+                out.append(f"    move.w {off}(a5),d2")
+                out.append("    move.w d2,d0")
+                lookup(v)
+                prev = v
+            else:                           # only if the palette changes
+                out.append(f"    cmp.w {off}(a5),d2")
+                out.append("    beq.s 1f")
+                out.append(f"    move.w {off}(a5),d2")
+                out.append("    move.w d2,d0")
+                lookup(v)
+                out.append("1:")
+        elif v != prev:
+            lookup(v)
+            prev = v
+        out.append(f"    move.b d1,{y * 4}(a1)")
+    return out
+
+
+def main():
+    """gen_scalers.py <out .s>: writes scaler_tab (an address per height
+    0..MAX_H; height 0 just returns) with the full-detail scalers, and
+    dscaler_tab with the low-detail ones (one texture column for both
+    pixels of a byte). build.sh rebuilds the file only when this script is
+    newer.
+    """
+    out = Path(sys.argv[1])
+    lines = ["| generated by tools/gen_scalers.py - do not edit", "    .section .assets", "    .balign 2",
+             "    .global scaler_tab", "scaler_tab:"]
+    for h in range(MAX_H + 1):
+        lines.append(f"    .long sc_{h}")
+    lines.append("sc_0:\n    rts")
+    for h in range(1, MAX_H + 1):
+        lines.append(f"sc_{h}:")
+        lines += body(h, ["    move.b 0(a2,d0.w),d1", "or3"])
+        lines.append("    rts")
+    # ---- double scalers, for low detail (every second column drawn two
+    # pixels wide): one texture column for both pixels of a byte;
+    # a2 / a4 = remap tables slot << 4 / slot ----
+    lines += ["    .global dscaler_tab", "dscaler_tab:"]
+    for h in range(MAX_H + 1):
+        lines.append(f"    .long dsc_{h}")
+    lines.append("dsc_0:\n    rts")
+    for h in range(1, MAX_H + 1):
+        lines.append(f"dsc_{h}:")
+        lines += body(h, ["    move.b 0(a2,d0.w),d1", "or4"])
+        lines.append("    rts")
+    out.write_text("\n".join(lines) + "\n")
+    print(f"scalers: heights 1..{MAX_H} (pairs of columns, and doubled columns)")
+
+
+if __name__ == "__main__":
+    main()

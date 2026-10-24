@@ -1,0 +1,95 @@
+diff --git a/platforms/libretro/libretro.cpp b/platforms/libretro/libretro.cpp
+index 5a81529..7d56272 100644
+--- a/platforms/libretro/libretro.cpp
++++ b/platforms/libretro/libretro.cpp
+@@ -1564,3 +1564,41 @@ static void check_variables(void)
+     for (unsigned i = 0; i < instance_count; i++)
+         apply_variables(instances[i].core);
+ }
++
++/* ---- debugging hooks for the Doom RPG SMS port's test harness ---- */
++u16 g_dbg_pc_ring[256];
++u8 g_dbg_pc_pos;
++u8 g_dbg_bank2;
++extern "C" RETRO_API void retro_dbg_regs(uint16_t* out)
++{
++    Processor::ProcessorState* st = core->GetProcessor()->GetState();
++    out[0] = st->PC->GetValue(); out[1] = st->SP->GetValue(); out[2] = st->AF->GetValue();
++    out[3] = st->BC->GetValue(); out[4] = st->DE->GetValue(); out[5] = st->HL->GetValue();
++    out[6] = st->IX->GetValue(); out[7] = st->IY->GetValue();
++}
++extern "C" RETRO_API void retro_dbg_pc_ring(uint16_t* out, uint8_t* pos)
++{
++    for (int i = 0; i < 256; i++) out[i] = g_dbg_pc_ring[i];
++    *pos = g_dbg_pc_pos;
++}
++
++u16 g_dbg_watch_lo, g_dbg_watch_hi;
++u32 g_dbg_watch_ring[64];
++u8 g_dbg_watch_pos;
++extern "C" RETRO_API void retro_dbg_watch(uint16_t lo, uint16_t hi)
++{
++    g_dbg_watch_lo = lo; g_dbg_watch_hi = hi; g_dbg_watch_pos = 0;
++}
++extern "C" RETRO_API void retro_dbg_watch_ring(uint32_t* out, uint8_t* pos)
++{
++    for (int i = 0; i < 64; i++) out[i] = g_dbg_watch_ring[i];
++    *pos = g_dbg_watch_pos;
++}
++
++u16 g_dbg_snap[256];
++u8 g_dbg_snap_pos;
++extern "C" RETRO_API void retro_dbg_watch_snap(uint16_t* out, uint8_t* pos)
++{
++    for (int i = 0; i < 256; i++) out[i] = g_dbg_snap[i];
++    *pos = g_dbg_snap_pos;
++}
+diff --git a/src/Memory_inline.h b/src/Memory_inline.h
+index f0134c5..5087317 100644
+--- a/src/Memory_inline.h
++++ b/src/Memory_inline.h
+@@ -42,8 +42,25 @@ inline u8 Memory::Read(u16 address)
+         return m_pBootromMemoryRule->PerformRead(address);
+ }
+ 
++extern u16 g_dbg_watch_lo, g_dbg_watch_hi;
++extern u32 g_dbg_watch_ring[64];
++extern u8 g_dbg_watch_pos;
+ inline void Memory::Write(u16 address, u8 value)
+ {
++    {
++        u16 a = address >= 0xE000 ? address - 0x2000 : address;
++        if (a >= g_dbg_watch_lo && a <= g_dbg_watch_hi && g_dbg_watch_hi)
++        {
++            extern u16 g_dbg_pc_ring[256], g_dbg_snap[256];
++            extern u8 g_dbg_pc_pos, g_dbg_snap_pos;
++            if (g_dbg_watch_pos == 0)
++            {
++                for (int i = 0; i < 256; i++) g_dbg_snap[i] = g_dbg_pc_ring[i];
++                g_dbg_snap_pos = g_dbg_pc_pos;
++            }
++            g_dbg_watch_ring[(g_dbg_watch_pos++) & 63] = ((u32)m_pProcessor->GetState()->PC->GetValue() << 16) | ((u32)(a - g_dbg_watch_lo) << 8) | value;
++        }
++    }
+     #if !defined(GS_DISABLE_DISASSEMBLER)
+     if (m_pProcessor->HasMemoryHooks(false))
+         m_pProcessor->CheckCpuAddressHooks(address, false);
+diff --git a/src/Processor.cpp b/src/Processor.cpp
+index b2edda0..30588ba 100644
+--- a/src/Processor.cpp
++++ b/src/Processor.cpp
+@@ -250,6 +250,14 @@ u32 Processor::RunFor(u32 tstates)
+ 
+         if (!m_bInputLastCycle && !m_bHalt)
+             TraceInstructionEvent(PC.GetValue());
++        if (!m_bInputLastCycle && !m_bHalt)
++        {
++            extern u16 g_dbg_pc_ring[256];
++            extern u8 g_dbg_pc_pos;
++            extern u8 g_dbg_bank2;
++            g_dbg_pc_ring[g_dbg_pc_pos++] = PC.GetValue();
++            (void)g_dbg_bank2;
++        }
+ 
+         if (m_bInputLastCycle)
+             ExecuteInputLastCycle();
