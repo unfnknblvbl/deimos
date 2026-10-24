@@ -12,8 +12,8 @@ offsets from the block's start), for the ports' tools and tests.
 The "campaign block" holds every map of the campaign:
   0    "MDCP", 6 u16 the number of maps
   8    u32 tex_bank, spr_bank, weapons, size (the textures' and sprites'
-       pixel data, the weapons' tables, the block's size); 24 u32 offset
-       and u32 size of one more shared table
+       pixel data, the weapons' tables, the block's size); 24 two u32
+       zeros (reserved)
   32 + 32 m   map m: u32 its pack's offset, u8 the original game's id,
               then its title (bytes 6..31, NUL-padded)
 A map's "pack": 8 six u16 (walls, textures, sprites, scenery, floor and

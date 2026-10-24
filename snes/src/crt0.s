@@ -250,7 +250,7 @@ irq_stub:
 ; 64 KB of battery-backed RAM; tools/snes_rom.py --fx fills in the rest)
 .segment "HEADER"
     .byte "00"                  ; $FFB0 maker code
-    .byte "DRPG"                ; game code
+    .byte "DEIM"                ; game code
     .byte 0                     ; $FFB6: the campaign block's bank
     .byte 0                     ; $FFB7: the resources' bank
     .byte 0, 0, 0, 0            ; reserved
@@ -289,7 +289,7 @@ irq_stub:
 ; fills in the size, the checksum and its complement)
 .segment "HEADER"
     .byte "00"                  ; $FFB0 maker code
-    .byte "DRPG"                ; game code
+    .byte "DEIM"                ; game code
     .byte 0                     ; $FFB6: the campaign block's bank (tools/snes_rom.py)
     .byte 0, 0, 0, 0, 0, 0      ; reserved
     .byte $00                   ; expansion RAM

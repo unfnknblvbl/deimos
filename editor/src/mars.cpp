@@ -6,34 +6,12 @@
 
 // Licence: GPL-2.0-or-later.
 //
-// The 32X cartridge's wrap and unwrap (see mars.h for the layout). Called
-// by rom.cpp.
+// The 32X cartridge's wrap (see mars.h for the layout). Called by rom.cpp.
 #include "mars.h"
 
 #include <cstring>
 
 namespace mars {
-
-// see mars.h
-bool is_32x(const Bytes &f)
-{
-    return f.size() > DATA_AT && memcmp(&f[0x100], "SEGA 32X", 8) == 0 && memcmp(&f[0x3C0], "MARS CHECK MODE", 15) == 0;
-}
-
-// see mars.h
-bool unwrap(const Bytes &f, Bytes &w, Bytes &image, std::string &err)
-{
-    if (!is_32x(f)) {
-        err = "this is not a 32X cartridge";
-        return false;
-    }
-    w.assign(f.begin(), f.begin() + DATA_AT);
-    image.assign(f.begin() + DATA_AT, f.end());
-    size_t size = 0x40000;              // (as the SNES build made it: a power of two, the rest $FF)
-    while (size < image.size()) size *= 2;
-    image.resize(size, 0xFF);
-    return true;
-}
 
 // see mars.h
 bool wrap(const Bytes &w, const Bytes &image, Bytes &out, std::string &err)

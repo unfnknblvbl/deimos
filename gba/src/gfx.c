@@ -49,7 +49,7 @@ u16 pad;                                /* the buttons (SNES bits), read once a 
 volatile u16 frame_count;               /* V-blanks since the start (irq_vblank) */
 u16 pad_read(void);                     /* plat.c */
 
-/* the SNES's resources (snes_ui_res.py: "DRPGRES1", entries) */
+/* the SNES's resources (snes_ui_res.py: "DEIMRES1", entries) */
 enum { E_FONT, E_FACES, E_ICONS, E_HUD_PAL, E_DLG_PAL, E_TITLE_TILES, E_TITLE_MAP, E_TITLE_PAL };
 static const u8 *res_base;              /* the resources' start (the bank in the header's $FFB7) */
 

@@ -7,8 +7,8 @@
 
 """
 Everything the live renderer needs for one level, as big-endian tables
-in build/gen/pack/ (tools/md_pack.py puts them in the ROM's data pack,
-where the editor can rewrite them):
+in build/gen/pack/ (tools/md_campaign.py puts each map's in the ROM's
+campaign block):
 
   r_walls      every wall segment: ax, az, bx, bz (world units, 64 per
                cell), texture slot, door/line slot (0xFF = a plain wall)
@@ -27,9 +27,8 @@ the console's measured DAC levels.
 
 (The list above names the C variables of render_data.h; the tables
 themselves are those of tables(), whose docstring gives each layout. A
-texture has up to 32 colours, not 16. The campaign ROM no longer goes
-through md_pack.py: tools/md_campaign.py calls tables() for each map and
-puts the results in the campaign block.)
+texture has up to 32 colours, not 16. tools/md_campaign.py calls tables()
+for each map and puts the results in the campaign block.)
 
 Terms: a "view" is what the player sees from one cell facing one way
 (32 x 32 cells x 4 facings); "PVS" (potentially visible set) is the list
@@ -52,7 +51,7 @@ from sprite_art import SpriteArt
 
 # the portal's textures (the walls of its line entities: eType 7 eSub 3,
 # tile 339, and eSub 4, tile 338) -> theirs once it is closed; both fixed in
-# the original's code. Shared with tools/source_container.py and the editor.
+# the original's code. The editor has the same table (editor/src/jar.cpp).
 PORTAL_CLOSED_TEX = {34: 92, 33: 91}
 MAX_SWAPS = 5  # the map pack header has room for 5 swap pairs
 

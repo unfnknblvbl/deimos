@@ -12,7 +12,7 @@
 //   draw_types_tab   the Thing types tab: the table of Project::defs;
 //   draw_text_tab    Text & scripts: the texts (Project::strings) and the
 //                    list of scripted cells (Project::events);
-//   draw_build_tab   Build: save buttons, the build's progress and log;
+//   draw_build_tab   Build: saving the project, making ROMs, the progress and log;
 //   draw_limits      Limits: what the level uses against each game's limits;
 //   draw_help        the "How to use" and "Settings" windows.
 // Texts: in a Project a '|' in a string is a line break in the game's dialog
@@ -278,45 +278,35 @@ void App::draw_text_tab()
     ImGui::EndChild();
 }
 
-// The Build tab: the save buttons (or, during a build, its progress and a
-// Cancel button), the thread count, and the build log.
+// The Build tab: saving the project and making ROMs of it (or, during a
+// build, its progress and a Cancel button), the console F5 plays on, the
+// thread count, and the build log.
 void App::draw_build_tab()
 {
-    para("Saving writes a new game ROM image: the editor rebuilds everything that depends on the level (the "
-         "renderer's data, sprites, texts, and the copy of the level the editor reads back) and keeps the "
-         "game code exactly as it is. It takes about ten seconds.");
+    para("The project (a %s file) holds every map you edit. Making a ROM builds everything that depends on the "
+         "maps (the renderer's data, sprites, texts) into the console's game code, which stays exactly as it "
+         "is; the graphics and sounds come from your DoomRPG.jar. The ROMs go to the export folder. A ROM "
+         "carries no copy of the project: keep the project to change the maps again.", PROJECT_EXT);
     if (building) {
         ImGui::ProgressBar(progress, ImVec2(-1, 0 * g_ui));   // full width, default height
         if (ImGui::Button("Cancel")) cancel = true;           // the builder checks it and stops
     } else {
         // the same actions as the File menu (app.cpp draw_menu)
-        if (ImGui::Button("Save ROM")) start_build(rom.path, false);
+        if (ImGui::Button("Save project")) save_or_ask();
         ImGui::SameLine();
-        if (ImGui::Button("Save ROM as...")) {
-            fd.open("Save ROM as", FileDialog::SAVE, rom_ext(), export_start(),
-                    [this](const std::string &f) { start_build(f, false); }, "my_level" + rom_ext());
-        }
+        if (ImGui::Button("Save project as...")) save_as();
         ImGui::SameLine();
-        if (ImGui::Button("Save and play (F5)")) start_build(rom.path, true);
+        if (ImGui::Button("Make ROMs...")) ask_new_rom(NR_PROJECT_ROMS);
         ImGui::SameLine();
-        // (unlike the File menu's version, this one does not ask which map a
-        // whole-game ROM should lose: the ROM's selected map, map 0 after
-        // loading, is replaced)
-        if (ImGui::Button("Put this level into the other console's ROM...")) {
-            fd.open("Pick the other console's ROM (it is not changed)", FileDialog::OPEN, ROM_EXTS,
-                    set.last_dir, [this](const std::string &f) {
-                        auto other = std::make_shared<Rom>();
-                        std::string err;
-                        if (!other->load(f, err)) {
-                            status = err;
-                            return;
-                        }
-                        std::string ext = console_ext(other->console);
-                        fd.open("Save the new ROM as", FileDialog::SAVE, ext, export_start(),
-                                [this, other](const std::string &out) { start_build(out, false, other.get()); },
-                                "my_level" + ext);
-                    });
-        }
+        if (ImGui::Button("Make a ROM and play (F5)")) make_and_play();
+    }
+    // F5's console (saved with the settings)
+    ImGui::SetNextItemWidth(260 * g_ui);
+    int pc = std::max(0, std::min((int)NEWROM_CONSOLES.size() - 1, set.play_console));
+    if (ImGui::BeginCombo("F5 plays on", NEWROM_CONSOLES[pc].label)) {
+        for (size_t k = 0; k < NEWROM_CONSOLES.size(); k++)
+            if (ImGui::Selectable(NEWROM_CONSOLES[k].label, (int)k == pc)) set.play_console = (int)k;
+        ImGui::EndCombo();
     }
     // the thread count for builds (saved with the settings; 0 = one per core)
     ImGui::SetNextItemWidth(100 * g_ui);
@@ -334,8 +324,10 @@ void App::draw_build_tab()
 }
 
 // The Limits tab: a table of counts (green; orange above 90% of the limit;
-// red over it or unknown) for the Master System and single-level Mega Drive
-// ROMs, or for a whole-game ROM's map. Recounted every frame.
+// red over it or unknown) for a map of the whole game (every console but
+// the Master System and Game Gear), or for a single level (the Master
+// System's), and whether the map fits the Master System. Recounted every
+// frame.
 void App::draw_limits()
 {
     para("What the level uses, against what the games allow. The map is a grid of 32 x 32 cells "
@@ -351,9 +343,9 @@ void App::draw_limits()
     // the size of the level blob the builder would make (levelblob.h): the
     // campaign's format or the single-level one; -1 if it can't be made
     int level_bytes = 0;
-    bool camp = rom.is_campaign();
+    bool camp = proj.campaign();
     try {
-        level_bytes = camp ? (int)make_level_blob_md(proj, {}, 0).size() : (int)make_level_blob(proj, false).size();
+        level_bytes = camp ? (int)make_level_blob_md(proj, {}, 0).size() : (int)make_level_blob(proj).size();
     } catch (...) {
         level_bytes = -1;
     }
@@ -375,8 +367,8 @@ void App::draw_limits()
         int n, max;
         const char *who;
     };
-    // the Master System and the Mega Drive game's single-level ROMs (the rows marked
-    // "both" hold for both; md::R_MAX_* are the Mega Drive renderer's limits)
+    // a single level: the Master System's limits, and the Mega Drive
+    // renderer's that every map must keep (md::R_MAX_*; "both": the two)
     Row rows[] = {{"thing types", (int)proj.defs.size(), 64, "both"},
                   {"things on the map", (int)proj.entities.size(), 192, "Master System"},
                   {"monsters", n_mon, 56, "both"},
@@ -391,7 +383,7 @@ void App::draw_limits()
                   {"props", props, 255, "Master System"},
                   {"wall textures (each decal makes one more)", tex_imgs, md::R_MAX_TEX, "Mega Drive"},
                   {"different sprites (things + props)", (int)tiles.size(), md::R_MAX_SPR, "Mega Drive"}};
-    // a map of the Mega Drive campaign: that game's own (larger) limits
+    // a map of the whole game: the Mega Drive game's own (larger) limits, which the other consoles share
     Row camp_rows[] = {{"thing types", (int)proj.defs.size(), 64, "Mega Drive"},
                        {"things on the map", (int)proj.entities.size(), 280, "Mega Drive"},
                        {"monsters", n_mon, 100, "Mega Drive"},
@@ -406,9 +398,13 @@ void App::draw_limits()
                        {"different sprites (things + props)", (int)tiles.size(), md::R_MAX_SPR, "Mega Drive"}};
     if (camp) {
         ImGui::Spacing();
-        para("This is one map of the whole game (%s). The Mega Drive game allows more on a map than the Master "
-             "System one, so this map may not fit the Master System.", map_label(rom.map).c_str());
+        para("This is one map of the whole game (%s). The Mega Drive game, and every console but the Master "
+             "System and Game Gear, allows more on a map than the Master System one.", map_label(cur_map).c_str());
     }
+    // the Master System and Game Gear take the map as a single level
+    std::string sms = check_limits(proj.single_level());
+    if (sms.empty()) ImGui::TextColored(ImVec4(0.6f, 1, 0.6f, 1), "It fits the Master System and the Game Gear.");
+    else ImGui::TextColored(ImVec4(1, 0.8f, 0.3f, 1), "Too big for the Master System and the Game Gear: %s", sms.c_str());
     float tw = std::min(ImGui::GetContentRegionAvail().x, reading_width());   // the table's width
     if (ImGui::BeginTable("lim", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingFixedFit,
                           ImVec2(tw, 0))) {
@@ -438,12 +434,11 @@ void App::draw_limits()
         ImGui::EndTable();
     }
     ImGui::Spacing();
-    // (note: the ROM sizes in this text, 4 MB Master System and 2 MB Mega
-    // Drive, differ from the README's: 1 MB, and 2 MB / 4 MB for a whole-game ROM)
     para("Pictures: 64 x 64 pixels, 16 colours each (sprites: 15 + transparent). On the Mega Drive a "
                        "wall texture may have at most 32 colours with its decals. On the Master System at most 96 "
                        "bytes of walls and props can be visible from one spot; the build says where if a view has "
-                       "too much. The ROM grows as needed: up to 4 MB on the Master System, 2 MB on the Mega Drive.");
+                       "too much. The ROM grows as needed: up to 1 MB on the Master System, 4 MB on the Mega Drive "
+                       "for all the maps together.");
     if (!preview_err.empty()) ImGui::TextColored(ImVec4(1, 0.4f, 0.3f, 1), "Problem: %s", preview_err.c_str());
 }
 
@@ -459,9 +454,10 @@ void App::draw_help()
     ImGui::SetNextWindowSize(ImVec2(640 * g_ui, 520 * g_ui), ImGuiCond_Appearing);
     if (ImGui::BeginPopupModal("How to use", nullptr)) {
         para(
-            "WHOLE-GAME ROMS\n"
-            "Mega Drive version 0.0.6 and later hold all ten maps. The Map menu lists them: pick the one to edit. "
-            "Saving writes that map back and keeps the others.\n\n"
+            "PROJECTS\n"
+            "You edit a project (a .deimos file): File > New project from the original game makes one of the "
+            "maps you tick, the whole game or a single level. The Map menu lists its maps: pick the one to edit. "
+            "File > Save project keeps all of them.\n\n"
             "MAP\n"
             "The level is a 32x32 grid. Dark cells are solid, light cells are floor. Use the tools on the left:\n"
             " - Wall / Floor: click or drag to fill or dig out cells. The walls around floor cells are made for you, "
@@ -482,13 +478,15 @@ void App::draw_help()
             "and how the Master System and the Mega Drive will show it. Double-click a colour to change it.\n\n"
             "TEXT\n"
             "Text & scripts lists every text; edit them freely. The | character (a new line in the box) breaks a line.\n\n"
-            "SAVING\n"
-            "File > Save ROM as... writes a new ROM. Keep the original ROM safe. F5 saves and starts your emulator "
-            "(set it in Help > Settings). File > Put this level into the other console's ROM makes the Master "
-            "System level play on the Mega Drive, or the other way round.\n\n"
+            "MAKING ROMS\n"
+            "File > Make ROMs of this project makes a ROM for every console you tick, in the export folder: every "
+            "map, in order (the Master System and Game Gear: the map you are editing). F5 makes one for the "
+            "console chosen in the Build tab and starts your emulator (set it in Help > Settings). The ROMs carry "
+            "no copy of the project: keep the project.\n\n"
             "THE ORIGINAL GAME\n"
             "File > Import a level from the original game reads your copy of DoomRPG.jar, lists its maps and "
-            "converts the one you pick (map, things, scripts, texts and art).\n\n"
+            "converts the one you pick (map, things, scripts, texts and art) in place of the map you are "
+            "editing.\n\n"
             "LIMITS\n"
             "The Limits tab shows what the level uses against what the games allow.");
         if (ImGui::Button("Close")) ImGui::CloseCurrentPopup();
@@ -526,8 +524,8 @@ void App::draw_help()
         para("Made by AI");
         para("Directed by unfnknblvbl");
         para("Master System, Game Gear, Mega Drive, SNES, SNES SuperFX, 3DS, 32X, Game Boy Color, Game Boy Advance. "
-             "GPL-2.0-or-later. Uses Dear ImGui (MIT), SDL2 (zlib), nlohmann/json (MIT), stb (public domain), "
-             "ZX0 by Einar Saukas (BSD-3) and the DejaVu fonts. An unofficial fan project, not made or endorsed by "
+             "GPL-2.0-or-later. Uses Dear ImGui (MIT), SDL2 (zlib), nlohmann/json (MIT), stb (public domain) "
+             "and the DejaVu fonts. An unofficial fan project, not made or endorsed by "
              "id Software, ZeniMax or Microsoft; it needs your own copy of Doom RPG.");
         if (ImGui::Button("Close")) {
             set.save();   // write the settings file now

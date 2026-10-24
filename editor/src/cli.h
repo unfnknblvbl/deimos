@@ -10,6 +10,6 @@
 // main_cli_only.cpp (always).
 #pragma once
 // Runs one command-line job. argc/argv: main()'s, so argv[1] is the job
-// ("--selftest", "--new-rom"...) and the rest its arguments. Prints its
+// ("--new-project", "--make-rom"...) and the rest its arguments. Prints its
 // results and errors and returns the process exit code (0 = success).
 int run_cli(int argc, char **argv);

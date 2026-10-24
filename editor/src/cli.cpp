@@ -5,51 +5,44 @@
 // option) any later version, with NO WARRANTY: see the LICENSE file.
 
 // Command-line functions of the editor (no window needed):
-//   --selftest ROM                 unpack the level, rebuild the ROM from it, and
-//                                  check the result is byte-for-byte the same
-//   --rebuild ROM OUT              rebuild a ROM from its own copy of the level
-//   --transfer FROM_ROM TO_ROM OUT put the level of one ROM into another
-//                                  (e.g. a Master System level into the Mega Drive game)
-//   --render ROM X Z FACING OUT.ppm [small] [low] [solid]   the Master System view from a cell
-//   --export ROM DIR / --import DIR ROM OUT   the level as plain files
-// and also (see run_cli and its usage text at the bottom):
-//   --version, --rom-maps ROM, --new-rom JAR CONSOLE OUT [maps...],
-//   --maps JAR, --from-game JAR MAP ROM OUT, and two for the tests,
-//   --demo-map ROM OUT [JSON], --dump-assets JAR CONSOLE VERSION DIR and
-//   --dump-strings JAR CONSOLE DIR.
-//   --map N anywhere picks the map of a campaign ROM to work on.
+//   --new-rom JAR CONSOLE OUT [maps...]    a ROM straight from the original game
+//   --new-project JAR [maps...] OUT        a new project (.deimos) of the game's maps
+//   --make-rom JAR PROJECT CONSOLE OUT     a ROM of a project's maps
+//   --project-maps PROJECT                 a project's maps, numbered
+//   --selftest PROJECT                     save / reopen check of a project
+//   --export PROJECT DIR / --import DIR OUT [PROJECT]   a map as plain files
+//   --render PROJECT X Z FACING OUT.ppm [small] [low] [solid]   the Master System view from a cell
+//   --from-game JAR MAP PROJECT OUT        one of the game's maps in place of a project's
+//   --maps JAR                             the original game's maps, and which fit
+// and for the tests --demo-map PROJECT OUT [JSON], --check-forms JAR,
+// --dump-assets JAR CONSOLE VERSION DIR and --dump-strings JAR CONSOLE DIR
+// (see run_cli and its usage text at the bottom). --map N anywhere picks
+// the map of a project to work on (default 0).
 // Licence: GPL-2.0-or-later.
 //
 // run_cli() is called by main() in main.cpp and main_cli_only.cpp. Each job
 // is a static function here that returns the process exit code (0 success,
 // 1 failure; 2 from run_cli for a usage error). They use the editor's core:
-// Rom (rom.h) to load, rebuild and save ROMs, Project (project.h) for the
-// level, the Master System builder and renderer (sms_build.h), the jar
-// reader and converter (jar.h), engine::new_rom (engine.h) and
-// export_project / import_project (projectio.h).
-//
-// A "campaign" ROM holds the whole game (the Mega Drive format, also used by
-// the SNES, 3DS, 32X, GBC and GBA); Rom::maps lists its maps and Rom::map
-// says which one read_project / build work on.
+// project files (projectfile.h) for the maps, the Master System builder
+// and renderer (sms_build.h), the jar reader and converter (jar.h), the
+// ROM makers (engine.h) and export_project / import_project (projectio.h).
 #include "cli.h"
-#include "colour.h"
-#include "container.h"
-#include "edit.h"
-#include "jar.h"
 #include "assets.h"
+#include "edit.h"
 #include "engine.h"
+#include "jar.h"
 #include "levelblob.h"
+#include "projectfile.h"
 #include "projectio.h"
 #include "rom.h"
 #include "sms_build.h"
 
 #include <algorithm>
-#include <chrono>
-#include <vector>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 // Prints "error: e" to stderr and returns 1 (the failure exit code), so a
 // job can end with "return fail(err);".
@@ -59,42 +52,22 @@ static int fail(const std::string &e)
     return 1;
 }
 
-static int g_map = -1;   // --map N: which map of a Mega Drive campaign ROM
-                         // -1 = not given (map 0 is used; --selftest then checks every map)
+static int g_map = 0;   // --map N: which map of a project (default the first)
 
-// Loads a ROM file, selecting map g_map (or 0) if it is a campaign ROM.
-// Output: rom; false and err if the file can't be read or --map is out of range.
-static bool load_rom(const char *path, Rom &rom, std::string &err)
+// Reads a project file and checks that it has map g_map. False with err.
+static bool load(const char *path, ProjectFile &pf, std::string &err)
 {
-    rom.map = std::max(0, g_map);
-    if (!rom.load(path, err)) return false;
-    if (g_map >= (int)rom.maps.size() && rom.is_campaign()) {
-        err = "this ROM has " + std::to_string(rom.maps.size()) + " maps (0.." + std::to_string(rom.maps.size() - 1) + ")";
+    if (!load_project_file(path, pf, err)) return false;
+    if (g_map < 0 || g_map >= (int)pf.maps.size()) {
+        err = std::string(path) + " has " + std::to_string(pf.maps.size()) + " maps (--map 0.." +
+              std::to_string(pf.maps.size() - 1) + ")";
         return false;
     }
     return true;
 }
 
-// Loads a ROM and reads its level (the selected map's) into p. On failure
-// prints the error and returns false.
-static bool load(const char *path, Rom &rom, Project &p)
-{
-    std::string err;
-    if (!load_rom(path, rom, err)) {
-        fail(err);
-        return false;
-    }
-    if (!editable(rom.console)) {   // (rom.h: these consoles' ROMs are made locked, not edited)
-        fail(std::string("the ") + rom.console_name() + " version isn't edited (its ROMs leave out the editable "
-             "level); use the Mega Drive, 3DS, Game Boy Color or Game Boy Advance ROM, and --make-rom");
-        return false;
-    }
-    if (!rom.read_project(p, err)) {
-        fail(err);
-        return false;
-    }
-    return true;
-}
+// Opens the jar at path into jar; false with err when it isn't Doom RPG's.
+static bool open_jar(const char *path, Jar &jar, std::string &err) { return jar.open(path, err); }
 
 // Build options whose log goes to stdout, indented (one thread per core,
 // no progress callback, no cancel).
@@ -105,149 +78,170 @@ static BuildOptions verbose()
     return o;
 }
 
-static int selftest_one(const char *path);
-
-// --selftest ROM: proves that unpacking and repacking changes nothing. A
-// campaign ROM without --map is tested map by map (selftest_one with g_map
-// set to each); otherwise the one level. Returns 1 if any test failed.
-static int selftest(const char *path)
+// The console named by its CONSOLE_KEYS name (sms, gg, md, snes, snesfx,
+// 3ds, 32x, gbc, gba); false when the name is none of them.
+static bool console_of(const char *name, Console &c)
 {
-    Rom rom;
-    std::string err;
-    if (!load_rom(path, rom, err)) return fail(err);
-    if (!rom.is_campaign() || g_map >= 0) return selftest_one(path);   // one level, or the map asked for
-    int bad = 0;
-    for (size_t m = 0; m < rom.maps.size(); m++) {
-        std::cout << "== map " << m << ": " << rom.maps[m].name << " (" << rom.maps[m].title << ")\n";
-        g_map = (int)m;
-        bad += selftest_one(path);   // reloads the ROM with map m selected
-    }
-    g_map = -1;
-    std::cout << (bad ? "CAMPAIGN SELFTEST FAILED\n" : "campaign selftest ok\n");
-    return bad ? 1 : 0;
+    for (int i = 0; i < 9; i++)
+        if (!strcmp(name, CONSOLE_KEYS[i])) {
+            c = (Console)i;
+            return true;
+        }
+    return false;
 }
 
-// The selftest of one level (map g_map of a campaign ROM). Three checks:
-// 1. the level survives project.json: to_json, from_json, to_json again
-//    gives the same text;
-// 2. rebuilding the ROM from the level gives the same bytes as the file
-//    (if not, the rebuilt ROM is written to ROM.rebuilt for comparison);
-// 3. the level read back from the rebuilt ROM is the same.
-// Returns 0 if all pass, else 1.
-static int selftest_one(const char *path)
+// --new-rom JAR CONSOLE OUT [maps...]: a ROM from the original game with
+// the console's engine file (engine::new_rom): the Master System and Game
+// Gear with one map (the UAC Base by default), the others with the given
+// maps in order (the whole game by default). Writes it to OUT.
+static int new_rom(const char *jar_path, const char *console, const char *outp, std::vector<std::string> maps)
 {
-    Rom rom;
-    Project p;
-    if (!load(path, rom, p)) return 1;
-    std::cout << rom.console_name() << " ROM, " << rom.data.size() / 1024 << " KB\n";
-    std::cout << "level: " << p.walls.size() << " walls, " << p.entities.size() << " things, " << p.events.size()
-              << " scripts, " << p.strings.size() << " texts, " << p.textures.size() << " textures, "
-              << p.sprites.size() << " sprites, " << p.shapes.size() << " drawings\n";
-    int bad = 0;   // checks failed
+    Jar jar;
     std::string err;
-    // 1. through JSON and back
-    Project p2;
-    bool jok = p2.from_json(p.to_json(), err) && p2.to_json() == p.to_json();
-    std::cout << "project survives save/load: " << (jok ? "yes" : "NO " + err) << "\n";
-    bad += !jok;
-    // 2. rebuild a copy of the ROM from the level, timed
-    auto t0 = std::chrono::steady_clock::now();
-    Rom r2 = rom;
+    Console c;
+    if (!console_of(console, c)) return fail(std::string("unknown console ") + console + " (sms gg md snes snesfx 3ds 32x gbc gba)");
+    if (!open_jar(jar_path, jar, err)) return fail(err);
+    // no maps named: the UAC Base ("intro") for the one-map consoles, else
+    // the whole game in playing order
+    if (maps.empty()) maps = sms_family(c) ? std::vector<std::string>{"intro"} : engine::campaign_maps(jar);
+    Rom rom;
     BuildStats st;
-    BuildOptions o = verbose();
-    if (!r2.build(p, o, st, err)) return fail(err);
-    double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-    // compare byte by byte; past the end of the shorter one counts as $EE
-    // (so a size difference shows up as differing bytes)
-    size_t n = std::max(rom.data.size(), r2.data.size()), diff = 0, first = 0;
-    for (size_t i = 0; i < n; i++) {
-        u8 a = i < rom.data.size() ? rom.data[i] : 0xEE, b = i < r2.data.size() ? r2.data[i] : 0xEE;
-        if (a != b) {
-            if (!diff) first = i;   // the first difference's offset
-            diff++;
+    std::vector<std::string> notes;
+    // build the ROM in memory, then save it
+    if (!engine::new_rom(c, jar, maps, rom, verbose(), st, err, &notes) || !rom.save(outp, err)) return fail(err);
+    for (auto &n : notes) std::cout << "note: " << n << "\n";
+    size_t n = sms_family(c) ? 1 : maps.size();
+    std::cout << "wrote " << outp << " (" << rom.console_name() << ", " << st.rom_kb << " KB, " << n
+              << (n == 1 ? " map" : " maps") << ")\n";
+    return 0;
+}
+
+// --new-project JAR [maps...] OUT: a project of the game's maps, in the
+// order given (the whole game by default), written to OUT.
+static int new_project(const char *jar_path, std::vector<std::string> maps, const char *outp)
+{
+    Jar jar;
+    std::string err;
+    if (!open_jar(jar_path, jar, err)) return fail(err);
+    if (maps.empty()) maps = engine::campaign_maps(jar);
+    ProjectFile pf;
+    std::vector<std::string> notes;
+    if (!engine::new_project(jar, maps, pf, verbose(), err, &notes) || !save_project_file(outp, pf, err))
+        return fail(err);
+    for (auto &n : notes) std::cout << "note: " << n << "\n";
+    std::cout << "wrote " << outp << " (" << pf.maps.size() << (pf.maps.size() == 1 ? " map)\n" : " maps)\n");
+    return 0;
+}
+
+// --make-rom JAR PROJECT CONSOLE OUT: a ROM for CONSOLE of the project's
+// maps (engine::project_rom; the Master System and Game Gear take map
+// --map N), the graphics and sounds from the jar.
+static int make_rom(const char *jar_path, const char *in, const char *console, const char *outp)
+{
+    Jar jar;
+    std::string err;
+    Console c;
+    if (!console_of(console, c)) return fail(std::string("unknown console ") + console + " (sms gg md snes snesfx 3ds 32x gbc gba)");
+    ProjectFile pf;
+    if (!load(in, pf, err) || !open_jar(jar_path, jar, err)) return fail(err);
+    std::string why = engine::why_not(c, pf, g_map);
+    if (!why.empty()) return fail(why);
+    Rom out;
+    BuildStats st;
+    if (!engine::project_rom(c, jar, pf, g_map, out, verbose(), st, err) || !out.save(outp, err)) return fail(err);
+    std::cout << "wrote " << outp << " (" << console_name(c) << ", " << st.rom_kb << " KB; the maps use "
+              << st.used_kb << " KB, " << st.free_kb << " KB free)\n";
+    return 0;
+}
+
+// --project-maps PROJECT: the project's maps, numbered as --map takes them.
+static int project_maps(const char *path)
+{
+    ProjectFile pf;
+    std::string err;
+    if (!load_project_file(path, pf, err)) return fail(err);
+    for (size_t m = 0; m < pf.maps.size(); m++) {
+        auto &pm = pf.maps[m];
+        std::cout << m << ": " << pm.info.name << " (" << pm.info.title << "), map id " << pm.info.id << ", "
+                  << pm.level.walls.size() << " walls, " << pm.level.entities.size() << " things, "
+                  << pm.level.events.size() << " scripts\n";
+    }
+    return 0;
+}
+
+// --selftest PROJECT: proves that saving and opening a project changes
+// nothing. Three checks: every map survives its JSON (to_json, from_json,
+// to_json again gives the same text); the project written again is the
+// same bytes as the file; and read back, every map has the same JSON and
+// drawings. Returns 1 if any failed.
+static int selftest(const char *path)
+{
+    ProjectFile pf;
+    std::string err;
+    Bytes file;
+    if (!read_file(path, file, err) || !read_project_file(file, pf, err)) return fail(err);
+    int bad = 0;   // checks failed
+    for (auto &pm : pf.maps) {
+        Project p2;
+        bool ok = p2.from_json(pm.level.to_json(), err) && p2.to_json() == pm.level.to_json();
+        if (!ok) {
+            std::cout << pm.info.name << ": the level does not survive its JSON " << err << "\n";
+            bad++;
         }
     }
-    std::cout << "rebuilt in " << secs << " s: " << r2.data.size() / 1024 << " KB, ";
-    if (diff) {
-        char buf[64];
-        snprintf(buf, sizeof buf, "%zu bytes differ (first at $%06zX)", diff, first);
-        std::cout << buf << "\n";
-        bad++;
-        std::string out = std::string(path) + ".rebuilt";
-        r2.save(out, err);   // kept for a binary diff
-        std::cout << "(written to " << out << ")\n";
-    } else
-        std::cout << "byte-for-byte identical to the original\n";
-    // 3. the rebuilt ROM's level, compared as JSON
-    Project p3;
-    bool rok = r2.read_project(p3, err) && p3.to_json() == p.to_json();
-    std::cout << "rebuilt ROM reads back: " << (rok ? "yes" : "NO") << "\n";
+    std::cout << pf.maps.size() << " maps survive their JSON: " << (bad ? "NO" : "yes") << "\n";
+    ProjectFile pf2 = pf;
+    Bytes again;
+    if (!write_project_file(pf2, again, err)) return fail(err);
+    bool same = again == file;
+    std::cout << "written again: " << again.size() / 1024 << " KB, "
+              << (same ? "byte-for-byte the same as the file" : "DIFFERENT from the file") << "\n";
+    bad += !same;
+    ProjectFile pf3;
+    bool rok = read_project_file(again, pf3, err) && pf3.maps.size() == pf.maps.size();
+    for (size_t m = 0; rok && m < pf.maps.size(); m++)
+        rok = pf3.maps[m].level.to_json() == pf.maps[m].level.to_json() &&
+              pf3.maps[m].info.name == pf.maps[m].info.name && pf3.maps[m].level.shapes.size() == pf.maps[m].level.shapes.size();
+    std::cout << "reads back: " << (rok ? "yes" : "NO " + err) << "\n";
     bad += !rok;
     std::cout << (bad ? "SELFTEST FAILED\n" : "selftest ok\n");
     return bad ? 1 : 0;
 }
 
-// --rebuild ROM OUT: rebuilds the ROM from its own level and writes OUT.
-static int rebuild(const char *in, const char *outp)
+// --check-forms JAR (tests): every map of the game read as a single level
+// (as the Master System has it) must equal the same map read in the whole
+// game's form and turned into a single level (Project::single_level, which
+// the Master System and Game Gear ROMs of a project use). Prints each
+// map's result; 1 if any differs.
+static int check_forms(const char *jar_path)
 {
-    Rom rom;
-    Project p;
-    if (!load(in, rom, p)) return 1;
-    BuildStats st;
+    Jar jar;
     std::string err;
-    if (!rom.build(p, verbose(), st, err) || !rom.save(outp, err)) return fail(err);
-    std::cout << "wrote " << outp << " (" << st.rom_kb << " KB)\n";
-    return 0;
+    if (!open_jar(jar_path, jar, err)) return fail(err);
+    int bad = 0;
+    for (auto &m : jar.maps()) {
+        Project single, camp;
+        if (!import_map(jar, m, single, err) || !import_map(jar, m, camp, err, nullptr, true)) return fail(err);
+        bool same = camp.single_level().to_json() == single.to_json();
+        std::cout << m << ": " << (same ? "the same" : "DIFFERENT") << "\n";
+        bad += !same;
+    }
+    return bad ? 1 : 0;
 }
 
-// --lock ROM OUT: ROM rebuilt without its editable copy (BuildOptions::
-// locked): smaller, and the editor can't open it afterwards
-static int lock(const char *in, const char *outp)
-{
-    Rom rom;
-    Project p;
-    if (!load(in, rom, p)) return 1;
-    BuildStats st;
-    std::string err;
-    BuildOptions o = verbose();
-    o.locked = true;
-    size_t before = rom.data.size();
-    if (!rom.build(p, o, st, err) || !rom.save(outp, err)) return fail(err);
-    std::cout << "wrote " << outp << " (locked, " << st.rom_kb << " KB; " << (long)(before - rom.data.size()) / 1024
-              << " KB smaller, " << st.free_kb << " KB free for maps)\n";
-    return 0;
-}
-
-// --transfer FROM TO OUT: the level of ROM `from` built into a copy of ROM
-// `to` (which may be another console's), written to OUT. With --map N, N
-// picks the map in both ROMs (FROM's level, and the map of TO it replaces).
-// (`unused` is never used.)
-static int transfer(const char *from, const char *to, const char *outp)
-{
-    Rom a, b;
-    Project p, unused;
-    if (!load(from, a, p)) return 1;
-    std::string err;
-    if (!load_rom(to, b, err)) return fail(err);
-    BuildStats st;
-    if (!b.build(p, verbose(), st, err) || !b.save(outp, err)) return fail(err);
-    std::cout << "the " << a.console_name() << " level is now in " << outp << " (" << b.console_name() << ", "
-              << st.rom_kb << " KB)\n";
-    return 0;
-}
-
-// --render ROM X Z FACING OUT.ppm [small] [low] [solid]: draws the view
-// from cell (x, z) facing f (0 north, 1 east, 2 south, 3 west) with the
-// Master System's renderer (sms_model.cpp), doors closed, and writes it as
-// a binary PPM (P6). small / low / solid: the game's smaller view, low
-// detail and solid walls settings. x, z and f are not range-checked.
+// --render PROJECT X Z FACING OUT.ppm [small] [low] [solid]: draws the view
+// of map --map N from cell (x, z) facing f (0 north, 1 east, 2 south, 3
+// west) with the Master System's renderer (sms_model.cpp), doors closed,
+// and writes it as a binary PPM (P6). small / low / solid: the game's
+// smaller view, low detail and solid walls settings. x, z and f are not
+// range-checked.
 static int render(const char *in, int x, int z, int f, const char *outp, bool small, bool low, bool solid)
 {
-    Rom rom;
-    Project p;
-    if (!load(in, rom, p)) return 1;
-    sms::LevelData d;
+    ProjectFile pf;
     std::string err;
+    if (!load(in, pf, err)) return fail(err);
+    Project p = pf.maps[g_map].level.single_level().for_console("sms");
+    sms::LevelData d;
     BuildOptions o;
     // the Master System builder's level data (true: with the visibility
     // lists the renderer needs; the editor's preview passes false)
@@ -262,16 +256,17 @@ static int render(const char *in, int x, int z, int f, const char *outp, bool sm
 }
 
 // A small custom map made only with the editor's own operations, with
-// changed art and text: proves that "edit -> build -> play" works end to
-// end on either console (used by the tests).
-// --demo-map ROM OUT [JSON]: keeps the ROM's art, thing types and texts,
-// replaces the map, builds and writes OUT, and (optionally) the level's
-// project.json to JSON.
+// changed art and text: proves that "edit -> make a ROM -> play" works end
+// to end on any console (used by the tests).
+// --demo-map PROJECT OUT [JSON]: map --map N keeps its art, thing types
+// and texts, gets a new map and a new text, and the project is written to
+// OUT (and, optionally, that map's JSON to JSON).
 static int demo_map(const char *in, const char *outp, const char *json_out)
 {
-    Rom rom;
-    Project p;
-    if (!load(in, rom, p)) return 1;
+    ProjectFile pf;
+    std::string err;
+    if (!load(in, pf, err)) return fail(err);
+    Project &p = pf.maps[g_map].level;
     // an empty map: every cell solid, nothing in it
     std::fill(p.wall.begin(), p.wall.end(), 1);
     std::fill(p.static_block.begin(), p.static_block.end(), 0);
@@ -280,6 +275,7 @@ static int demo_map(const char *in, const char *outp, const char *json_out)
     p.entities.clear();
     p.lines.clear();
     p.events.clear();
+    p.thin.clear();
     int tex = p.textures.count(48) ? 48 : p.textures.begin()->first;   // texture 48 if there is one, else the first
     // a 3x3 start room (z 20..22), a corridor north (x 15, z 14..19) and a
     // 7x5 room at the end (z 9..13)
@@ -335,22 +331,19 @@ static int demo_map(const char *in, const char *outp, const char *json_out)
             for (int i = 0; i < 16; i++) std::swap(sp.pal[i].r, sp.pal[i].b);
         }
     p.drop_unused_shapes();   // the old drawing, if nothing else uses it
-    BuildStats st;
-    std::string err;
-    if (!rom.build(p, verbose(), st, err) || !rom.save(outp, err)) return fail(err);
+    if (!save_project_file(outp, pf, err)) return fail(err);
     if (json_out) std::ofstream(json_out) << p.to_json();
     std::cout << "wrote " << outp << "\n";
     return 0;
 }
 
-// the maps in the original game, and whether each fits the consoles
 // --maps JAR: converts each map in the jar and prints its counts and whether
 // it fits the Master System's limits (check_limits), plus the converter's notes.
 static int list_maps(const char *jar_path)
 {
     Jar jar;
     std::string err;
-    if (!jar.open(jar_path, err)) return fail(err);
+    if (!open_jar(jar_path, jar, err)) return fail(err);
     for (auto &m : jar.maps()) {
         Project p;
         std::vector<std::string> notes;
@@ -361,43 +354,70 @@ static int list_maps(const char *jar_path)
         std::string lim = check_limits(p);   // "" if it fits the Master System
         std::cout << m << " (" << Jar::map_title(m) << "): " << p.walls.size() << " walls, " << p.entities.size()
                   << " things, " << p.events.size() << " scripts, " << p.strings.size() << " texts -> "
-                  << (lim.empty() ? "fits" : lim) << "\n";
+                  << (lim.empty() ? "fits the Master System" : lim) << "\n";
         for (auto &n : notes) std::cout << "    " << n << "\n";
     }
     return 0;
 }
 
-// --from-game JAR MAP ROM OUT: converts one map of the original game
-// (e.g. "reactor") and builds it into a copy of ROM (in place of its level,
-// or of map --map N of a campaign ROM), written to OUT.
+// Puts level p in place of map m of pf, as the App's "Import a level"
+// does: the map keeps its place (its name, so the exits to it still lead
+// there, and its id), takes the level's title, and the level becomes a
+// map of the whole game in that place.
+static void replace_map(ProjectFile &pf, int m, Project p)
+{
+    ProjectMap &pm = pf.maps[m];
+    if (p.campaign()) p.map_id = pm.info.id;
+    pm.info.title = p.name;
+    pm.level = std::move(p);
+}
+
+// --from-game JAR MAP PROJECT OUT: one map of the original game (e.g.
+// "reactor") in place of map --map N of the project, written to OUT.
 static int from_game(const char *jar_path, const char *map, const char *in, const char *outp)
 {
     Jar jar;
     Project p;
     std::vector<std::string> notes;
     std::string err;
-    if (!jar.open(jar_path, err) || !import_map(jar, map, p, err, &notes)) return fail(err);
+    ProjectFile pf;
+    if (!load(in, pf, err) || !open_jar(jar_path, jar, err) || !import_map(jar, map, p, err, &notes, true))
+        return fail(err);
     for (auto &n : notes) std::cout << "note: " << n << "\n";
-    Rom rom;
-    if (!load_rom(in, rom, err)) return fail(err);
-    BuildStats st;
-    if (!rom.build(p, verbose(), st, err) || !rom.save(outp, err)) return fail(err);
-    std::cout << "wrote " << outp << " (" << rom.console_name() << ", " << st.rom_kb << " KB)\n";
+    replace_map(pf, g_map, std::move(p));
+    if (!save_project_file(outp, pf, err)) return fail(err);
+    std::cout << "wrote " << outp << "\n";
     return 0;
 }
 
-// --rom-maps ROM: a campaign ROM's maps, numbered as --map takes them.
-static int list_rom_maps(const char *path)
+// --export PROJECT DIR: map --map N of the project as a level folder
+// (project.json, map.json, the drawings and every picture as a PNG).
+static int export_dir(const char *in, const char *dir)
 {
-    Rom rom;
+    ProjectFile pf;
     std::string err;
-    if (!load_rom(path, rom, err)) return fail(err);
-    if (!rom.is_campaign()) {
-        std::cout << "one level (no campaign)\n";
-        return 0;
-    }
-    for (size_t m = 0; m < rom.maps.size(); m++)
-        std::cout << m << ": " << rom.maps[m].name << " (" << rom.maps[m].title << "), map id " << rom.maps[m].id << "\n";
+    if (!load(in, pf, err)) return fail(err);
+    if (!export_project(pf.maps[g_map].level, pf.maps[g_map].info, dir, err)) return fail(err);
+    std::cout << "exported " << pf.maps[g_map].info.title << " to " << dir << "\n";
+    return 0;
+}
+
+// --import DIR OUT [PROJECT]: a level folder (as --export writes it) as a
+// new one-map project in OUT; with PROJECT, in place of its map --map N
+// (the rest of PROJECT kept), written to OUT.
+static int import_dir(const char *dir, const char *outp, const char *into)
+{
+    ProjectFile pf;
+    Project p;
+    std::string err;
+    MapInfo info{"level", "", 1};   // (a folder without map.json: one level of its own)
+    if (into && !load(into, pf, err)) return fail(err);
+    if (!import_project(dir, p, info, err)) return fail(err);
+    if (info.title.empty()) info.title = p.name;
+    if (into) replace_map(pf, g_map, std::move(p));
+    else pf.maps.push_back({info, std::move(p)});
+    if (!save_project_file(outp, pf, err)) return fail(err);
+    std::cout << "wrote " << outp << "\n";
     return 0;
 }
 
@@ -409,7 +429,7 @@ static int dump_assets(const char *jar_path, const char *console, const char *ve
 {
     Jar jar;
     std::string err;
-    if (!jar.open(jar_path, err)) return fail(err);
+    if (!open_jar(jar_path, jar, err)) return fail(err);
     assets::Blocks b;   // block name -> bytes
     bool md = !strcmp(console, "md");
     // the SNES family's resources (the last argument: the edition's label,
@@ -446,7 +466,7 @@ static int dump_strings(const char *jar_path, const char *console, const char *d
 {
     Jar jar;
     std::string err;
-    if (!jar.open(jar_path, err)) return fail(err);
+    if (!open_jar(jar_path, jar, err)) return fail(err);
     bool sms = !strcmp(console, "sms"), gg = !strcmp(console, "gg");
     int bad = 0;   // maps skipped
     for (auto &m : engine::campaign_maps(jar)) {
@@ -455,7 +475,7 @@ static int dump_strings(const char *jar_path, const char *console, const char *d
         Project q = p.for_console(console);
         Bytes b;
         try {   // (the builders' own calls: sms_build.cpp's, md_build.cpp's make_cmap)
-            b = sms || gg ? make_strings_blob(q, false, gg) : make_strings_blob_md(q);
+            b = sms || gg ? make_strings_blob(q, gg) : make_strings_blob_md(q);
         } catch (const std::exception &e) {
             fail(m + ": " + e.what());
             bad++;
@@ -467,61 +487,11 @@ static int dump_strings(const char *jar_path, const char *console, const char *d
     return bad ? 1 : 0;
 }
 
-// --make-rom JAR ROM CONSOLE OUT: a ROM for CONSOLE made from ROM's maps
-// (engine::make_rom_for; the graphics and sounds from the jar); locked for
-// the consoles the editor doesn't edit
-static int make_rom(const char *jar_path, const char *in, const char *console, const char *outp)
-{
-    Jar jar;
-    std::string err;
-    if (!jar.open(jar_path, err)) return fail(err);
-    Rom src;
-    Project p;
-    if (!load(in, src, p)) return 1;
-    int k = -1;   // the console named, by its CONSOLE_KEYS name
-    for (int i = 0; i < 9; i++)
-        if (!strcmp(console, CONSOLE_KEYS[i])) k = i;
-    if (k < 0) return fail(std::string("unknown console ") + console + " (sms gg md snes snesfx 3ds 32x gbc gba)");
-    Rom out;
-    BuildStats st;
-    if (!engine::make_rom_for((Console)k, jar, src, p, out, verbose(), st, err) || !out.save(outp, err)) return fail(err);
-    std::cout << "wrote " << outp << " (" << console_name((Console)k) << (editable((Console)k) ? "" : ", locked") << ")\n";
-    return 0;
-}
-
-// a new ROM from the original game: the Master System with one map (UAC Base
-// by default), the Mega Drive with the given maps in order (all by default)
-// --new-rom JAR CONSOLE OUT [maps...]: makes a ROM from the jar with the
-// console's engine file (engines/) (engine::new_rom) and writes it to OUT.
-static int new_rom(const char *jar_path, const char *console, const char *outp, std::vector<std::string> maps)
-{
-    Jar jar;
-    std::string err;
-    if (!jar.open(jar_path, err)) return fail(err);
-    // the console name; any name not listed (including "md") means the Mega Drive
-    Console c = !strcmp(console, "sms") ? Console::SMS : !strcmp(console, "gg") ? Console::GG
-                : !strcmp(console, "snes") ? Console::SNES : !strcmp(console, "snesfx") ? Console::SNESFX
-                : !strcmp(console, "3ds") ? Console::N3DS : !strcmp(console, "32x") ? Console::MARS
-                : !strcmp(console, "gbc") ? Console::GBC : !strcmp(console, "gba") ? Console::GBA : Console::MD;
-    // no maps named: the UAC Base ("intro") for the one-map consoles, else
-    // the whole game in playing order
-    if (maps.empty()) maps = sms_family(c) ? std::vector<std::string>{"intro"} : engine::campaign_maps(jar);
-    Rom rom;
-    BuildStats st;
-    std::vector<std::string> notes;
-    // build the ROM in memory, then save it
-    if (!engine::new_rom(c, jar, maps, rom, verbose(), st, err, &notes) || !rom.save(outp, err)) return fail(err);
-    for (auto &n : notes) std::cout << "note: " << n << "\n";
-    std::cout << "wrote " << outp << " (" << rom.console_name() << ", " << rom.data.size() / 1024 << " KB, "
-              << maps.size() << (maps.size() == 1 ? " map" : " maps") << ")\n";
-    return 0;
-}
-
 // Picks the job from argv[1] (once --map N is taken out) and checks it has
 // enough arguments; anything else prints the usage and returns 2.
 int run_cli(int argc, char **argv)
 {
-    // --map N anywhere: the map of a campaign ROM to work on
+    // --map N anywhere: the map of a project to work on
     // (taken out of the argument list, so the jobs see only their own arguments)
     std::vector<char *> args;
     for (int i = 0; i < argc; i++)
@@ -534,19 +504,15 @@ int run_cli(int argc, char **argv)
         std::cout << "Deimos Editor " EDITOR_VERSION "\n";
         return 0;
     }
-    if (argc >= 3 && !strcmp(argv[1], "--rom-maps")) return list_rom_maps(argv[2]);
-    if (argc >= 6 && !strcmp(argv[1], "--make-rom")) return make_rom(argv[2], argv[3], argv[4], argv[5]);
     if (argc >= 5 && !strcmp(argv[1], "--new-rom"))
         return new_rom(argv[2], argv[3], argv[4], std::vector<std::string>(argv + 5, argv + argc));
-    if (argc >= 6 && !strcmp(argv[1], "--dump-assets")) return dump_assets(argv[2], argv[3], argv[4], argv[5]);
-    if (argc >= 5 && !strcmp(argv[1], "--dump-strings")) return dump_strings(argv[2], argv[3], argv[4]);
-    if (argc >= 3 && !strcmp(argv[1], "--maps")) return list_maps(argv[2]);
-    if (argc >= 6 && !strcmp(argv[1], "--from-game")) return from_game(argv[2], argv[3], argv[4], argv[5]);
-    if (argc >= 4 && !strcmp(argv[1], "--demo-map")) return demo_map(argv[2], argv[3], argc >= 5 ? argv[4] : nullptr);
+    if (argc >= 4 && !strcmp(argv[1], "--new-project"))   // (the maps between the jar and OUT)
+        return new_project(argv[2], std::vector<std::string>(argv + 3, argv + argc - 1), argv[argc - 1]);
+    if (argc >= 6 && !strcmp(argv[1], "--make-rom")) return make_rom(argv[2], argv[3], argv[4], argv[5]);
+    if (argc >= 3 && !strcmp(argv[1], "--project-maps")) return project_maps(argv[2]);
     if (argc >= 3 && !strcmp(argv[1], "--selftest")) return selftest(argv[2]);
-    if (argc >= 4 && !strcmp(argv[1], "--rebuild")) return rebuild(argv[2], argv[3]);
-    if (argc >= 4 && !strcmp(argv[1], "--lock")) return lock(argv[2], argv[3]);
-    if (argc >= 5 && !strcmp(argv[1], "--transfer")) return transfer(argv[2], argv[3], argv[4]);
+    if (argc >= 4 && !strcmp(argv[1], "--export")) return export_dir(argv[2], argv[3]);
+    if (argc >= 4 && !strcmp(argv[1], "--import")) return import_dir(argv[2], argv[3], argc >= 5 ? argv[4] : nullptr);
     if (argc >= 7 && !strcmp(argv[1], "--render")) {
         bool small = false, low = false, solid = false;     // optional: small, low, solid
         for (int i = 7; i < argc; i++) {
@@ -556,46 +522,33 @@ int run_cli(int argc, char **argv)
         }
         return render(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]), argv[6], small, low, solid);
     }
-    if (argc >= 4 && !strcmp(argv[1], "--export")) {
-        // --export ROM DIR: the ROM's level as project.json + drawings + PNGs
-        Rom rom;
-        Project p;
-        if (!load(argv[2], rom, p)) return 1;
-        std::string err;
-        if (!export_project(p, argv[3], err)) return fail(err);
-        std::cout << "exported to " << argv[3] << "\n";
-        return 0;
-    }
-    if (argc >= 5 && !strcmp(argv[1], "--import")) {
-        // --import DIR ROM OUT: a level folder (as --export writes) built into a copy of ROM
-        Rom rom;
-        Project p;
-        std::string err;
-        if (!load_rom(argv[3], rom, err)) return fail(err);
-        if (!import_project(argv[2], p, err)) return fail(err);
-        BuildStats st;
-        if (!rom.build(p, verbose(), st, err) || !rom.save(argv[4], err)) return fail(err);
-        std::cout << "wrote " << argv[4] << "\n";
-        return 0;
-    }
+    if (argc >= 6 && !strcmp(argv[1], "--from-game")) return from_game(argv[2], argv[3], argv[4], argv[5]);
+    if (argc >= 3 && !strcmp(argv[1], "--maps")) return list_maps(argv[2]);
+    if (argc >= 4 && !strcmp(argv[1], "--demo-map")) return demo_map(argv[2], argv[3], argc >= 5 ? argv[4] : nullptr);
+    if (argc >= 3 && !strcmp(argv[1], "--check-forms")) return check_forms(argv[2]);
+    if (argc >= 6 && !strcmp(argv[1], "--dump-assets")) return dump_assets(argv[2], argv[3], argv[4], argv[5]);
+    if (argc >= 5 && !strcmp(argv[1], "--dump-strings")) return dump_strings(argv[2], argv[3], argv[4]);
     // no job matched: the usage, exit code 2
     std::cerr << "Deimos Editor " EDITOR_VERSION "\nusage:\n"
-                 "  \"Deimos Editor\" [ROM]                      open the editor\n"
+                 "  \"Deimos Editor\" [PROJECT.deimos]               open the editor (with a project)\n"
                  "  deimos-editor-cli --version                     the version\n"
-                 "  deimos-editor-cli --selftest ROM                check unpack/repack\n"
-                 "  deimos-editor-cli --new-rom DoomRPG.jar sms|gg|md|snes|snesfx|3ds|32x|gbc|gba OUT [maps...]   a new ROM from the original game\n"
-                 "                 (Master System, Game Gear: one map, intro = the UAC Base by default;\n"
-                 "                  Mega Drive: the maps in order, the whole game by default)\n"
-                 "  deimos-editor-cli --rom-maps ROM                a Mega Drive campaign ROM's maps\n"
-                 "  (add --map N to work on map N of a campaign ROM; the default is 0)\n"
-                 "  deimos-editor-cli --rebuild ROM OUT\n"
-                 "  deimos-editor-cli --make-rom DoomRPG.jar ROM sms|gg|md|snes|snesfx|3ds|32x|gbc|gba OUT   another console's ROM of ROM's maps\n"
-                 "  deimos-editor-cli --lock ROM OUT                 a locked copy: no editable level (smaller; can't be opened)\n"
-                 "  deimos-editor-cli --transfer FROM_ROM TO_ROM OUT   copy a level to another ROM\n"
-                 "  deimos-editor-cli --render ROM X Z FACING OUT.ppm [small] [low] [solid]  Master System view\n"
+                 "  deimos-editor-cli --new-rom DoomRPG.jar CONSOLE OUT [maps...]   a ROM straight from the original game\n"
+                 "                 (CONSOLE: sms gg md snes snesfx 3ds 32x gbc gba; sms, gg: one map, intro =\n"
+                 "                  the UAC Base by default; the others: the maps in order, the whole game by default)\n"
+                 "  deimos-editor-cli --new-project DoomRPG.jar [maps...] OUT.deimos   a new project of the game's maps\n"
+                 "                 (the maps in order, the whole game by default)\n"
+                 "  deimos-editor-cli --make-rom DoomRPG.jar PROJECT CONSOLE OUT   a ROM of the project's maps\n"
+                 "                 (sms, gg: map --map N alone)\n"
+                 "  deimos-editor-cli --project-maps PROJECT       the project's maps, numbered\n"
+                 "  deimos-editor-cli --selftest PROJECT            check that saving and opening it changes nothing\n"
+                 "  deimos-editor-cli --export PROJECT DIR          a map as JSON + PNG files (a level folder)\n"
+                 "  deimos-editor-cli --import DIR OUT.deimos [PROJECT]   such a folder as a new project\n"
+                 "                 (or with PROJECT: in place of its map --map N)\n"
+                 "  deimos-editor-cli --render PROJECT X Z FACING OUT.ppm [small] [low] [solid]   Master System view\n"
+                 "  deimos-editor-cli --from-game DoomRPG.jar MAP PROJECT OUT.deimos   one of the game's maps in place\n"
+                 "                 of map --map N\n"
                  "  deimos-editor-cli --maps DoomRPG.jar            the original game's maps, and which fit\n"
-                 "  deimos-editor-cli --from-game DoomRPG.jar MAP ROM OUT   build a ROM with one of them\n"
-                 "  deimos-editor-cli --export ROM DIR              level as JSON + PNG files\n"
-                 "  deimos-editor-cli --import DIR ROM OUT          build a ROM from such files\n";
+                 "  (--map N picks a project's map, 0 = the first; tests: --demo-map PROJECT OUT [JSON],\n"
+                 "   --check-forms JAR, --dump-assets JAR CONSOLE VERSION DIR, --dump-strings JAR CONSOLE DIR)\n";
     return 2;
 }

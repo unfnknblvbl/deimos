@@ -5,24 +5,26 @@
  * option) any later version, with NO WARRANTY: see the LICENSE file.
  */
 
-// The editable level ("project"), the same for the Master System and the
-// Mega Drive: what the ROM's source container holds (see
-// tools/source_container.py, which writes exactly the same JSON).
+// The editable level ("project"), the same for every console: one map of
+// a project file (.deimos, projectfile.h), kept there as JSON
+// ("map/<name>.json") plus its drawings.
 // Licence: GPL-2.0-or-later.
 //
 // A Project is one map with everything needed to build it: the 32 x 32
 // cell grid, the walls, props, things and their types, doors, scripts,
 // texts, and the art (drawings plus palettes). Almost every part of the
 // editor reads or changes it: jar.cpp makes one from the original game,
-// container.cpp reads and writes it inside a ROM, levelblob.cpp turns it
-// into the game rules' tables, geometry.cpp into wall pieces, and the
-// sms_build / md_build builders into a ROM.
+// projectfile.cpp reads and writes it in a project file, levelblob.cpp
+// turns it into the game rules' tables, geometry.cpp into wall pieces,
+// and the sms_build / md_build builders into a ROM.
 //
 // Coordinates: cells are (x, z), 0..31, x to the east, z to the south;
 // cell index = z * 32 + x. World units are 64 per cell. Facings are
 // 0 north (-z), 1 east, 2 south, 3 west (geometry.cpp's FX/FZ).
-// "Campaign map": a map of the Mega Drive's whole-game ROM (map_id >= 0),
-// which keeps a few things the single-level ROMs drop.
+// "Campaign map": a map in the whole game's form (map_id >= 0), as every
+// console but the Master System and Game Gear plays it; it keeps a few
+// things the Master System's single level drops (single_level() turns one
+// into the other).
 #pragma once
 #include "common.h"
 
@@ -125,9 +127,8 @@ const int N_WEAPON_FRAMES = 18;   // 9 weapons x (idle, firing)
 // A console without its own version of something uses the shared one. The
 // Master System and Game Gear can also have a fixed 16-colour level palette
 // (has_palette): the builder uses it instead of choosing the 16 colours.
-// Kept in project.json under "per_console", keyed by console_key(), and
-// only when a console has something of its own (so ROMs made before this
-// existed rebuild byte for byte).
+// Kept in the map's JSON under "per_console", keyed by CONSOLE_KEYS, and
+// only when a console has something of its own.
 struct ConsoleOwn {
     std::map<int, ArtRef> textures, sprites;   // by texture id / sprite tile
     std::map<int, std::string> strings;        // by text id (UTF-8)
@@ -145,15 +146,13 @@ struct Project {
     RGB floor, ceiling;     // the original map's floor and ceiling colours
     // the Master System's own ceiling and floor (its floor fades into the
     // ceiling colour towards the horizon); without them its usual ones: a
-    // black ceiling, a dark red floor (as the Master System port chose) -
-    // except a level from a Master System ROM that had none (sms_plain:
-    // those used the above, and keep them)
-    bool has_sms_colours = false, sms_plain = false;
+    // black ceiling, a dark red floor (as the Master System port chose)
+    bool has_sms_colours = false;
     RGB sms_ceiling, sms_floor;
-    RGB sms_ceil() const { return has_sms_colours ? sms_ceiling : sms_plain ? ceiling : RGB{0, 0, 0}; }
-    RGB sms_flo() const { return has_sms_colours ? sms_floor : sms_plain ? floor : RGB{85, 0, 0}; }
+    RGB sms_ceil() const { return has_sms_colours ? sms_ceiling : RGB{0, 0, 0}; }
+    RGB sms_flo() const { return has_sms_colours ? sms_floor : RGB{85, 0, 0}; }
     int spawn_x = 1, spawn_z = 1, spawn_f = 0;   // the player's start: cell and facing
-    // a map of the Mega Drive campaign: its original map id (-1: a single level)
+    // a map in the whole game's form: its original map id (-1: a single level)
     int map_id = -1;
     bool campaign() const { return map_id >= 0; }
     std::vector<Thin> thin;   // (campaign maps only; written to JSON only for them)
@@ -183,13 +182,21 @@ struct Project {
     RGB level_palette[16];
     // this level as console `key` builds it: its own pictures and texts in
     // place of the shared ones, its fixed palette if any (per_console is
-    // kept, so the ROM's editable copy still has every console's versions)
+    // kept as it is)
     Project for_console(const std::string &key) const;
+    // This level as the Master System and Game Gear have it (the form
+    // jar.cpp's import_map gives a single level): a campaign map's thin
+    // invisible blockers block their whole cells, the props lose their
+    // cells and the Pain Elementals their spawns, SHOW's "none" is 255,
+    // and the UAC Base (map id 1) gives a new game's kit. A level already
+    // in that form comes back as it is.
+    Project single_level() const;
 
-    // replaces *this with the level in project.json's text; false with err
+    // replaces *this with the level in the JSON text (a project file's
+    // map/<name>.json, or a level folder's project.json); false with err
     // when it can't be read or is an old format (version < 2)
     bool from_json(const std::string &text, std::string &err);   // the art's drawings come separately
-    // project.json's text, byte for byte as tools/source_container.py writes it
+    // the level's JSON text (compact; the keys always in the same order)
     std::string to_json() const;
 
     // a picture's drawing and colours in one (a zero drawing when its shape is missing)
@@ -203,6 +210,19 @@ struct Project {
     std::string new_shape_key(const std::string &prefix) const;
     // removes the drawings no picture refers to
     void drop_unused_shapes();
+    // gives drawing `from` the key `to`: the drawing moves and every
+    // picture that used it (the consoles' own versions too) follows
+    void rename_shape(const std::string &from, const std::string &to);
+};
+
+// One map of a project, as the consoles' games know it: name is the map's
+// file name in the original game ("level01": a script's CHANGEMAP to
+// "/level01.bsp" leads there), title what the game shows ("Sector 1"), id
+// the original game's map id.
+struct MapInfo {
+    std::string name;
+    std::string title;
+    int id = 0;
 };
 
 // command names (Doom RPG event byte-code)

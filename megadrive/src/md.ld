@@ -14,7 +14,7 @@
  * The ROM, in order:
  *   $000  the 68000's exception vectors (crt0.s .text.vectors)
  *   $100  the cartridge header (crt0.s .text.header), including at $1C8
- *         the "MDRPGDIR" directory: the campaign block's address, the end
+ *         the "DEIMOSMD" directory: the campaign block's address, the end
  *         of the space it may use, the areas table's address
  *   $200  the start-up code (crt0.s .text.start), then all code and
  *         read-only data, then the initial values of .data

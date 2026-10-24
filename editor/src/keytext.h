@@ -44,10 +44,6 @@ std::string md_text(const std::string &s);
 // tokens written as that console's buttons and, if it had any, re-wrapped
 // to its box (21 columns; the Game Gear's 19); unchanged without keys
 std::string sms_text(const std::string &s, bool gg);
-// a Latin-1 text for the Mega Drive game's old single-level ROMs (0.0.4, 0.0.5),
-// whose game knows no tokens: a text with tokens (typed in the Text tab)
-// gets the Mega Drive's default buttons written in; any other is unchanged
-std::string md_v1_text(const std::string &s);
 
 // a text as the Text tab shows it: tokenised, each token as {NAME}
 std::string key_markup(const std::string &s);

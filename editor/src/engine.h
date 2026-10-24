@@ -12,7 +12,7 @@
 // and sounds (src/assets.*), and the maps.
 // Licence: GPL-2.0-or-later.
 //
-// An engine file ("DEIMENG1"; "DRPGENG1" before 0.9.10): a byte for the console and 3 zero bytes,
+// An engine file ("DEIMENG1"): a byte for the console and 3 zero bytes,
 // u32 template size, u32 region count; per region a length-prefixed name,
 // u32 ROM offset, u32 size; a length-prefixed version string; u32 maps
 // address, u32 maps limit; u32 packed size and the ZX0-packed template;
@@ -25,6 +25,7 @@
 #pragma once
 #include "build.h"
 #include "jar.h"
+#include "projectfile.h"
 #include "rom.h"
 
 #include <string>
@@ -61,30 +62,28 @@ bool load(Console c, Engine &e, std::string &err);
 // the engine's version string ("?" when it can't be read)
 std::string version(Console c);
 
-// the maps a console can hold: the Master System one at a time, the Mega
-// Drive the game's maps in order (campaign_maps: every map of the game)
+// the game's maps that the jar has, in the order they are played (the
+// Master System and Game Gear hold one at a time, the others any of them)
 std::vector<std::string> campaign_maps(const Jar &jar);
 
-// A new ROM of the game's own maps: the Master System gets maps[0]; the Mega
-// Drive all of them, in order. The consoles the editor doesn't edit
-// (rom.h's editable()) get locked ROMs.
-// (every non-Master System console gets the campaign form). notes collects
-// what didn't come across from the jar.
+// A new ROM of the game's own maps, straight from the jar: the Master
+// System and Game Gear get maps[0] (as a single level); every other
+// console all of them, in order, as the whole game. notes collects what
+// didn't come across from the jar.
 bool new_rom(Console c, const Jar &jar, const std::vector<std::string> &maps, Rom &out, const BuildOptions &opt,
              BuildStats &stats, std::string &err, std::vector<std::string> *notes = nullptr);
-// A new ROM for console c of maps open in the editor (infos: their names,
-// titles and ids, in play order; projects: the levels; the Master System
-// and Game Gear take the first): the engine's graphics and sounds from
-// the jar, each level as console c has it (its own pictures and texts).
-// Locked when the editor doesn't edit that console.
-bool new_rom_from(Console c, const Jar &jar, const std::vector<md::MapInfo> &infos, const std::vector<Project> &projects,
-                  Rom &out, const BuildOptions &opt, BuildStats &stats, std::string &err);
-// A new ROM for console c made from the open ROM src: every map of a
-// campaign ROM (its editable copies, with `current` - the map being
-// edited, src.map - as it is in the editor), or the one level of a
-// single-level ROM; the Master System and Game Gear take the map being
-// edited. Locked when the editor doesn't edit console c.
-bool make_rom_for(Console c, const Jar &jar, const Rom &src, const Project &current, Rom &out, const BuildOptions &opt,
-                  BuildStats &stats, std::string &err);
+// A new project of the game's maps (in play order), each in the whole
+// game's form, with its art; notes as for new_rom.
+bool new_project(const Jar &jar, const std::vector<std::string> &maps, ProjectFile &out, const BuildOptions &opt,
+                 std::string &err, std::vector<std::string> *notes = nullptr);
+// A ROM for console c of a project: every map, in order, each as console
+// c has it (its own pictures and texts); the Master System and Game Gear
+// take map `map` alone, in its single-level form (Project::single_level).
+// The graphics and sounds come from the jar.
+bool project_rom(Console c, const Jar &jar, const ProjectFile &pf, int map, Rom &out, const BuildOptions &opt,
+                 BuildStats &stats, std::string &err);
+// "" when console c can take map `map` of the project (the Master System
+// and Game Gear: within their limits), else why not
+std::string why_not(Console c, const ProjectFile &pf, int map);
 
 }  // namespace engine

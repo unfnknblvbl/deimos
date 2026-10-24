@@ -83,12 +83,11 @@ foreach(pic title_bg title_logo title_icon)
   list(APPEND ENGINE_SRC ${out})
 endforeach()
 
-# ---- the editor's core (no GUI): ROM, level, renderer, builder ----
+# ---- the editor's core (no GUI): project, level, renderer, builders ----
 add_library(editor_core STATIC ${ENGINE_SRC} src/engine.cpp
-  src/zx0.cpp src/project.cpp src/container.cpp src/colour.cpp src/geometry.cpp src/levelblob.cpp src/keytext.cpp
+  src/zx0.cpp src/project.cpp src/projectfile.cpp src/colour.cpp src/geometry.cpp src/levelblob.cpp src/keytext.cpp
   src/sms_build.cpp src/sms_model.cpp src/md_build.cpp src/rom.cpp src/n3ds.cpp src/mars.cpp src/gbc.cpp src/gba.cpp src/projectio.cpp src/edit.cpp src/cli.cpp
-  src/render.cpp src/console_view.cpp src/jar.cpp src/assets.cpp src/md_areas.c
-  third_party/zx0/compress.c third_party/zx0/optimize.c third_party/zx0/memory.c)
+  src/render.cpp src/console_view.cpp src/jar.cpp src/assets.cpp src/md_areas.c)
 # the colour choices must come out the same on every machine (no fused multiply-add)
 target_compile_options(editor_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-ffp-contract=off>)
 target_include_directories(editor_core PUBLIC src)

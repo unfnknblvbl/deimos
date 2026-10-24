@@ -12,6 +12,8 @@
 // from here.
 #include "projectio.h"
 
+#include "../third_party/json/json.hpp"
+
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
@@ -131,7 +133,7 @@ std::vector<Pic> pictures(Project &p)
 }  // namespace
 
 // see projectio.h
-bool export_project(const Project &p0, const std::string &dir, std::string &err)
+bool export_project(const Project &p0, const MapInfo &info, const std::string &dir, std::string &err)
 {
     Project p = p0;   // a copy: pictures() wants a non-const project
     try {
@@ -141,6 +143,11 @@ bool export_project(const Project &p0, const std::string &dir, std::string &err)
         return false;
     }
     std::ofstream(fs::path(dir) / "project.json") << p.to_json();   // (a write error isn't detected)
+    nlohmann::ordered_json mj;   // the map's place in the project
+    mj["name"] = info.name;
+    mj["title"] = info.title;
+    mj["id"] = info.id;
+    std::ofstream(fs::path(dir) / "map.json") << mj.dump(1, ' ', true) << "\n";
     // the drawings themselves: grey levels = palette index (255 = clear)
     for (auto &kv : p.shapes)
         if (!stbi_write_png((fs::path(dir) / "drawings" / (kv.first + ".png")).string().c_str(), 64, 64, 1,
@@ -154,11 +161,25 @@ bool export_project(const Project &p0, const std::string &dir, std::string &err)
     return true;
 }
 
-// see projectio.h. Steps: project.json, then the drawings (64x64 grey
-// PNGs; others are skipped), then each picture PNG compared with its
-// drawing in its colours, then a check that every picture has a drawing.
-bool import_project(const std::string &dir, Project &p, std::string &err)
+// see projectio.h. Steps: map.json, project.json, then the drawings
+// (64x64 grey PNGs; others are skipped), then each picture PNG compared
+// with its drawing in its colours, then a check that every picture has a
+// drawing.
+bool import_project(const std::string &dir, Project &p, MapInfo &info, std::string &err)
 {
+    if (std::ifstream mf{fs::path(dir) / "map.json"}) {
+        std::stringstream ms;
+        ms << mf.rdbuf();
+        try {
+            nlohmann::json mj = nlohmann::json::parse(ms.str());
+            info.name = mj.at("name").get<std::string>();
+            info.title = mj.at("title").get<std::string>();
+            info.id = mj.at("id").get<int>();
+        } catch (const std::exception &e) {
+            err = std::string("map.json: ") + e.what();
+            return false;
+        }
+    }
     std::ifstream f(fs::path(dir) / "project.json");
     if (!f) {
         err = "no project.json in " + dir;

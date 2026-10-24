@@ -64,13 +64,6 @@ const char *sms_name(unsigned char t, bool gg)
     }
 }
 
-// the Mega Drive's default 6-button pad buttons (src/save.c), by token
-const char *md_default_name(unsigned char t)
-{
-    static const char *const N[] = {"", "A", "B", "C", "X", "Z", "Y", "MODE"};
-    return t == KEY_MENU ? "START" : t <= KEY_DETAIL ? N[t] : "";
-}
-
 // is s[i] a space or '|' (what separates the words of a phrase)?
 bool sep(const std::string &s, size_t i) { return i < s.size() && (s[i] == ' ' || s[i] == '|'); }
 
@@ -226,14 +219,6 @@ std::string md_text(const std::string &s)
 std::string sms_text(const std::string &s, bool gg)
 {
     return fixed_text(s, [gg](unsigned char t) { return sms_name(t, gg); }, gg ? GG_COLS : SMS_COLS);
-}
-
-// see keytext.h (no Python counterpart: nothing else makes these ROMs).
-// Only a text with tokens (typed in the Text tab) changes: the original
-// texts stay as those ROMs were made, phone keys and all.
-std::string md_v1_text(const std::string &s)
-{
-    return has_token(s) ? fixed_text(s, md_default_name, BOX_COLS) : s;
 }
 
 // see keytext.h

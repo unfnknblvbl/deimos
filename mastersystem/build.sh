@@ -68,8 +68,8 @@ python3 tools/build_sfx.py "$GFX" game/gen              # sound effects and thei
 NEXT=$(cat "$GFX/live/next_bank.txt")
 NEXT=$(python3 tools/build_sprites.py "$ANALYSIS/gamedata.json" "$GFX" "$NEXT" large)
 NEXT=$(python3 tools/build_sprites.py "$ANALYSIS/gamedata.json" "$GFX" "$NEXT" small)
-# the editable level (source container) and the ROM directory that finds it
-python3 tools/pack_source.py "$ANALYSIS/$LEVEL.json" "$ANALYSIS/gamedata.json" "$ASSETS" "$GFX"
+# the ROM directory (where the level's banks are)
+python3 tools/rom_dir.py "$GFX"
 
 echo "== 4. Assemble + link the ROM (engine, renderer, game logic) =="
 wla-z80 -o rom/main.o rom/main.asm

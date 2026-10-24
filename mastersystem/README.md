@@ -4,8 +4,8 @@ Part of **Deimos**: Doom RPG on nine retro consoles. Made by AI. Directed by unf
 
 The Z80 draws every view as you play (0.1.5 stored 1,700 pre-drawn
 pictures in 4 MB). The view comes in two sizes and sits in a border in the
-style of the original Doom. The ROM is **512 KB**, locked: the editor (`../editor/`) makes it from
-an editable ROM of another console (File > Make a ROM for another console).
+style of the original Doom. The ROM is **512 KB**. The Deimos Editor (`../editor/`) makes the
+same ROM from your DoomRPG.jar, or from a level you have edited in it (a `.deimos` project).
 
 A port of **Doom RPG** (id Software / Fountainhead, 2005, J2ME) Sector 1 to
 the **Sega Master System**, built from the level, textures and sprites in
@@ -31,7 +31,7 @@ button. Dialogs, door codes, the notebook and the pause menu are laid out
 Gear's 12-bit colours as they are written; the view's go in at every
 vblank and one line interrupt swaps in the status bar's in the black row.
 The lockstep test runs on it as on the SMS (the whole UAC Base matches the
-model), and the editor makes, opens and rebuilds Game Gear ROMs.
+model), and the editor makes Game Gear ROMs as it makes Master System ones.
 
 ## Playing
 
@@ -271,14 +271,15 @@ test is unaffected.
 
 ## The editor
 
-`editor/` is a level and art editor (C++, Dear ImGui, Linux and Windows)
-for this ROM and for the Mega Drive game, the Mega Drive port. It opens the ROM,
-reads the level stored inside it, and lets you change the map, the things,
-the scripts and texts, and every picture (64x64 drawings with 16 colours,
-edited whole with their 8x8 tiles, shown with every palette that uses them
-and as each console will show them). Saving rewrites only the level's data
-(`docs/rom_format.md`). Rebuilding a ROM from its own level gives exactly
-the same bytes as `build.sh`. See `editor/README.md`.
+`../editor/` is the Deimos Editor, a level and art editor (C++, Dear ImGui,
+Linux and Windows) for every console's game. It keeps the levels in its own
+project files (`.deimos`), made from DoomRPG.jar, and lets you change the
+map, the things, the scripts and texts, and every picture (64x64 drawings
+with 16 colours, edited whole with their 8x8 tiles, shown with every
+palette that uses them and as each console will show them). Making a ROM
+writes only the level's data into this game's engine
+(`docs/rom_format.md`); for the same level it gives exactly the same bytes
+as `build.sh`. See `../editor/README.md`.
 
 ## Building
 

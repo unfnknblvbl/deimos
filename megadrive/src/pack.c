@@ -14,7 +14,7 @@
  * without recompiling. Every offset in it counts from its start:
  *   0   "MDCP", u16 version, u16 number of maps (byte 7: the low byte)
  *   8   u32 texture bank, 12 u32 sprite bank, 16 u32 weapons,
- *   20  u32 block size, 24 u32 editable maps, 28 u32 their size
+ *   20  u32 block size, 24 two u32 zeros (reserved)
  *   32  per map, 32 bytes: u32 its map pack, u8 the original game's map
  *       id, u8 0, the title (26 bytes, zero-padded)
  * The weapons: 4 x (u32 offset, u32 size): frames, sprites, palettes,

@@ -14,22 +14,25 @@
 //   refresh. frame() draws everything: the menu bar, the six tabs, the status
 //   line and any modal windows.
 // - The member functions are spread over several files:
-//     app.cpp      undo, image cache, opening/saving, builds, menus, the
-//                  "new ROMs from DoomRPG.jar" and "original game's levels"
-//                  windows, and the text helpers hint()/para();
+//     app.cpp      undo, image cache, opening/saving projects, making ROMs,
+//                  menus, the "new project / make ROMs" and "original
+//                  game's levels" windows, and the text helpers
+//                  hint()/para();
 //     ui_map.cpp   the Map tab (tools, canvas, inspector, view preview);
 //     ui_art.cpp   the Art tab (the paint program);
 //     ui_data.cpp  the Thing types, Text & scripts, Limits, Build tabs and the
 //                  Help / Settings windows;
 //     scripts.cpp  the script editor (another file, not documented here).
-// - The data being edited is App::proj, a Project (project.h): "the level",
-//   i.e. one map with its walls, things, scripts, texts and art. App::rom is
-//   the ROM it came from (rom.h). Saving rebuilds the ROM from proj on a
-//   worker thread (start_build / poll_build).
-// - "Campaign" ROM: a ROM that holds the whole game (many maps) in one block,
-//   the Mega Drive format that the SNES, 3DS, 32X, GBC and GBA versions share.
-//   Such a ROM has rom.maps non-empty, and rom.map is the map being edited.
-//   The Master System and Game Gear hold one map per ROM.
+// - The editor edits a project (App::doc, a ProjectFile, projectfile.h; a
+//   .deimos file): the maps of the whole game, in play order, or a single
+//   level. The map being edited (doc.maps[cur_map]) is App::proj, a Project
+//   (project.h): "the level", i.e. one map with its walls, things, scripts,
+//   texts and art; store_map() puts it back into doc. Saving writes the
+//   project file; ROMs are made from the project on a worker thread
+//   (start_project_roms / poll_build) into the export folder.
+// - Every console but the Master System and Game Gear holds all of a
+//   project's maps in one ROM; the Master System and Game Gear hold one
+//   map, the one being edited.
 // - "Picture": a 64x64 drawing (palette indices) plus its own 16 colours
 //   (ArtRef in project.h). Several pictures can share one drawing ("shape").
 #pragma once
@@ -39,6 +42,7 @@
 #include "geometry.h"
 #include "jar.h"
 #include "project.h"
+#include "projectfile.h"
 #include "rom.h"
 #include "settings.h"
 #include "sms_build.h"
@@ -98,8 +102,8 @@ struct ArtEditState {
     int console = -1;
 };
 
-// The whole editor: the open ROM and level, the UI state of every tab, the
-// image cache and the background build. One instance, made by main.cpp.
+// The whole editor: the open project and map, the UI state of every tab,
+// the image cache and the background build. One instance, made by main.cpp.
 class App {
 public:
     SDL_Window *win = nullptr;   // the main window (main.cpp makes it)
@@ -109,24 +113,32 @@ public:
                                  // (main.cpp keeps the global g_ui equal to it)
     float dpi_scale = 1.0f;      // what the display asks for (shown in Settings)
     bool fonts_dirty = false;    // rebuild the font and sizes before the next frame
-    std::string pending_open;    // a ROM to open once the user says the unsaved changes may go
-    int pending_map = -1;        // a campaign map to switch to, likewise
-    std::shared_ptr<Rom> pending_other;   // "put this level into the other ROM": a campaign, which map?
-    // Loads map m of the open campaign ROM into proj (losing unsaved changes).
+    // something to do once the user says the unsaved changes may go (frame()'s
+    // "Discard changes?"), and what it is, for the question
+    std::function<void()> pending_discard;
+    std::string pending_what;
+    // Runs `then` now, or (with unsaved changes) once the user agrees to lose them.
+    void ask_discard(const std::string &what, std::function<void()> then);
+    // Edits map m of the project: the current one is kept in doc first.
     void switch_map(int m);
-    // After a new level is loaded: clears undo and the image cache, selects the
-    // start cell, sets the window title and the status line to `how`.
+    // After a new project or map is loaded into proj: clears undo and the
+    // image cache, selects the start cell, sets the window title and the
+    // status line to `how`.
     void reset_view(const std::string &how);
-    // "Title  (name)" of map m of the open campaign ROM, "" if out of range.
+    // "Title  (name)" of map m of the project, "" if out of range.
     std::string map_label(int m) const;
-    // Opens a ROM, or asks first if there are unsaved changes (via pending_open).
+    // Opens a project, or asks first if there are unsaved changes.
     void request_open(const std::string &path);
-    // A file dropped on the window (main.cpp): a jar, a PNG or a ROM.
+    // A file dropped on the window (main.cpp): a project, a jar or a PNG.
     void dropped(const std::string &path);
-    Rom rom;                     // the open ROM (its bytes, console, campaign maps)
-    bool have_rom = false;       // false until a ROM is open: frame() shows the start page
+    ProjectFile doc;             // the open project (the map being edited is in proj)
+    int cur_map = 0;             // the map being edited: an index into doc.maps
+    std::string doc_path;        // the project's file ("" until it is saved)
+    bool have_project = false;   // false until a project is open: frame() shows the start page
     Project proj;                // the level being edited
-    bool unsaved = false;        // proj changed since it was opened or saved
+    bool unsaved = false;        // the project changed since it was opened or saved
+    // Puts proj back into doc (and its weapon into every map: they share it).
+    void store_map();
     bool want_quit = false;      // File > Quit: main.cpp's loop ends
     std::string status;          // the status line at the bottom of the window
 
@@ -182,7 +194,7 @@ public:
     bool preview_stale = true;   // redraw the preview before showing it
 
     // build (runs on a thread)
-    std::thread worker;          // the build thread (start_build, start_new_rom)
+    std::thread worker;          // the build thread (start_project_roms, start_new_rom)
     // building: a build is running; cancel: asks it to stop; build_finished:
     // the thread has finished and poll_build may collect the result
     std::atomic<bool> building{false}, cancel{false}, build_finished{false};
@@ -190,17 +202,25 @@ public:
     std::mutex log_mu;           // guards log (the thread adds to it)
     std::vector<std::string> log;     // the Build tab's log lines
     bool build_ok = false;       // the result, set by the thread before build_finished
-    std::string build_err, build_target;   // the error; the file being written ("" = build only)
-    std::unique_ptr<Rom> build_out;        // the rebuilt ROM
-    BuildStats build_stats;      // sizes and notes from the builder
-    bool build_then_run = false; // start the emulator once saved (F5)
-    // Checks the limits, then rebuilds `target` (or the open ROM) from proj on
-    // the worker thread and saves it to save_to ("" = do not save).
-    // locked: leave out the ROM's editable copy (a smaller copy saved
-    // elsewhere; the open ROM stays as it is)
-    void start_build(const std::string &save_to, bool run_after, const Rom *target = nullptr, bool locked = false);
-    void start_make_rom(Console c, const std::string &out);   // File > Make a ROM for another console
-    bool build_locked = false;   // the running build is a locked copy
+    std::string build_err, build_target;   // the error; the (first) ROM file written
+    BuildStats build_stats;      // sizes and notes from the builder (the last ROM's)
+    // after the build: start the emulator for this console on build_target (F5)
+    bool build_then_run = false;
+    Console run_console = Console::MD;
+    // Makes a ROM of the project (as it is now, proj included) for each
+    // console in cons on the worker thread, each saved under its usual name
+    // in folder out (or, with one console, as the file out when folder is
+    // false); run_after: then start the emulator on it (F5).
+    void start_project_roms(const std::vector<Console> &cons, const std::string &out, bool folder, bool run_after);
+    // F5: a ROM of the project for the "play on" console (Settings::play_console),
+    // export/<its usual name>, then the emulator
+    void make_and_play();
+    // Saves the project to path (store_map first); records it in the recent
+    // files; false and status when it can't.
+    bool save_project(const std::string &path);
+    // Save (Ctrl+S): to its file, or asks for one when it has none.
+    void save_or_ask();
+    void save_as();              // asks for the file, then save_project
     // Called every frame: once the thread has finished, joins it and takes the result.
     void poll_build();
     void add_log(const std::string &s);   // adds a Build tab log line (any thread)
@@ -212,7 +232,7 @@ public:
     struct GameMap {
         std::string name, title, verdict;           // file name (e.g. "level01"), its title, "fits: ..." or why not
         std::vector<std::string> notes;             // the converter's notes (e.g. skipped commands)
-        bool fits = false;                          // within the open ROM's console's limits
+        bool fits = false;                          // within a whole-game map's limits
         bool fits_sms = false;                      // within the Master System's / Game Gear's limits
         std::string sms_verdict;                    // why not ("" if it fits)
     };
@@ -235,10 +255,13 @@ public:
     void draw_find_jar_window();
     void with_jar(std::function<void()> then);         // then, once a jar is loaded (asking for it first)
     void draw_jar_window();
-    // a new ROM from the original game (src/engine.*)
-    // show_newrom: open the window next frame; build_is_new: the running
-    // build makes new ROMs (poll_build then opens the first)
-    bool show_newrom = false, build_is_new = false;
+    // the "maps and consoles" window (src/engine.*), in one of three modes:
+    // NR_JAR_ROMS new ROMs straight from the jar (maps and consoles),
+    // NR_NEW_PROJECT a new project from the jar (maps only), NR_PROJECT_ROMS
+    // ROMs of the open project (consoles only). show_newrom: open it next frame.
+    enum NewRomMode { NR_JAR_ROMS, NR_NEW_PROJECT, NR_PROJECT_ROMS };
+    NewRomMode newrom_mode = NR_JAR_ROMS;
+    bool show_newrom = false;
     // A console the editor can make ROMs for. This list is also the order of
     // the Map tab's preview console menu (Settings::preview_console indexes it).
     struct NewRomConsole {
@@ -259,21 +282,29 @@ public:
     std::vector<char> newrom_cons;                    // the consoles ticked (NEWROM_CONSOLES' order)
     std::vector<std::string> newrom_maps;             // the game's maps in the order they are played
     std::vector<char> newrom_sel;                     // the maps ticked
-    std::string newrom_why_not(size_t k) const;       // why console k can't take the maps ticked ("" if it can)
+    // why console k can't take the maps (the ticked ones, or for
+    // NR_PROJECT_ROMS the project's) ("" if it can)
+    std::string newrom_why_not(size_t k) const;
     void newrom_reset();         // the jar's maps, all ticked; the Mega Drive ticked the first time
-    void ask_new_rom();          // opens the "new ROMs" window (asking for the jar first if needed)
+    // opens the window in mode m (asking for the jar first if needed)
+    void ask_new_rom(NewRomMode m = NR_JAR_ROMS);
     void draw_newrom_window();
-    // the ROMs: out is the file (one console) or the folder (several: each console's default name in it)
+    // the ROMs from the jar: out is the file (one console) or the folder
+    // (several: each console's default name in it)
     void start_new_rom(const std::string &out, bool folder);
+    // a new project (unsaved, no file yet) of the maps ticked
+    void new_project();
 
     // actions
-    // Loads a ROM and its level; false (and status says why) if it fails.
-    bool open_rom(const std::string &path);
+    // Loads a project and edits its first map; false (and status says why) if it fails.
+    bool open_project(const std::string &path);
     // Empties the map (keeping art, thing types and texts) to a 4x4 room.
     void new_map();
-    // Starts the emulator command from the settings on a ROM file.
-    void run_emulator(const std::string &rom_path);
-    std::string rom_ext() const { return console_ext(rom.console); }   // ".sms", ".md"...
+    // Starts the emulator command from the settings (console c's) on a ROM file.
+    void run_emulator(const std::string &rom_path, Console c);
+    // the level, as one of the game's maps, in place of the map being edited
+    // (it keeps the map's place: its name and id); undoable
+    void replace_level(Project p);
 
     // drawing (each called from frame(), once per frame, inside ImGui)
     void frame();                // the whole window (app.cpp)
@@ -305,8 +336,6 @@ public:
 
 // text helpers (app.cpp): a greyed note that wraps at the panel's edge, and
 // paragraphs kept to a comfortable reading width on big screens
-// (ROM_EXTS: the file extensions the Open ROM dialogs list)
-#define ROM_EXTS ".sms .gg .md .bin .gen .sfc .3dsx .32x .gbc .gba"
 void hint(const char *fmt, ...);   // printf-style, greyed, wrapped
 void para(const char *fmt, ...);   // printf-style, wrapped at reading_width()
 float reading_width();             // about 65 letters, in pixels at the current size

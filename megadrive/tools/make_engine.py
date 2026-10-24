@@ -80,7 +80,7 @@ def main():
         blocks[n] = ui[n]
     blocks.update(songs(gen / "music_data.s"))
     blocks.update({k: v for k, v in c_arrays(gen / "sfx_data.c").items() if k.startswith("sfx_")})
-    camp = struct.unpack_from(">I", rom, 0x1D0)[0]  # the ROM directory at $1C8: "MDRPGDIR", then the block's address ...
+    camp = struct.unpack_from(">I", rom, 0x1D0)[0]  # the ROM directory at $1C8: "DEIMOSMD", then the block's address ...
     limit = struct.unpack_from(">I", rom, 0x1D4)[0]  # ... and the end of its space
     regions = []
     for name in sorted(blocks, key=lambda n: addr[n]):

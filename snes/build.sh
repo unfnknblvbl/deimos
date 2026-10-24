@@ -93,4 +93,4 @@ python3 ../tools/snes_tables.py out/tables.bin out/spc_engine.bin > /dev/null
 # the resources made from the jar (with the sound streams and the version)
 python3 ../tools/snes_ui_res.py $MD out/res.bin out/spc_streams.bin "$(cat VERSION)" > /dev/null
 # the cartridge: code, tables, resources, campaign block; size and checksum
-python3 ../tools/snes_rom.py out/deimos_game.bin out/tables_game.bin out/res.bin $MD/build/gen/campaign_locked.bin out/deimos.sfc
+python3 ../tools/snes_rom.py out/deimos_game.bin out/tables_game.bin out/res.bin $MD/build/gen/campaign.bin out/deimos.sfc

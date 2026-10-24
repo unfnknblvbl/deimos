@@ -6,7 +6,7 @@
 
 // Licence: GPL-2.0-or-later.
 //
-// The 3DS .3dsx's wrap and unwrap (see n3ds.h). The parts of the formats
+// The 3DS .3dsx's wrap (see n3ds.h). The parts of the formats
 // used here (all little-endian):
 //   .3dsx header: u16 header size at 4 (44 with the extended header),
 //                 u32 romfs offset at 40;
@@ -29,8 +29,9 @@ static void put32(u8 *p, u32 v)
     for (int i = 0; i < 4; i++) p[i] = (u8)(v >> (8 * i));
 }
 
-// see n3ds.h (44 = the header with its extension)
-bool is_3dsx(const Bytes &f) { return f.size() >= 44 && memcmp(f.data(), "3DSX", 4) == 0; }
+// true when f starts with the "3DSX" magic and has room for the extended
+// header (44 bytes)
+static bool is_3dsx(const Bytes &f) { return f.size() >= 44 && memcmp(f.data(), "3DSX", 4) == 0; }
 
 // the romfs's deimos.sfc: where its entry is (file offset) and where its data starts
 // Walks the romfs's file metadata table for an entry named deimos.sfc.
@@ -67,16 +68,6 @@ static bool find(const Bytes &f, size_t &entry, size_t &data, std::string &err)
         p += 32 + ((nl + 3) & ~3u);   // next entry: the name padded to 4 bytes
     }
     return false;
-}
-
-// see n3ds.h
-bool unwrap(const Bytes &f, Bytes &wrap, Bytes &image, std::string &err)
-{
-    size_t e, d;
-    if (!find(f, e, d, err)) return false;
-    wrap.assign(f.begin(), f.begin() + (long)d);
-    image.assign(f.begin() + (long)d, f.end());
-    return true;
 }
 
 // see n3ds.h. Writes the size into the file table's first entry: the
