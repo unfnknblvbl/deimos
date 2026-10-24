@@ -1,6 +1,6 @@
 # Deimos Editor (Master System, Game Gear, Mega Drive, SNES, 3DS, 32X, Game Boy Color and Game Boy Advance)
 
-Version 0.9.9. Part of **Deimos**: Doom RPG on nine retro consoles. Made by AI. Directed by unfnknblvbl. Licence: GPL-2.0-or-later. Version numbers are 0.x.y: x is the number of consoles the editor makes ROMs for (9: the SNES with the SuperFX counts as its own), y the number of releases since the last console was added.
+Version 0.10.0. Part of **Deimos**: Doom RPG on ten retro consoles. Made by AI. Directed by unfnknblvbl. Licence: GPL-2.0-or-later. Version numbers are 0.x.y: x is the number of consoles the editor makes ROMs for (10: the SNES with the SuperFX counts as its own), y the number of releases since the last console was added.
 
 A ROM maker, level editor and art editor for the console versions of Doom RPG (id Software / Fountainhead, 2005, for mobile phones):
 
@@ -63,7 +63,7 @@ build/linux/  (build/windows/ the same, with Deimos Editor.exe)
 
 Nothing else is needed to run it: SDL2 is built into the program, the consoles' games are the files in `engines/` beside it, and the person only needs their own `DoomRPG.jar`.
 
-**The engines.** Each console's game code, with nothing of the original game in it, is one file in `engines/`, named for the console's maker and kind: `sg8.eng` (Master System), `sg8hh.eng` (Game Gear), `sg16.eng` (Mega Drive), `sg32.eng` (32X), `ntnd8hh.eng` (Game Boy Color), `ntnd16.eng` (SNES), `ntnd16fx.eng` (SNES with the Super FX), `ntnd32hh.eng` (Game Boy Advance) and `ntnd3Dhh.eng` (3DS). The editor offers the consoles whose file is there, so an editor can be passed on with only some of them, and a newer engine can be dropped in without a new editor. `../build.sh engines` makes them again from the games' source. Run from its build folder (`cmake-build/<platform>/`), the editor reads `editor/engines/` in the source; `DEIMOS_ENGINES=folder` points it anywhere else. There's no `defaults` folder of ROMs: the editor makes every ROM itself from the jar. CMake's working files stay in `cmake-build/`. Without MinGW-w64, `./build.sh` builds the Linux version and says how to get the Windows one. The first build of each downloads and compiles SDL2, which takes a few minutes.
+**The engines.** Each console's game code, with nothing of the original game in it, is one file in `engines/`, named for the console's maker and kind: `sg8.eng` (Master System), `sg8hh.eng` (Game Gear), `sg16.eng` (Mega Drive), `sg32.eng` (32X), `ntnd8hh.eng` (Game Boy Color), `ntnd16.eng` (SNES), `ntnd16fx.eng` (SNES with the Super FX), `ntnd32hh.eng` (Game Boy Advance), `ntnd3Dhh.eng` (3DS) and `ntnd32vr.eng` (Virtual Boy). The editor offers the consoles whose file is there, so an editor can be passed on with only some of them, and a newer engine can be dropped in without a new editor. `../build.sh engines` makes them again from the games' source. Run from its build folder (`cmake-build/<platform>/`), the editor reads `editor/engines/` in the source; `DEIMOS_ENGINES=folder` points it anywhere else. There's no `defaults` folder of ROMs: the editor makes every ROM itself from the jar. CMake's working files stay in `cmake-build/`. Without MinGW-w64, `./build.sh` builds the Linux version and says how to get the Windows one. The first build of each downloads and compiles SDL2, which takes a few minutes.
 
 ## 3. Run
 

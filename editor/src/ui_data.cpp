@@ -159,7 +159,7 @@ void App::draw_text_tab()
     ImGui::SetNextItemWidth(220 * ui);
     if (ImGui::BeginCombo("Edit for", art.console < 0 ? "Every console (shared)" : console_name((Console)art.console))) {
         if (ImGui::Selectable("Every console (shared)", art.console < 0)) art.console = -1;
-        for (int c = 0; c < 9; c++)
+        for (int c = 0; c < N_CONSOLES; c++)
             if (ImGui::Selectable(console_name((Console)c), art.console == c)) art.console = c;
         ImGui::EndCombo();
     }

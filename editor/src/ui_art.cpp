@@ -248,7 +248,7 @@ void App::draw_art_tab()
     const char *now = st.console < 0 ? "Every console (shared)" : console_name((Console)st.console);
     if (ImGui::BeginCombo("Edit for", now)) {
         if (ImGui::Selectable("Every console (shared)", st.console < 0)) st.console = -1;
-        for (int c = 0; c < 9; c++)
+        for (int c = 0; c < N_CONSOLES; c++)
             if (ImGui::Selectable(console_name((Console)c), st.console == c)) st.console = c;
         ImGui::EndCombo();
     }

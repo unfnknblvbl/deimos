@@ -1,6 +1,6 @@
 # Deimos Editor @VERSION@
 
-Part of **Deimos**: Doom RPG on nine retro consoles. Made by AI. Directed by unfnknblvbl. Free software under the GNU GPL, version 2 or later (`docs/GPL-2.0.txt`).
+Part of **Deimos**: Doom RPG on ten retro consoles. Made by AI. Directed by unfnknblvbl. Free software under the GNU GPL, version 2 or later (`docs/GPL-2.0.txt`).
 
 A ROM maker, level editor and art editor for the console versions of Doom RPG (id Software / Fountainhead, 2005, for mobile phones):
 

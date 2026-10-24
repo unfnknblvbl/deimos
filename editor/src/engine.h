@@ -16,12 +16,12 @@
 // u32 template size, u32 region count; per region a length-prefixed name,
 // u32 ROM offset, u32 size; a length-prefixed version string; u32 maps
 // address, u32 maps limit; u32 packed size and the ZX0-packed template;
-// for the wrapped consoles (3DS, 32X, GBC, GBA) then u32 size, u32 packed
+// for the wrapped consoles (3DS, 32X, GBC, GBA, Virtual Boy) then u32 size, u32 packed
 // size and the ZX0-packed wrap. All little-endian. The files are named for
 // the consoles' makers and kinds (file_name): sg8 (Master System), sg8hh
 // (Game Gear), sg16 (Mega Drive), sg32 (32X), ntnd8hh (Game Boy Color),
 // ntnd16 (SNES), ntnd16fx (SNES with the Super FX), ntnd32hh (Game Boy
-// Advance) and ntnd3Dhh (3DS).
+// Advance), ntnd3Dhh (3DS) and ntnd32vr (Virtual Boy).
 #pragma once
 #include "build.h"
 #include "jar.h"

@@ -79,10 +79,10 @@ static BuildOptions verbose()
 }
 
 // The console named by its CONSOLE_KEYS name (sms, gg, md, snes, snesfx,
-// 3ds, 32x, gbc, gba); false when the name is none of them.
+// 3ds, 32x, gbc, gba, vb); false when the name is none of them.
 static bool console_of(const char *name, Console &c)
 {
-    for (int i = 0; i < 9; i++)
+    for (int i = 0; i < N_CONSOLES; i++)
         if (!strcmp(name, CONSOLE_KEYS[i])) {
             c = (Console)i;
             return true;
@@ -99,7 +99,7 @@ static int new_rom(const char *jar_path, const char *console, const char *outp, 
     Jar jar;
     std::string err;
     Console c;
-    if (!console_of(console, c)) return fail(std::string("unknown console ") + console + " (sms gg md snes snesfx 3ds 32x gbc gba)");
+    if (!console_of(console, c)) return fail(std::string("unknown console ") + console + " (sms gg md snes snesfx 3ds 32x gbc gba vb)");
     if (!open_jar(jar_path, jar, err)) return fail(err);
     // no maps named: the UAC Base ("intro") for the one-map consoles, else
     // the whole game in playing order
@@ -141,7 +141,7 @@ static int make_rom(const char *jar_path, const char *in, const char *console, c
     Jar jar;
     std::string err;
     Console c;
-    if (!console_of(console, c)) return fail(std::string("unknown console ") + console + " (sms gg md snes snesfx 3ds 32x gbc gba)");
+    if (!console_of(console, c)) return fail(std::string("unknown console ") + console + " (sms gg md snes snesfx 3ds 32x gbc gba vb)");
     ProjectFile pf;
     if (!load(in, pf, err) || !open_jar(jar_path, jar, err)) return fail(err);
     std::string why = engine::why_not(c, pf, g_map);
@@ -441,6 +441,7 @@ static int dump_assets(const char *jar_path, const char *console, const char *ve
               : !strcmp(console, "3ds") ? assets::snes_res(jar, version, b, err, "3D")
               : !strcmp(console, "32x") ? assets::snes_res(jar, version, b, err, "32X")
               : !strcmp(console, "gba") ? assets::snes_res(jar, version, b, err, "ADVANCE")
+              : !strcmp(console, "vb") ? assets::snes_res(jar, version, b, err, "VIRTUAL BOY")
               : !strcmp(console, "gbc") ? assets::snes_res(jar, version, b, err)
               : md ? assets::md_ui(jar, version, b, err) && assets::md_music(jar, b, err) && assets::md_sfx(jar, b, err)
                    : assets::sms_ui(jar, version, !strcmp(console, "gg"), b, err);

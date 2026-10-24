@@ -37,7 +37,7 @@ namespace engine {
 const char *file_name(Console c)
 {
     static const char *const N[] = {"sg8.eng",     "sg8hh.eng",    "sg16.eng",     "ntnd16.eng", "ntnd16fx.eng",
-                                    "ntnd3Dhh.eng", "sg32.eng",     "ntnd8hh.eng",  "ntnd32hh.eng"};
+                                    "ntnd3Dhh.eng", "sg32.eng",     "ntnd8hh.eng",  "ntnd32hh.eng", "ntnd32vr.eng"};
     return N[(int)c];
 }
 
@@ -136,7 +136,7 @@ bool load(Console c, Engine &e, std::string &err)
     e.rom = zx0_decompress(d + p, packed);   // the template
     if (e.rom.size() != size) return bad();
     p += packed;
-    if (c == Console::N3DS || c == Console::MARS || c == Console::GBC || c == Console::GBA) {   // (then the .3dsx's code, icon and romfs
+    if (c == Console::N3DS || c == Console::MARS || c == Console::GBC || c == Console::GBA || c == Console::VB) {   // (then the .3dsx's code, icon and romfs
                                                         // headers, or the 32X's, Game Boy Color's or Game Boy Advance's code: u32 size, u32 packed, ZX0)
         if (p + 8 > n) return bad();
         u32 wsize = le32(d + p), wpacked = le32(d + p + 4);
@@ -194,6 +194,7 @@ static bool filled_engine(Console c, const Jar &jar, Engine &e, Bytes &rom, cons
               : c == Console::N3DS ? assets::snes_res(jar, e.version, b, err, "3D")
               : c == Console::MARS ? assets::snes_res(jar, e.version, b, err, "32X")
               : c == Console::GBA ? assets::snes_res(jar, e.version, b, err, "ADVANCE")
+              : c == Console::VB ? assets::snes_res(jar, e.version, b, err, "VIRTUAL BOY")
               : c == Console::GBC ? assets::snes_res(jar, e.version, b, err)        // (the Game Boy takes the logo only)
                                    : assets::md_ui(jar, e.version, b, err) && assets::md_music(jar, b, err) &&
                                          assets::md_sfx(jar, b, err);
@@ -234,7 +235,7 @@ static bool rom_from_projects(Console c, const Jar &jar, const std::vector<MapIn
         // (snes: every SNES-image console but the SuperFX; snes_fx: the SuperFX)
         if (!md::new_campaign(rom, e.maps_addr, e.maps_limit, infos, projects, opt, stats, err,
                               c == Console::SNES || c == Console::N3DS || c == Console::MARS || c == Console::GBC ||
-                                  c == Console::GBA,
+                                  c == Console::GBA || c == Console::VB,
                               c == Console::SNESFX))
             return false;
     }

@@ -294,7 +294,7 @@ std::string Project::to_json() const
     return j.dump(-1, ' ', true);   // compact, non-ASCII characters escaped (like Python's default)
 }
 
-const char *const CONSOLE_KEYS[9] = {"sms", "gg", "md", "snes", "snesfx", "3ds", "32x", "gbc", "gba"};
+const char *const CONSOLE_KEYS[N_CONSOLES] = {"sms", "gg", "md", "snes", "snesfx", "3ds", "32x", "gbc", "gba", "vb"};
 
 // see project.h
 Project Project::for_console(const std::string &key) const

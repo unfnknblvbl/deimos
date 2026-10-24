@@ -12,6 +12,7 @@
 #include "rom.h"
 #include "n3ds.h"
 #include "mars.h"
+#include "vb.h"
 #include "gba.h"
 #include "gbc.h"
 
@@ -64,6 +65,7 @@ bool Rom::file_bytes(Bytes &out, std::string &err) const
     case Console::MARS: return mars::wrap(wrap, data, out, err);
     case Console::GBA: return gba::wrap(wrap, data, out, err);
     case Console::GBC: return gbc::wrap(wrap, data, out, err);
+    case Console::VB: return vb::wrap(wrap, data, out, err);
     default: out = data; return true;   // (the cartridge as it is)
     }
 }
