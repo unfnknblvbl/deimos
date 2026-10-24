@@ -22,10 +22,10 @@
  *   y 0..7      the message line (8 x 8 characters, centred)
  *   y 8..183    the 3D view: view/view.c's 128 x 88 (fb, drawn by
  *               view_draw.c) at twice the size (256 x 176, from x 64),
- *               the weapon over it (the Mega Drive's frames at the SNES's
- *               size, which is this view's)
- *   y 184..223  the face (40 x 40, x 88) and the status bar (5 lines of
- *               20 characters, x 136)
+ *               the weapon over it (the Mega Drive's frames at 1.5 times
+ *               the SNES's size, which is this view's: gfx_weapon)
+ *   y 184..223  the face (40 x 40, x 68) and the status bar (5 lines of
+ *               25 characters, x 116: the SNES's layout, tools/vb_ui.py)
  *   the boxes   over the view (24 characters of 8 pixels, 8-pixel lines)
  * The title: the SNES title's picture (256 x 224, its text drawn in by
  * megadrive/tools/build_md_ui.py), from x 64.
@@ -89,8 +89,8 @@ static inline u8 md_px(const u8 *t, u32 x, u32 y) { return (t[y * 4 + (x >> 1)] 
 #define VW 256
 #define VH 176
 #define HUD_Y 184                       /* the status bar's top */
-#define FACE_X 88                       /* the face's left */
-#define HUD_TX 136                      /* the status bar's text */
+#define FACE_X 68                       /* the face's left (the face, a gap and the text: 248 pixels under the view) */
+#define HUD_TX 116                      /* the status bar's text (HUD_COLS characters) */
 #define VIEW_HW (VH / 8)                /* the view's halfwords down a column (22) */
 
 /* ------------------------------------------------------------ levels and shades */
@@ -329,7 +329,7 @@ static void title_picture(void)
 
 /* ------------------------------------------------------------ the game's parts */
 static char msg[41];                    /* the message line */
-static char hud[5][21];                 /* the status bar's lines */
+static char hud[5][HUD_COLS + 1];       /* the status bar's lines */
 static u16 face_hw[40][5];              /* the face's 40 columns (5 halfwords each) */
 static u8 cur_face = 0xFF;              /* which face it is ($FF none) */
 static char box_txt[16][24];            /* the box's text */
@@ -501,7 +501,7 @@ void gfx_message(const char *s)
 }
 
 /* gfx_hud: the status bar's lines (redrawn only if they changed) */
-void gfx_hud(char lines[5][21])
+void gfx_hud(char lines[5][HUD_COLS + 1])
 {
     if (scr_mode != 2 || !memcmp(hud, lines, sizeof hud)) return;
     memcpy(hud, lines, sizeof hud);
@@ -573,15 +573,45 @@ void gfx_weapon_off(void)
     }
 }
 
+/* the weapon's sprites as gfx_weapon reads them: their rectangles in the
+   SNES's view pixels (x, y the top left; w, h in pixels) and first tiles */
+static struct { s16 x, y; u8 w, h; u16 tile; } wsp[16];
+static u8 wsp_n;                        /* how many */
+static const u8 *wsp_tiles;             /* the frame's tiles (in the block) */
+
+/* weapon_px: the weapon frame's colour (0..15, 0 none) at SNES view pixel
+   (x, y): the last sprite covering it that has a colour there (a Mega
+   Drive sprite's tiles go down each column first) */
+static u8 weapon_px(int x, int y)
+{
+    int k;
+    u8 v = 0;
+    for (k = 0; k < wsp_n; k++) {
+        int dx = x - wsp[k].x, dy = y - wsp[k].y, h8 = wsp[k].h >> 3;
+        u8 c;
+        if (dx < 0 || dy < 0 || dx >= wsp[k].w || dy >= wsp[k].h) continue;
+        c = md_px(wsp_tiles + (u32)(wsp[k].tile + (dx >> 3) * h8 + (dy >> 3)) * 32, (u32)(dx & 7), (u32)(dy & 7));
+        if (c) v = c;
+    }
+    return v;
+}
+
 /* gfx_weapon: weapon w's frame (2 w, + 1 firing) into wp_pix / wp_msk,
    each of its colours as a level shaded on the screen's pixels; wp_x0..,
-   wp_r0.. the columns and halfwords it covers */
+   wp_r0.. the columns and halfwords it covers. The frame (the Mega
+   Drive's sprites, placed in the SNES's 256 x 176 view, which is this
+   view's size) is shown WP_NUM / WP_DEN times as big (nearest pixel), from
+   the view's bottom middle, moved sideways into the view if it would go
+   past an edge */
+#define WP_NUM 3
+#define WP_DEN 2
 void gfx_weapon(u8 w, u8 firing)
 {
     s8 id = (s8)(w * 2 + (firing ? 1 : 0));
-    const u8 *f, *sp, *tiles, *pp;
+    const u8 *f, *sp, *pp;
     u8 lev[16];
     u32 n, k, i;
+    int bx0 = VW, bx1 = 0, by0 = VH, by1 = 0, X0, Y0, X1, Y1, X, Y, shift = 0;
     int xmin = VW, xmax = -1, ymin = VH, ymax = -1;
     if (scr_mode != 2 || w > 8) return;
     if (id == wp_frame) return;
@@ -590,37 +620,52 @@ void gfx_weapon(u8 w, u8 firing)
     f = blk + wp_table(0) + (u32)id * 10;
     n = be16(f + 8);
     sp = blk + wp_table(1) + be16(f + 6) * 8UL;
-    tiles = blk + wp_table(3) + (u32)be16(f) * 32;
+    wsp_tiles = blk + wp_table(3) + (u32)be16(f) * 32;
     pp = blk + wp_table(2) + be16(f + 4) * 32UL;
     for (i = 0; i < 16; i++) lev[i] = md_level(be16(pp + 2 * i));
-    for (k = 0; k < n && k < 16; k++) {
+    wsp_n = 0;
+    for (k = 0; k < n && k < 16; k++) {     /* the sprites, and the frame's box (bx0..bx1-1, by0..by1-1) */
         const u8 *s = sp + k * 8;
-        int x = be16(s) & 0x1FF, y = (s16)be16(s + 2), sz = be16(s + 4), tile = be16(s + 6);
-        int w8 = ((sz >> 2) & 3) + 1, h8 = (sz & 3) + 1, dx, dy;  /* the size in tiles (Mega Drive: width bits 2..3, height 0..1) */
+        int x = be16(s) & 0x1FF, y = (s16)be16(s + 2), sz = be16(s + 4);
         if (x >= 256) x -= 512;         /* 9-bit x */
         y += 16;                        /* (the SNES's view rows: the sprite's line y + 24, the view's first 8) */
-        for (dy = 0; dy < h8 * 8; dy++) {
-            int vy = y + dy;
-            if (vy < 0 || vy >= VH) continue;
-            for (dx = 0; dx < w8 * 8; dx++) {
-                int vx = x + dx;
-                u8 v;
-                u16 bit;
-                if (vx < 0 || vx >= VW) continue;
-                /* (a Mega Drive sprite's tiles go down each column first) */
-                v = md_px(tiles + (u32)(tile + (dx >> 3) * h8 + (dy >> 3)) * 32, (u32)(dx & 7), (u32)(dy & 7));
-                if (!v) continue;
-                bit = (u16)(2 * (vy & 7));
-                wp_msk[vx][vy >> 3] |= (u16)(3 << bit);
-                wp_pix[vx][vy >> 3] = (u16)((wp_pix[vx][vy >> 3] & ~(3 << bit)) |
-                                            (shade_at(lev[v], VIEW_X + vx, VIEW_Y + vy) << bit));
-                if (vx < xmin) xmin = vx;
-                if (vx > xmax) xmax = vx;
-                if (vy < ymin) ymin = vy;
-                if (vy > ymax) ymax = vy;
-            }
-        }
+        wsp[k].x = (s16)x;
+        wsp[k].y = (s16)y;
+        wsp[k].w = (u8)((((sz >> 2) & 3) + 1) * 8);    /* (Mega Drive size: width bits 2..3, height 0..1, in tiles - 1) */
+        wsp[k].h = (u8)(((sz & 3) + 1) * 8);
+        wsp[k].tile = be16(s + 6);
+        if (x < bx0) bx0 = x;
+        if (x + wsp[k].w > bx1) bx1 = x + wsp[k].w;
+        if (y < by0) by0 = y;
+        if (y + wsp[k].h > by1) by1 = y + wsp[k].h;
+        wsp_n++;
     }
+    if (!wsp_n) return;
+    /* the box scaled from the view's bottom middle (VW / 2, VH) */
+    X0 = VW / 2 - (VW / 2 - bx0) * WP_NUM / WP_DEN;
+    X1 = X0 + (bx1 - bx0) * WP_NUM / WP_DEN;
+    Y1 = VH - (VH - by1) * WP_NUM / WP_DEN;
+    Y0 = Y1 - (by1 - by0) * WP_NUM / WP_DEN;
+    if (X1 > VW) shift = VW - X1;       /* (into the view sideways) */
+    if (X0 + shift < 0) shift = -X0;
+    for (Y = Y0 < 0 ? 0 : Y0; Y < Y1 && Y < VH; Y++)
+        for (X = X0; X < X1; X++) {
+            int vx = X + shift;
+            u8 v;
+            u16 bit;
+            if (vx < 0 || vx >= VW) continue;
+            /* (the source pixel: nearest, counted from the box's corner) */
+            v = weapon_px(bx0 + (X - X0) * WP_DEN / WP_NUM, by0 + (Y - Y0) * WP_DEN / WP_NUM);
+            if (!v) continue;
+            bit = (u16)(2 * (Y & 7));
+            wp_msk[vx][Y >> 3] |= (u16)(3 << bit);
+            wp_pix[vx][Y >> 3] = (u16)((wp_pix[vx][Y >> 3] & ~(3 << bit)) |
+                                       (shade_at(lev[v], VIEW_X + vx, VIEW_Y + Y) << bit));
+            if (vx < xmin) xmin = vx;
+            if (vx > xmax) xmax = vx;
+            if (Y < ymin) ymin = Y;
+            if (Y > ymax) ymax = Y;
+        }
     if (xmin <= xmax) {
         wp_x0 = (u16)xmin;
         wp_x1 = (u16)(xmax + 1);

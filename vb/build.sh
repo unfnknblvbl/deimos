@@ -52,14 +52,9 @@ OBJS=""
 build() { $V-gcc $CF "${@:3}" -c "$1" -o "obj/$2.o"; OBJS="$OBJS obj/$2.o"; }
 $V-gcc -c src/crt0.s -o obj/crt0.o
 OBJS="obj/crt0.o"
-# the Game Boy Color's ui.c, with the Virtual Boy's names for the buttons
-# an action can have (the SNES's X and Y are the right D-pad's down and
-# up), and the options screen's button names a column further right (after
-# "PREV WEAPON" and "NEXT WEAPON", which fill 11)
-sed -e 's|"SEL+B", "SEL+A", "SEL+LEFT", "SEL+RIGHT",|"R-DOWN", "R-UP", "L", "R",|' \
-    -e 's|^\( *\)"SEL+START"};|\1"SELECT"};|' \
-    -e 's|b\[k\] && 11 + k < 20; k++) d\[11 + k\]|b[k] \&\& 12 + k < 20; k++) d[12 + k]|' ../gbc/src/ui.c > obj/ui.c
-grep -q '"R-DOWN", "R-UP", "L", "R",' obj/ui.c && grep -q '"SELECT"};' obj/ui.c && grep -q 'd\[12 + k\]' obj/ui.c  # (the changes went in)
+# the Game Boy Color's ui.c with the Virtual Boy's button names and its
+# wider status bar (tools/vb_ui.py: a copy, the source unchanged)
+python3 tools/vb_ui.py ../gbc/src/ui.c obj/ui.c
 build obj/ui.c ui -DVIEW_FX
 build ../core/rules.c rules
 build ../core/gen/data.c data

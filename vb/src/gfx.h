@@ -23,7 +23,8 @@ void gfx_init(void);                    /* once: the display, the font, the fram
 void gfx_title(void);                   /* the title screen */
 void gfx_game(void);                    /* the game screen, empty */
 void gfx_message(const char *s);        /* the message line (up to 40 characters) */
-void gfx_hud(char lines[5][21]);        /* the status bar's 5 lines of 20 */
+#define HUD_COLS 25                     /* the status bar's columns (tools/vb_ui.py's layout, the SNES's) */
+void gfx_hud(char lines[5][HUD_COLS + 1]);     /* the status bar's 5 lines */
 void gfx_face(u8 f);                    /* the face picture f (0..8) */
 void gfx_box(char box[16][24], u8 y, u8 h);    /* a box of h lines over the view (y unused) */
 void gfx_box_off(void);
