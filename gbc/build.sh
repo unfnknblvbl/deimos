@@ -89,8 +89,8 @@ if max(ends) > 0x4000:
 PY
 python3 tools/check_calls.py obj/code.noi obj/*.asm   # (a plain call into another bank)
 # the cartridge: the code, the SNES data from bank 64, the resources, the script
-# the data in the SNES game's layout (snes/build.sh's parts), with the
-# editable campaign block (the SNES game's own has the locked one)
+# the data in the SNES game's layout (snes/build.sh's parts and the
+# campaign block: the same bytes as the SNES game's cartridge)
 if [ -z "${SNES_ROM:-}" ]; then
     python3 ../tools/snes_rom.py ../snes/out/deimos.bin ../snes/out/tables.bin ../snes/out/res.bin \
         $MD/build/gen/campaign.bin $SNES > /dev/null

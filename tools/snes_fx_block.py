@@ -9,8 +9,7 @@
 The campaign's block for the SuperFX build: the Mega Drive game's (tools/md_campaign.py
 format) without what the GSU does not need - the visibility tables (pvs,
 pvs_index, vis, vis_index: the GSU looks at every wall and thing), so the
-game fits the GSU's 2 MB. (The editor's copy of the maps stays.) Same layout
-rules: every table 4-aligned, offsets from the block's start; the empty
+game fits the GSU's 2 MB. Same layout rules: every table 4-aligned, offsets from the block's start; the empty
 entries keep their place (offset, size 0).
 
 Usage: snes_fx_block.py <campaign.bin> <out.bin>
@@ -29,8 +28,8 @@ DROP = {"pvs_index", "pvs", "vis_index", "vis"}   # (the entries emptied)
 def trim(src):
     """the block src (a path or bytes) rebuilt without the DROP tables: the
     header and map records first, then the weapons, the texture and sprite
-    banks, each map's pack and entries, the block's last table (header
-    offset 24); every offset in the header and records rewritten"""
+    banks, each map's pack and entries; every offset in the header and
+    records rewritten (the header's reserved zeros at 24 kept)"""
     b = Block(src)
     raw = b.b
     n = b.n_maps
@@ -63,8 +62,6 @@ def trim(src):
             data = b"" if name in DROP else m.raw[name]
             struct.pack_into(">II", out, po + 32 + 8 * k, add(data), len(data))
         struct.pack_into(">I", out, 32 + 32 * i, po)
-    so, ss = struct.unpack_from(">II", raw, 24)          # (the header's table at 24: offset, size)
-    struct.pack_into(">II", out, 24, add(raw[so:so + ss]), ss)
     while len(out) % 4:
         out.append(0)
     struct.pack_into(">I", out, 20, len(out))            # (header: the block's size)

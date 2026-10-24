@@ -11,6 +11,7 @@
 // keys it knows into the Settings fields; save() writes them all back with
 // comments for a person editing the file by hand.
 #include "settings.h"
+#include "projectfile.h"   // (PROJECT_EXT)
 
 #include <SDL.h>
 
@@ -80,12 +81,12 @@ void Settings::load()
     auto b = [&](const char *k, bool &v) {
         if (kv.count(k)) v = kv[k] == "1" || kv[k] == "true" || kv[k] == "yes";
     };
-    s("files.last_rom", last_rom);
+    s("files.last_project", last_project);
     s("files.last_dir", last_dir);
     s("files.jar", jar);
     for (int n = 0; n < 8; n++) {   // recent0 .. recent7, empty ones skipped
         std::string k = "files.recent" + std::to_string(n);
-        if (kv.count(k) && !kv[k].empty()) recent.push_back(kv[k]);
+        if (kv.count(k) && !kv[k].empty() && fs::path(kv[k]).extension() == PROJECT_EXT) recent.push_back(kv[k]);
     }
     s("tools.emulator", emulator);
     s("tools.emulator_md", emulator_md);
@@ -108,6 +109,7 @@ void Settings::load()
     b("art.pixel_grid", art_pixel_grid);
     b("art.fit", art_fit);
     i("build.threads", build_threads);
+    i("build.play", play_console);
     // keep hand-edited values within what the editor can use
     // (preview_console 0..8: the nine entries of App::NEWROM_CONSOLES)
     ui_scale = std::max(0.5f, std::min(3.0f, ui_scale));
@@ -115,6 +117,7 @@ void Settings::load()
     map_panel = std::max(0.1f, std::min(1.0f / 3.0f, map_panel));
     art_zoom = std::max(2, std::min(48, art_zoom));
     preview_console = std::max(0, std::min(8, preview_console));
+    play_console = std::max(0, std::min(8, play_console));
 }
 
 // Writes the whole file again, section by section (bools are written as 1 or 0).
@@ -125,7 +128,7 @@ void Settings::save() const
     std::ofstream f(file());
     if (!f) return;   // can't write: the settings are just not kept
     f << "; Deimos Editor settings. Safe to edit while the editor is closed.\n\n";
-    f << "[files]\nlast_rom=" << last_rom << "\nlast_dir=" << last_dir << "\njar=" << jar << "\n";
+    f << "[files]\n; projects (.deimos)\nlast_project=" << last_project << "\nlast_dir=" << last_dir << "\njar=" << jar << "\n";
     for (size_t n = 0; n < recent.size() && n < 8; n++) f << "recent" << n << "=" << recent[n] << "\n";
     f << "\n[tools]\n; commands that run an emulator; %f is replaced by the ROM file\n";
     f << "emulator=" << emulator << "\n";
@@ -138,14 +141,15 @@ void Settings::save() const
       << "\npreview_small=" << preview_small << "\npreview_low=" << preview_low
       << "\npreview_solid=" << preview_solid << "\n";
     f << "\n[art]\nzoom=" << art_zoom << "\ntile_grid=" << art_grid << "\npixel_grid=" << art_pixel_grid << "\nfit=" << art_fit << "\n";
-    f << "\n[build]\n; 0 = use every CPU core\nthreads=" << build_threads << "\n";
+    f << "\n[build]\n; 0 = use every CPU core\nthreads=" << build_threads
+      << "\n; F5 makes a ROM for this console and plays it (as preview= above)\nplay=" << play_console << "\n";
 }
 
-void Settings::add_recent(const std::string &rom)
+void Settings::add_recent(const std::string &path)
 {
     // remove it if already listed, put it first, keep 8
-    recent.erase(std::remove(recent.begin(), recent.end(), rom), recent.end());
-    recent.insert(recent.begin(), rom);
+    recent.erase(std::remove(recent.begin(), recent.end(), path), recent.end());
+    recent.insert(recent.begin(), path);
     if (recent.size() > 8) recent.resize(8);
-    last_rom = rom;
+    last_project = path;
 }

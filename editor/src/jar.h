@@ -7,9 +7,9 @@
 
 // Importing levels from the original game (DoomRPG.jar, the J2ME phone
 // game, supplied by the user): the maps (.bsp + .str), the entity types
-// (entities.db/.str) and the art. A port of tools/bsp_parser.py,
-// tools/gamedata.py and tools/source_container.py: Sector 1 (level01)
-// comes out exactly as the ports' own build makes it.
+// (entities.db/.str) and the art. A port of the ports' tools/bsp_parser.py,
+// tools/gamedata.py and the art's extractors: every map comes out exactly
+// as the ports' own builds make it.
 // Licence: GPL-2.0-or-later.
 //
 // Called by engine.cpp (new ROMs from the jar), the editor's "Import a

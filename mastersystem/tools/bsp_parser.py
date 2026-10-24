@@ -44,7 +44,7 @@ File layout (all integers little-endian):
 
 Usage: bsp_parser.py LEVEL.bsp [OUT.json]
 Run by build.sh step 1; the JSON it writes (analysis/<level>.json) is read
-by gamedata.py, live_data.py, pack_source.py and others. World units: one
+by gamedata.py, live_data.py and others. World units: one
 grid cell is 64 units, so map bytes (x8) give 8-unit steps.
 
 The "grid" in the output is one int per cell: bits 0-1 the terrain value

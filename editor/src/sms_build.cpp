@@ -13,13 +13,12 @@
 //   sprites      sprite_palette, sprite_record: hardware sprites;
 //   packing      pack_level, make_header: the level's tables into banks;
 //   level_data   all of the above for a Project;
-//   build        the whole ROM: blobs, tables, sprites, container, the
-//                ROM directory, size and checksum.
+//   build        the whole ROM: blobs, tables, sprites, the ROM
+//                directory, size and checksum.
 // Every choice copies the Python tools' arithmetic so the ROM comes out
 // byte for byte the same.
 #include "sms_build.h"
 #include "colour.h"
-#include "container.h"
 #include "levelblob.h"
 
 #include <algorithm>
@@ -880,63 +879,18 @@ bool level_data(const Project &p, LevelData &d, bool with_pvs, const BuildOption
     return true;
 }
 
-// see sms_build.h
-bool is_rom(const Bytes &rom)
-{
-    return rom.size() >= 0x8000 && memcmp(&rom[0x7FF0], "TMR SEGA", 8) == 0 &&
-           memcmp(&rom[ROM_DIR], "DRPGDIR1", 8) == 0;
-}
-
-// see sms_build.h
-bool is_gg(const Bytes &rom)
-{
-    int region = rom.size() >= 0x8000 ? rom[0x7FFF] >> 4 : 0;   // the header's region code (high nibble)
-    return region >= 5 && region <= 7;
-}
-
-// see sms_build.h (the caller has checked is_rom). The ROM directory's
-// layout is written at the end of build() below.
-bool read_project(const Bytes &rom, Project &p, std::string &err)
-{
-    const u8 *dir = &rom[ROM_DIR];
-    if (dir[8] < 3) {   // the directory's version
-        err = "this Master System ROM was made by an older version of the port (before 0.2.8); "
-              "rebuild it with a current one";
-        return false;
-    }
-    int bank = dir[13], n = dir[14];   // the container's first bank and bank count
-    u32 size = get32(dir + 16);        // and its size in bytes
-    if (n == 0 || (size_t)bank * BANK + size > rom.size()) {
-        err = "this ROM has no copy of the level for the editor";
-        return false;
-    }
-    if (!read_container(&rom[(size_t)bank * BANK], size, p, err)) return false;
-    p.sms_plain = !p.has_sms_colours;      // (a ROM from before: its own ceiling and floor colours)
-    return true;
-}
-
 // see sms_build.h. rom_in must be a ROM of this port (the engine part is
-// kept). Progress: 0..72% level_data, then tables, sprites (to 90%), the
-// container and the header.
-bool build(Bytes &rom_in, const Project &p_in, const BuildOptions &opt, BuildStats &stats, std::string &err)
+// kept). Progress: 0..72% level_data, then tables, sprites (to 90%) and
+// the header.
+bool build(Bytes &rom_in, const Project &p, const BuildOptions &opt, BuildStats &stats, std::string &err)
 {
-    // the Master System's ceiling and floor go into the ROM's copy of the
-    // level (its usual black and dark red, unless it has its own or is one
-    // from an older ROM that had none)
-    Project p = p_in;
-    if (!p.has_sms_colours && !p.sms_plain) {
-        p.sms_ceiling = p.sms_ceil();
-        p.sms_floor = p.sms_flo();
-        p.has_sms_colours = true;
-    }
     // the game's data comes from q: the level as this console builds it (its
-    // own pictures, texts and palette); the ROM's editable copy (the
-    // container, below) from p, every console's versions kept
+    // own pictures, texts and palette)
     const Project q = p.for_console(opt.console);
     Bytes level, strings;
     try {   // the rules' tables (these also check the limits)
-        level = make_level_blob(q, false);
-        strings = make_strings_blob(q, false, opt.console == "gg");   // (the Game Gear's buttons and box)
+        level = make_level_blob(q);
+        strings = make_strings_blob(q, opt.console == "gg");   // (the Game Gear's buttons and box)
     } catch (const std::exception &e) {
         err = e.what();
         return false;
@@ -1142,30 +1096,18 @@ bool build(Bytes &rom_in, const Project &p_in, const BuildOptions &opt, BuildSta
     int n_sprite = next_bank - first_sprite;
     opt.at(0.9f);
 
-    // ---- the editable level
-    opt.say("packing the editable level...");
-    Bytes src = opt.locked ? locked_container() : make_container(p);   // (locked: no editable copy)
-    int first_src = next_bank, n_src = (int)((src.size() + BANK - 1) / BANK);
-    if (first_src + n_src > 256) {
-        err = "no room left in the 4 MB ROM for the editor's copy of the level";
-        return false;
-    }
-    memcpy(&rom[(size_t)first_src * BANK], src.data(), src.size());
-    // ROM directory (version 3) at $7FC0: "DRPGDIR1", version, first data
-    // bank (9), number of data banks, first sprite bank, sprite bank count,
-    // first container bank, container bank count, 0, u32 container size
+    // ROM directory (version 4) at $7FC0, as tools/rom_dir.py writes it:
+    // "DEIMDIR1", version, first data bank (9), number of data banks,
+    // first sprite bank, sprite bank count, 3 zero bytes
     u8 *dir = &rom[ROM_DIR];
-    memcpy(dir, "DRPGDIR1", 8);
+    memcpy(dir, "DEIMDIR1", 8);
     int last_data = images.rbegin()->first;
-    dir[8] = 3;
+    dir[8] = 4;
     dir[9] = FIRST_DATA_BANK;
     dir[10] = (u8)std::max(0, last_data - 8);
     dir[11] = (u8)first_sprite;
     dir[12] = (u8)n_sprite;
-    dir[13] = (u8)first_src;
-    dir[14] = (u8)n_src;
-    dir[15] = 0;
-    for (int i = 0; i < 4; i++) dir[16 + i] = (src.size() >> (8 * i)) & 0xFF;
+    dir[13] = dir[14] = dir[15] = 0;
 
     // ---- size (power of two, at least 128 KB) and header (tools/rom_size.py)
     // the last bank with anything in it

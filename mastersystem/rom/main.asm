@@ -1693,7 +1693,7 @@ game_code_1:
 game_code_1_end:
 
 .ORGA $7FC0
-rom_directory:               ; where the generated parts are (tools/pack_source.py, the editor)
+rom_directory:               ; where the generated parts are (tools/rom_dir.py, the editor)
 .include "build/gfx/rom_dir.inc"
 
 ; The Sega ROM header, which the console's BIOS checks before booting.
@@ -1789,7 +1789,6 @@ dlg_font_data_end:
 .ORGA $8000
 .incbin "build/gfx/live/table_small.bin"
 ; generated: the hardware sprites' records for each view size (banks
-; after the level's data), then the editable level (source container)
+; after the level's data)
 .include "build/gfx/sprite_banks_large.inc"
 .include "build/gfx/sprite_banks_small.inc"
-.include "build/gfx/source_banks.inc"

@@ -87,13 +87,13 @@
                                         | sit at 0x200001, 0x200003, ...
                                         | 0x203FFF, one byte per word)
     .ascii  "            "                                      | 0x1BC modem
-| 0x1C8: the notes field, used here as the ROM directory: the "MDRPGDIR"
+| 0x1C8: the notes field, used here as the ROM directory: the "DEIMOSMD"
 | tag, then three big-endian longs. The code itself reaches the campaign
 | block through the md_campaign symbol (pack.c); the directory is for the
-| tools outside the ROM (tools/md_campaign.py, the Doom RPG editor), which
-| find the block here and can rewrite it in place without relinking.
+| tools outside the ROM (tools/make_engine.py, which blanks the block for
+| the Deimos Editor's engine; the editor writes a new block there).
 | 8 + 12 + 20 bytes = the field's 40 bytes.
-    .ascii  "MDRPGDIR"                                          | 0x1C8 notes (40): the ROM directory
+    .ascii  "DEIMOSMD"                                          | 0x1C8 notes (40): the ROM directory
     .long   md_campaign                                       |   the campaign (tools/md_campaign.py)
     .long   0x00400000                                        |   end of the space it may use
     .long   md_areas                                          |   the areas' colours (tools/md_areas.c)

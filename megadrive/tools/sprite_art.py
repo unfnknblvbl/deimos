@@ -40,8 +40,7 @@ PLURAL_OFFSETS = (-16, 16, 0)
 
 class SpriteArt:
     """Loads the jar's sprite data once and returns each sprite on its 64x64
-    canvas (canvas()), caching the results. Used by build_render_data.py
-    and source_container.py.
+    canvas (canvas()), caching the results. Used by build_render_data.py.
     """
     def __init__(self, jar_dir: Path = JAR):
         """Reads the palettes, the mappings, the shapes and the sprite texels from jar_dir."""

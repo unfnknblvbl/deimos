@@ -48,8 +48,8 @@ python3 tools/build_md_ui.py "$ASSETS" "$GEN" "$VERSION"   # font, faces, icons,
 python3 tools/build_sfx.py "$ASSETS" "$GEN"                 # sound effects
 python3 tools/build_music.py "$ASSETS" "$GEN"               # the tunes
 python3 tools/build_weapons.py "$ASSETS" "$GEN"             # the weapon sprites
-# (tools/md_pack.py's single-map pack, left by an older build, would be
-# linked too: remove it)
+# (a single-map pack, left by a much older build, would be linked too:
+# remove it)
 rm -f "$GEN/pack.s" "$GEN/pack.bin"
 # the campaign block (campaign.bin) and campaign.s, which puts it and
 # areas.bin in the ROM's .pack section

@@ -7,8 +7,8 @@
 
 // The level blob and the strings blob the game's rules read: byte-for-byte
 // the same as tools/gen_cdata.py level_blob/strings_blob of each port
-// (Master System: little-endian; Mega Drive: big-endian, tables at even
-// addresses).
+// (Master System: little-endian; the Mega Drive campaign's, which every
+// other console reads: big-endian, tables at even addresses).
 // Licence: GPL-2.0-or-later.
 //
 // The "level blob" is the rules' view of one map: the thing types, things,
@@ -23,18 +23,14 @@
 #include <string>
 #include <vector>
 
+// the Master System's (and Game Gear's) level blob ("LVL1", version 2);
 // throws std::runtime_error with a readable reason when a limit is exceeded
-// big_endian = false: the Master System's blob ("LVL1", version 2);
-// true: the Mega Drive game's single-level blob ("LVB1", version 1)
-Bytes make_level_blob(const Project &p, bool big_endian);
-// the texts (the same choice of byte order and limits); the phone's keys
-// they name written as the console's buttons (keytext.h): gg = the Game
-// Gear's (else the Master System's, or for big_endian the old Mega Drive
-// ROMs' default buttons)
-Bytes make_strings_blob(const Project &p, bool big_endian, bool gg = false);
-// checks a project against the ROM limits; returns "" when fine
-std::string check_limits(const Project &p);          // the Master System's
-std::string check_limits_mdv1(const Project &p);     // the Mega Drive game's single-level ROMs (0.0.4, 0.0.5)
+Bytes make_level_blob(const Project &p);
+// its texts (the same limits), the phone's keys they name written as the
+// console's buttons (keytext.h): gg = the Game Gear's, else the Master System's
+Bytes make_strings_blob(const Project &p, bool gg = false);
+// checks a project against the Master System's limits; returns "" when fine
+std::string check_limits(const Project &p);
 
 // the Mega Drive campaign's (LVB2): maps = the campaign's map names in ROM
 // order (CHANGEMAP's targets), map_id = the original game's id of the map

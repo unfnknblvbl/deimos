@@ -67,6 +67,6 @@ python3 ../tools/snes_sound.py $MD out > /dev/null
 python3 ../tools/snes_tables.py out/tables_game.bin out/spc_engine.bin --view $VIEW_W $VIEW_H > /dev/null
 python3 ../tools/snes_ui_res.py $MD out/res_fx.bin out/spc_streams.bin "$(cat VERSION)" "SUPER FX" > /dev/null
 # the campaign block, trimmed to fit the 2 MB ROM
-python3 ../tools/snes_fx_block.py $MD/build/gen/campaign_locked.bin out/fx_block.bin > /dev/null
+python3 ../tools/snes_fx_block.py $MD/build/gen/campaign.bin out/fx_block.bin > /dev/null
 # the cartridge in the GSU's layout (header at $7FB0)
 python3 ../tools/snes_rom.py --fx out/deimos_fx.bin out/tables_game.bin out/gsu_view.bin out/res_fx.bin out/fx_block.bin out/deimos_fx.sfc

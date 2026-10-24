@@ -6,14 +6,13 @@
 
 // Licence: GPL-2.0-or-later.
 //
-// The level blob (single level, tools/gen_cdata.py level_blob):
-//   16-byte header: "LV", 'L' (little-endian) or 'B' (big-endian), '1',
-//     version (2 Master System, 1 Mega Drive version 0.0.4/0.0.5), then counts:
-//     defs, things, monsters, lines, events, commands (low byte),
-//     strings, spawn x, z, facing, commands' high byte (Master System)
-//   u16 offset of each table (from the blob's start), in TABLES order,
-//     plus "start" and "title" on the Master System
-//   the tables (big-endian: each at an even offset)
+// The Master System's level blob (tools/gen_cdata.py level_blob):
+//   16-byte header: "LVL1", version 2, then counts: defs, things,
+//     monsters, lines, events, commands (low byte), strings, spawn x, z,
+//     facing, commands' high byte
+//   u16 offset of each table (from the blob's start, little-endian), in
+//     TABLES order, then "start" and "title"
+//   the tables
 // The campaign's blob (LVB2) is laid out the same way with a 24-byte
 // header and the TABLES2 list (see make_level_blob_md).
 // Names ending in 0 (ent_def0, ev_state0...) are a table's starting values,
@@ -49,9 +48,6 @@ const Limits SMS_LIMITS = {64, 192, 56, 40, 96, 320, 255};
 // the most bytes for the level blob ($A000-$BFFF of bank 2) and the
 // strings blob (bank 4 from $8000)
 const int SMS_LEVEL_MAX = 0x2000, SMS_STRINGS_MAX = 0x2000;
-// The Mega Drive game's single-level ROMs (0.0.4, 0.0.5)
-const Limits MDV1_LIMITS = {lim::MAX_DEFS, lim::MAX_MAP_ENTS, lim::MAX_MONS, lim::MAX_LINES,
-                            lim::MAX_EVENTS, lim::MAX_CMDS, lim::MAX_STRINGS};
 // the Mega Drive campaign's (tools/gen_cdata.py)
 const Limits MD_LIMITS = {64, 280, 100, 64, 160, 448, 255};
 // blob byte limits, and the most Pain Elementals (things with spawns)
@@ -91,7 +87,6 @@ static std::string check_limits(const Project &p, const Limits &L)
 
 // the public checks (see levelblob.h)
 std::string check_limits(const Project &p) { return check_limits(p, SMS_LIMITS); }
-std::string check_limits_mdv1(const Project &p) { return check_limits(p, MDV1_LIMITS); }
 std::string check_limits_md(const Project &p) { return check_limits(p, MD_LIMITS); }
 
 namespace {
@@ -117,11 +112,10 @@ struct Out {
 }  // namespace
 
 // see levelblob.h
-Bytes make_level_blob(const Project &p, bool big_endian)
+Bytes make_level_blob(const Project &p)
 {
-    Out o{big_endian};
-    bool sms = !big_endian;            // the Master System's version 2 (else the Mega Drive game's single level, version 1)
-    std::string err = check_limits(p, sms ? SMS_LIMITS : MDV1_LIMITS);
+    Out o{false};   // little-endian
+    std::string err = check_limits(p, SMS_LIMITS);
     if (!err.empty()) throw std::runtime_error(err);
     const auto &defs = p.defs;
     // ent_mon: each thing's monster slot (monsters numbered in map order), 255 = not a monster
@@ -172,8 +166,7 @@ Bytes make_level_blob(const Project &p, bool big_endian)
         t[14].push_back(e.z);
         t[15].push_back(e.state);
         t[16].push_back(e.flags);
-        if (sms) o.p16(t[17], starts[i]);   // (words: up to 320 commands)
-        else t[17].push_back(starts[i]);
+        o.p16(t[17], starts[i]);   // (words: up to 320 commands)
         t[18].push_back((u8)e.cmds.size());
         ev_at[e.z * 32 + e.x] = (u8)i;
     }
@@ -205,58 +198,50 @@ Bytes make_level_blob(const Project &p, bool big_endian)
             }
         t[26].push_back(found);
     }
-    int n_tables = N_TABLES;
-    if (sms) {
-        t.resize(N_TABLES + 2);
-        t[N_TABLES].push_back(p.new_game ? 1 : 0);          // "start": a new game's kit
-        std::string title;                                     // "title": shown at the start and the end
-        for (unsigned char ch : utf8_to_latin1(p.name)) title.push_back((char)(ch >= 'a' && ch <= 'z' ? ch - 32 : ch));
-        if (title.size() > 16) title.resize(16);   // at most 16 characters, then a 0
-        t[N_TABLES + 1].assign(title.begin(), title.end());
-        t[N_TABLES + 1].push_back(0);
-        n_tables += 2;
-    }
+    int n_tables = N_TABLES + 2;
+    t.resize(n_tables);
+    t[N_TABLES].push_back(p.new_game ? 1 : 0);          // "start": a new game's kit
+    std::string title;                                     // "title": shown at the start and the end
+    for (unsigned char ch : utf8_to_latin1(p.name)) title.push_back((char)(ch >= 'a' && ch <= 'z' ? ch - 32 : ch));
+    if (title.size() > 16) title.resize(16);   // at most 16 characters, then a 0
+    t[N_TABLES + 1].assign(title.begin(), title.end());
+    t[N_TABLES + 1].push_back(0);
     // the 16-byte header (see the top of this file)
-    Bytes blob = {'L', 'V', big_endian ? (u8)'B' : (u8)'L', '1', (u8)(sms ? 2 : 1), (u8)defs.size(), (u8)p.entities.size(), (u8)n_mon, (u8)p.lines.size(),
+    Bytes blob = {'L', 'V', 'L', '1', 2, (u8)defs.size(), (u8)p.entities.size(), (u8)n_mon, (u8)p.lines.size(),
                   (u8)p.events.size(), (u8)cmds.size(), (u8)p.strings.size(), (u8)p.spawn_x, (u8)p.spawn_z,
-                  (u8)p.spawn_f, (u8)(sms ? cmds.size() >> 8 : 0)};
+                  (u8)p.spawn_f, (u8)(cmds.size() >> 8)};
     // the offset table, then the tables themselves
     int header = 16 + 2 * n_tables;
     Bytes body;
     for (int i = 0; i < n_tables; i++) {
-        if (big_endian && (body.size() & 1)) body.push_back(0);   // the 68000 reads words at even addresses
         o.p16(blob, header + body.size());
         body.insert(body.end(), t[i].begin(), t[i].end());
     }
     blob.insert(blob.end(), body.begin(), body.end());
-    int level_max = sms ? SMS_LEVEL_MAX : lim::LEVEL_MAX;
-    if ((int)blob.size() > level_max)
+    if ((int)blob.size() > SMS_LEVEL_MAX)
         throw std::runtime_error("the level data is too big: " + std::to_string(blob.size()) + " bytes (max " +
-                                 std::to_string(level_max) + ")");
+                                 std::to_string(SMS_LEVEL_MAX) + ")");
     return blob;
 }
 
 // see levelblob.h: a u16 offset per text (from the blob's start), then
 // the texts in Latin-1, each ending in 0, with the phone's keys a text
 // names written as the console's buttons (keytext.h: the Master System's
-// or the Game Gear's as tools/gen_cdata.py writes them; the old Mega
-// Drive ROMs' default buttons)
-Bytes make_strings_blob(const Project &p, bool big_endian, bool gg)
+// or the Game Gear's, as tools/gen_cdata.py writes them)
+Bytes make_strings_blob(const Project &p, bool gg)
 {
-    Out o{big_endian};
     Bytes offs, body;
     unsigned base = 2 * p.strings.size();
     for (auto &s : p.strings) {
-        o.p16(offs, base + body.size());
-        std::string l1 = big_endian ? keytext::md_v1_text(utf8_to_latin1(s)) : keytext::sms_text(utf8_to_latin1(s), gg);
+        put16(offs, base + body.size());
+        std::string l1 = keytext::sms_text(utf8_to_latin1(s), gg);
         body.insert(body.end(), l1.begin(), l1.end());
         body.push_back(0);
     }
     offs.insert(offs.end(), body.begin(), body.end());
-    int strings_max = big_endian ? lim::STRINGS_MAX : SMS_STRINGS_MAX;
-    if ((int)offs.size() > strings_max)
+    if ((int)offs.size() > SMS_STRINGS_MAX)
         throw std::runtime_error("the strings are too long: " + std::to_string(offs.size()) + " bytes (max " +
-                                 std::to_string(strings_max) + ")");
+                                 std::to_string(SMS_STRINGS_MAX) + ")");
     return offs;
 }
 

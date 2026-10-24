@@ -30,30 +30,31 @@ The editor needs nothing else installed. On Linux, if double-clicking doesn't st
 
 Put `DoomRPG.jar` in the `import` folder. When the editor starts, it looks there. If there's no valid one, it asks where yours is and copies it into `import`, so it finds it the next time.
 
+## Projects
+
+You edit a **project**: a `.deimos` file that holds the maps you change, the whole game or a single level, each with its map, the things in it, the scripts and texts, and every picture (with each console's own versions, if you give it any). The ROMs are made from the project; they carry no copy of it, so **keep the project** to change your maps again.
+
+**A new project.** Press **New project from DoomRPG.jar** (or **File > New project from the original game**) and tick the maps, in the order they are played: **The whole game** ticks all of them, **UAC Base only** just the first; one map makes a single level. Leaving a map for one that isn't in the project ends the game. Each map says whether it fits the Master System. The project opens on its first map; **File > Save project as...** gives it a file.
+
+**Opening and saving.** **File > Open project** (or drag a `.deimos` file onto the window, or pick one from **Open recent** or the start page), **File > Save project** (Ctrl+S) and **Save project as...**. The editor opens the last project at start.
+
+**The maps.** The **Map** menu lists the project's maps; pick the one to edit. Switching keeps your changes in the project (Save writes all of them). Exits keep working: a script that changes map names the target map (for example `/level02.bsp`), so a map you edit still leads to the right place. The maps can share the wall textures and sprites: if you change a drawing that other maps also use, only the map you changed gets the new drawing (saving stores both); the others keep theirs. The player's weapon is the same on every map, so a change to it applies to all of them.
+
+**Another level from the original game.** **File > Import a level from the original game** lists every map in your `DoomRPG.jar` and says whether each fits. It converts the one you choose (map, things, scripts, texts and art) in place of the map you're editing; that map keeps its place in the project. **File > New map** empties the map to a small room, keeping its art, thing types and texts.
+
+**Editing the art outside.** **File > Export map to folder** writes the map as `project.json`, `map.json`, its drawings and every picture as a PNG; change the PNGs in another paint program and **File > Import map from folder** brings them back (each changed picture gets a drawing of its own).
+
 ## Making ROMs
 
-Press **Make ROMs from DoomRPG.jar** (or **File > New ROMs from the original game**). Then tick:
+**Of your project.** **File > Make ROMs of this project** (or **Make ROMs...** in the Build tab): tick the consoles, and each gets its own ROM in the `export` folder, with its console's usual name (`deimos.sms`, `deimos.md`, `deimos.gba`...; if that name is taken, `deimos (2).sms` and so on). Every console but the Master System and the Game Gear gets every map of the project, in order; the Master System and the Game Gear hold one map, the one you are editing, within their limits (they are greyed out, with the reason beside them, when it doesn't fit). **F5** (**File > Make a ROM and play**) makes one ROM, for the console chosen in the Build tab, as `export/play_...`, and starts your emulator on it.
 
-- **the maps**, in the order they are played. **The whole game** ticks all of them, **UAC Base only** just the first. Leaving a map for one that isn't in the ROM ends the game. Each map says whether it fits the Master System.
-- **the consoles**: every one you tick gets its own ROM. The Master System and the Game Gear hold one map, within their limits, so they are greyed out (with the reason beside them) unless just one map that fits is ticked.
+**Straight from the game.** **Make ROMs from DoomRPG.jar** (on the start page or in the File menu) makes ROMs of the original maps without a project: tick the maps and the consoles, as above.
 
-Press **Make the ROMs**. They go into the `export` folder, each with its console's usual name (`deimos.sms`, `deimos.md`, `deimos.gba`...; if that name is taken, `deimos (2).sms` and so on), and the first one opens, ready to change. A Master System map takes about 15 seconds, the whole game about a minute per console. The ROMs run in emulators and on flash carts.
+The editor builds everything that depends on the maps; the game code is never changed, so your maps play by exactly the same rules as the original ones. A Master System map takes about 15 seconds, the whole game about a minute per console. The ROMs run in emulators and on flash carts.
 
-## Editing
+On the Master System the UAC Base, Sector 1, Sector 2, the Junctions and the Reactor fit by their counts (the Limits tab says what a map needs). Very big open areas can still be too much to see at once, and the build says so. The other consoles hold every map. A few script commands only the phone game had are listed and are skipped by the consoles.
 
-**Editing.** Open a ROM made here (**File > Open ROM**, or drag it onto the window). Change the map, the things in it, the scripts and texts, and every picture, then **File > Save ROM as...** with a new name (the dialog starts in the `export` folder). The level is stored inside the ROM, so the ROM is all you need. When you save, the editor rebuilds everything that depends on the level. The game code is never changed, so your level plays by exactly the same rules as the original maps. The editor also opens the ROMs of the two ports' own releases (the Master System 0.2.8 on, Mega Drive version 0.0.4 on).
-
-Both games keep the level in the same format. **File > Put this level into the other console's ROM** turns a Master System level into a Mega Drive one, or the other way round.
-
-**The whole game on the Mega Drive.** Mega Drive versions 0.0.6 and later hold the whole game: UAC Base, the Junction, Sectors 1 to 7 and the destroyed Junction, and from 0.0.9 the Reactor, where the game ends. When you open such a ROM, the **Map** menu lists them; pick the one to edit. **Save ROM** writes that map back and leaves the others as they are. Exits keep working: a script that changes map names the target map (for example `/level02.bsp`), so a map you edit still leads to the right place. A level from elsewhere (a Master System ROM, a folder, the original game) takes the place of the map you have picked; when you put one into a whole-game ROM, the editor asks which map it replaces.
-
-The maps share the wall textures and sprites. If you change a drawing that other maps also use, only the map you are editing gets the new drawing; the others keep theirs. The player's weapon is the same on every map, so a change to it applies to all of them.
-
-**Another level from the original game into an open ROM.** **File > Import a level from the original game** lists every map in your `DoomRPG.jar` and says whether each fits. It converts the one you choose (map, things, scripts, texts and art) into the level you're editing.
-
-On the Master System the UAC Base, Sector 1, Sector 2, the Junctions and the Reactor fit by their counts (the Limits tab says what a map needs). Very big open areas can still be too much to see at once, and the build says so. The Mega Drive holds every map. A few script commands only the phone game had are listed and are skipped by the Master System.
-
-The program files are `Deimos Editor` (with a window) and `deimos-editor-cli` (the command line), `.exe` on Windows.
+The editor also works from the command line: `"Deimos Editor" --help` lists what it does (new projects, ROMs, level folders).
 
 ## Using the editor
 
@@ -65,12 +66,12 @@ Everything is sized to your display's scale (KDE, GNOME and Windows display scal
 - **Art.** A small paint program, described below.
 - **Thing types.** What each kind of thing is: monster class, pickup amount, sprite, and so on.
 - **Text & scripts.** All the texts (edit them freely) and every scripted cell. A new line in a text box is a new line in the game's dialog box: 18 letters fit on the Master System, 24 on the Mega Drive.
-- **Limits.** What the level uses, against what each game allows.
-- **Build.** Save the game ROM image, save and play, or copy the level to another console's ROM. Shows how much room is left in the ROM.
+- **Limits.** What the map uses, against what the games allow, and whether it fits the Master System.
+- **Build.** Save the project, make ROMs of it, or make one and play it (F5, on the console chosen there). The log shows how much room is left in each ROM.
 
-**F5** saves and starts your emulator. Set the commands once in **Help > Settings**, for example `mednafen %f` or `blastem %f`.
+**F5** makes a ROM and starts your emulator. Set the commands once in **Help > Settings**, for example `mednafen %f` or `blastem %f`.
 
-**Undo/redo:** Ctrl+Z / Ctrl+Y. **Save:** Ctrl+S.
+**Undo/redo:** Ctrl+Z / Ctrl+Y (per map). **Save the project:** Ctrl+S.
 
 ### The Art tab
 
@@ -85,25 +86,25 @@ Every picture is 64 x 64 pixels with its own 16 colours. The pictures are listed
 
 ## Settings
 
-Settings are kept in `deimos-editor.ini` in the editor's own folder (beside the program), so each copy of the editor has its own and never picks up another version's. They cover recent files, window size, zoom, emulator commands, the preview and the text size. You can edit the file while the editor is closed.
+Settings are kept in `deimos-editor.ini` in the editor's own folder (beside the program), so each copy of the editor has its own and never picks up another version's. They cover the recent projects, window size, zoom, emulator commands, the preview and the text size. You can edit the file while the editor is closed.
 
 ## Limits
 
-| | Master System | Mega Drive (one level, 0.0.4-0.0.5) | Mega Drive (whole game, 0.0.6+), per map |
-|---|---|---|---|
-| map | 32 x 32 cells | 32 x 32 cells | 32 x 32 cells |
-| things (of which monsters) | 192 (56) | 152 (56) | 280 (100) |
-| doors and sliding walls | 40 | 32 | 64 |
-| scripted cells, script commands | 96, 320 | 96, 240 | 160, 448 |
-| thing types | 64 | 64 | 64 |
-| texts | 255, 8 KB in all | 255, 6 KB in all | 255, 16 KB in all |
-| wall textures (each wall decal adds one) | 255 | 48 | 48 |
-| different sprites | - | 64 | 64 |
-| colours | 16 per picture (the level picks 16 in all) | 16 per picture, 32 per texture with decals | the same |
-| ROM | a power of two, up to 1 MB | a power of two, up to 2 MB | a power of two, up to 4 MB, all maps together |
+| | Master System, Game Gear | the other consoles, per map |
+|---|---|---|
+| map | 32 x 32 cells | 32 x 32 cells |
+| things (of which monsters) | 192 (56) | 280 (100) |
+| doors and sliding walls | 40 | 64 |
+| scripted cells, script commands | 96, 320 | 160, 448 |
+| thing types | 64 | 64 |
+| texts | 255, 8 KB in all | 255, 16 KB in all |
+| wall textures (each wall decal adds one) | 255 | 48 |
+| different sprites | - | 64 |
+| colours | 16 per picture (the level picks 16 in all) | 16 per picture, 32 per texture with decals |
+| ROM | a power of two, up to 1 MB | all maps together: up to 4 MB (the Super FX 2 MB) |
 
 Walls must run along cell edges or at 45 degrees. On the Master System at most 96 bytes of walls and props may be visible from one spot (about 45 wall pieces). If a view has too much, the build says which cell.
 
 ## Licence
 
-The editor is free software under the GNU General Public License, version 2 or later (`docs/GPL-2.0.txt`). It uses Dear ImGui, SDL2, nlohmann/json, stb, ZX0 and the DejaVu fonts; their licences are in `docs/`.
+The editor is free software under the GNU General Public License, version 2 or later (`docs/GPL-2.0.txt`). It uses Dear ImGui, SDL2, nlohmann/json, stb and the DejaVu fonts; their licences are in `docs/`.

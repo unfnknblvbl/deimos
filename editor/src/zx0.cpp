@@ -4,9 +4,8 @@
 // Free software under the GNU General Public License, version 2 or (at your
 // option) any later version, with NO WARRANTY: see the LICENSE file.
 
-// ZX0 (Einar Saukas, BSD-3): compression via the bundled reference
-// compressor (third_party/zx0, made thread-safe), decompression written
-// from the format description in the reference decoder.
+// ZX0 (Einar Saukas' format): decompression, written from the format's
+// description in the reference decoder.
 // Licence of this file: GPL-2.0-or-later.
 //
 // The ZX0 stream, as read by zx0_decompress below: a sequence of blocks,
@@ -23,36 +22,7 @@
 // with the literal and offset bytes.
 #include "zx0.h"
 
-extern "C" {
-#include "../third_party/zx0/zx0.h"
-}
-
 #include <stdexcept>
-
-// the reference compressor's search windows (bytes back): the full ZX0
-// range, and the small "quick" one it borrows from ZX7
-#define MAX_OFFSET_ZX0 32640
-#define MAX_OFFSET_ZX7 2176
-
-// Compresses in with the reference compressor (see zx0.h). The compressor
-// allocates its working blocks from a pool that zx0_reset_memory frees
-// afterwards; the pool is per thread (the third_party change), so several
-// builds may compress at once.
-Bytes zx0_compress(const Bytes &in, bool quick)
-{
-    Bytes src = in;
-    if (src.empty()) src.push_back(0);   // like the tools: never compress nothing
-    int out_size = 0, delta = 0;
-    // optimal parse (skip 0 bytes of prefix, window by quick), then emit
-    // the stream (no prefix, not backwards, inverted gamma = 1: the
-    // standard ZX0 format)
-    BLOCK *opt = optimize(src.data(), (int)src.size(), 0, quick ? MAX_OFFSET_ZX7 : MAX_OFFSET_ZX0);
-    unsigned char *out = compress(opt, src.data(), (int)src.size(), 0, 0, 1, &out_size, &delta);
-    Bytes r(out, out + out_size);
-    free(out);              // compress() malloc'ed the output
-    zx0_reset_memory();     // free the parse's blocks
-    return r;
-}
 
 namespace {
 // Reads a ZX0 stream: bytes, single bits and Elias gamma numbers.

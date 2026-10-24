@@ -19,7 +19,7 @@ dialog colours of slots 1, 2, 3 and 15 (white, yellow, grey, dark blue).
 The 9 are chosen from the frame's Mega Drive colours, the one worst served
 first (pixels x distance); every pixel takes the nearest of the 13.
 
-Output: build/gen/pack/wp_*.bin (the data pack, tools/md_pack.py) + build/gen/weapon_data.h
+Output: build/gen/pack/wp_*.bin (tools/md_campaign.py puts them in the campaign block) + build/gen/weapon_data.h
   wp_frames[18]: { tiles offset (in 32-byte tiles), number of tiles,
                    palette index, first sprite, number of sprites }
   wp_sprites[]:  { x, y (view pixels), size (VDP sprite size bits), tile }

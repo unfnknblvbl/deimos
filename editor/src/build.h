@@ -32,9 +32,6 @@ struct BuildOptions {
     // builders use that console's own pictures and texts (Project::
     // for_console); "" = the shared ones only
     std::string console;
-    // leave out the ROM's editable copy of the level (a smaller ROM, more
-    // room for maps; the editor can't open it afterwards)
-    bool locked = false;
     // log one line (nothing when no log is set)
     void say(const std::string &s) const
     {

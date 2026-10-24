@@ -133,17 +133,15 @@ original phone game did:
   visibility, the rules' level tables, the texts, the colours) is in one
   **campaign block** at the end of the ROM (`tools/md_campaign.py`), with
   the wall textures and sprites in two shared banks (each picture once,
-  however many maps use it), the weapon pictures, and an editable copy of
-  every map. The code finds it at start-up through a small directory in
-  the cartridge header's notes field (`$1C8`: `"MDRPGDIR"`, the block's
-  address, the end of the space it may use, `$400000`). So the **Doom RPG
-  editor** (in the Master System repository, `editor/`) can open this ROM,
-  pick any of the eleven maps, change it (the map, the things, the scripts
-  and texts and every picture) and write a new ROM without a compiler.
-  Rebuilding the ROM from its own maps gives exactly the same bytes as
-  `build.sh`. The editable maps have the same format as the Master System
-  version's level (`tools/source_container.py`), so a level can move
-  between the two.
+  however many maps use it), and the weapon pictures. A small directory
+  in the cartridge header's notes field (`$1C8`: `"DEIMOSMD"`, the block's
+  address, the end of the space it may use, `$400000`) says where it is.
+  So the **Deimos Editor** (`../editor/`) makes the ROM without a
+  compiler: the game code (its engine, `sg16.eng`) plus a new block made
+  from your DoomRPG.jar, or from the maps of a project (`.deimos`) you
+  edited in it. For the same maps it gives exactly the same bytes as
+  `build.sh`. The ROM carries no copy of the maps for the editor: all the
+  space goes to the maps themselves.
 - **68000 assembler**: the renderer (`src/render.s`)
   and the game rules (`src/rules.s`) are written in assembler, for speed;
   menus, screens and saving are C.

@@ -8,22 +8,23 @@
 //
 // The App member functions that are not one tab's drawing (see app.h for
 // the overview of the class):
-// - undo / redo: whole copies of the Project;
+// - undo / redo: whole copies of the map being edited;
 // - the image cache: SDL textures of pictures, made on demand;
-// - opening a ROM, switching between a campaign ROM's maps, a new empty map,
-//   starting an emulator;
-// - building: start_build copies the ROM and level and rebuilds on a worker
-//   thread (Rom::build, the console builders); poll_build collects the
-//   result on the UI thread;
+// - projects: opening, saving, switching between a project's maps, a new
+//   empty map, bringing in a level, starting an emulator;
+// - making ROMs: start_project_roms copies the project and makes a ROM per
+//   console on a worker thread (engine::project_rom); poll_build collects
+//   the result on the UI thread;
 // - frame(): the whole window each frame (menu bar, tabs, status line,
 //   modal windows), and draw_menu();
 // - DoomRPG.jar: finding and loading it, checking each of its maps, the
-//   "new ROMs" window (engine::new_rom on the worker thread) and the
-//   "original game's levels" window (import_map);
+//   "new project / make ROMs" window (engine::new_project, engine::new_rom
+//   on the worker thread) and the "original game's levels" window
+//   (import_map);
 // - the text helpers hint(), para() and reading_width().
-// Threads: only start_build / start_new_rom's worker runs off the UI thread.
-// It works on its own copies and talks back through the atomics, the log
-// (under log_mu) and the build_* fields, read once build_finished is set.
+// Threads: only the ROM makers' worker runs off the UI thread. It works on
+// its own copies and talks back through the atomics, the log (under
+// log_mu) and the build_* fields, read once build_finished is set.
 #include "app.h"
 #include "colour.h"
 #include "edit.h"
@@ -75,7 +76,7 @@ void App::redo()
     status = "redone";
 }
 
-// Marks the level as changed: unsaved, the preview data to be remade
+// Marks the map as changed: unsaved, the preview data to be remade
 // (refresh_level_data, next frame), the preview to be redrawn, and with
 // art_changed the cached picture textures dropped.
 void App::changed(bool art_changed)
@@ -215,64 +216,78 @@ void App::forget_shape_images(const std::string &shape)
 }
 
 // ---------------------------------------------------------------- files
-bool App::open_rom(const std::string &path)
+bool App::open_project(const std::string &path)
 {
-    Rom r;
-    Project p;
+    ProjectFile pf;
     std::string err;
-    // the file, then the level kept inside it (map 0 of a campaign ROM)
-    if (!r.load(path, err)) {
-        status = "Can't open " + path + ": " + err;
+    if (!load_project_file(path, pf, err)) {   // (err names the file)
+        status = "Can't open " + err;
         return false;
     }
-    if (!editable(r.console)) {   // (rom.h: these consoles' ROMs are made locked)
-        status = std::string("The ") + r.console_name() + " version isn't edited in the editor (its ROMs leave out the "
-                 "editable level, to save room). Open the Mega Drive, 3DS, Game Boy Color or Game Boy Advance ROM, "
-                 "and make the " + r.console_name() + " ROM from it with File > Make a ROM for another console.";
-        return false;
-    }
-    if (!r.read_project(p, err)) {
-        status = "Can't open " + path + ": " + err;
-        return false;
-    }
-    rom = std::move(r);
-    proj = std::move(p);
+    doc = std::move(pf);
+    doc_path = path;
+    cur_map = 0;
+    proj = doc.maps[0].level;
+    have_project = true;
+    unsaved = false;
     set.add_recent(path);   // first in File > Open recent, and opened at the next start
     set.last_dir = fs::path(path).parent_path().string();
     set.save();
-    reset_view(std::string("Opened ") + rom.console_name() + " ROM " + path);
+    reset_view("Opened " + path + " (" + std::to_string(doc.maps.size()) +
+               (doc.maps.size() == 1 ? " map)" : " maps)"));
     return true;
+}
+
+// see app.h. A weapon frame of another map that differs from this map's
+// (its drawing, its key or its colours) is replaced by this map's, with
+// the drawing.
+void App::store_map()
+{
+    if (!have_project || cur_map < 0 || cur_map >= (int)doc.maps.size()) return;
+    doc.maps[cur_map].level = proj;
+    doc.maps[cur_map].info.title = proj.name;   // (the title the game shows follows the map's name)
+    // true when weapon frame a of p shows the same as frame b of proj
+    auto same = [&](const Project &p, const ArtRef &a, const ArtRef &b) {
+        const Drawing *da = p.drawing(a), *db = proj.drawing(b);
+        return a.shape == b.shape && memcmp(a.pal, b.pal, sizeof a.pal) == 0 && da && db &&
+               memcmp(da->px, db->px, sizeof da->px) == 0;
+    };
+    for (int m = 0; m < (int)doc.maps.size(); m++) {
+        if (m == cur_map) continue;
+        Project &q = doc.maps[m].level;
+        bool all_same = q.weapons.size() == proj.weapons.size();
+        for (size_t k = 0; all_same && k < q.weapons.size(); k++) all_same = same(q, q.weapons[k], proj.weapons[k]);
+        if (all_same) continue;
+        q.weapons = proj.weapons;
+        for (auto &w : proj.weapons)
+            if (const Drawing *d = proj.drawing(w)) q.shapes[w.shape] = *d;
+        q.drop_unused_shapes();
+    }
 }
 
 std::string App::map_label(int m) const
 {
-    if (m < 0 || m >= (int)rom.maps.size()) return "";
-    return rom.maps[m].title + "  (" + rom.maps[m].name + ")";
+    if (m < 0 || m >= (int)doc.maps.size()) return "";
+    // (the map being edited: its title as it is now)
+    const std::string &title = m == cur_map ? proj.name : doc.maps[m].info.title;
+    return title + "  (" + doc.maps[m].info.name + ")";
 }
 
-// a campaign ROM: edit another of its maps
-// (the caller has already asked about unsaved changes; on failure the
-// current map stays)
+// another map of the project; the one being edited is kept in doc first
+// (its unsaved changes stay unsaved, in the project)
 void App::switch_map(int m)
 {
-    Project p;
-    std::string err;
-    int old = rom.map;
-    rom.map = m;   // read_project reads the selected map
-    if (!rom.read_project(p, err)) {
-        rom.map = old;
-        status = "Can't open that map: " + err;
-        return;
-    }
-    proj = std::move(p);
+    if (!have_project || m < 0 || m >= (int)doc.maps.size() || m == cur_map) return;
+    store_map();
+    cur_map = m;
+    proj = doc.maps[m].level;
     reset_view("Editing " + map_label(m));
 }
 
 void App::reset_view(const std::string &how)
 {
-    have_rom = true;
-    unsaved = false;
-    undo_stack.clear();   // undo does not cross into another level
+    have_project = true;
+    undo_stack.clear();   // undo does not cross into another map
     redo_stack.clear();
     clear_images();
     level_dirty = true;
@@ -287,15 +302,91 @@ void App::reset_view(const std::string &how)
     cur_prop = proj.sprites.empty() ? 0 : proj.sprites.begin()->first;
     art.pic = {P_TEXTURE, cur_tex};
     art.tile = -1;
-    for (size_t k = 0; k < NEWROM_CONSOLES.size(); k++)       // (the preview: the ROM's console)
-        if (NEWROM_CONSOLES[k].c == rom.console) set.preview_console = (int)k;
     preview_stale = true;
     status = how + "  (" + std::to_string(proj.walls.size()) + " walls, " + std::to_string(proj.entities.size()) +
              " things, " + std::to_string(proj.events.size()) + " scripts)";
-    // window title: "Deimos Editor 0.9.9 - console - file [- map]"
-    std::string t = std::string(TITLE) + " - " + rom.console_name() + " - " + fs::path(rom.path).filename().string();
-    if (rom.is_campaign()) t += " - " + map_label(rom.map);
+    // window title: "Deimos Editor 0.9.9 - file - map"
+    std::string t = std::string(TITLE) + " - " +
+                    (doc_path.empty() ? std::string("(new project)") : fs::path(doc_path).filename().string()) +
+                    " - " + map_label(cur_map);
     SDL_SetWindowTitle(win, t.c_str());
+}
+
+// see app.h: the File menu's actions that would lose unsaved changes come here
+void App::ask_discard(const std::string &what, std::function<void()> then)
+{
+    if (have_project && unsaved) {
+        pending_what = what;
+        pending_discard = std::move(then);   // frame() asks "Discard changes?"
+    } else
+        then();
+}
+
+void App::request_open(const std::string &path)
+{
+    ask_discard("open " + fs::path(path).filename().string(), [this, path]() { open_project(path); });
+}
+
+// see app.h. The level (from DoomRPG.jar or a level folder) takes the
+// map's place in the project: a map of the whole game gets this map's id,
+// and its title becomes the map's (store_map). Undoable; the start cell,
+// closed doors and first texture are selected, as reset_view does.
+void App::replace_level(Project p)
+{
+    if (p.campaign()) p.map_id = doc.maps[cur_map].info.id;
+    push_undo();
+    proj = std::move(p);
+    changed(true);
+    sel_x = proj.spawn_x;
+    sel_z = proj.spawn_z;
+    preview_facing = proj.spawn_f;
+    preview_open.assign(proj.lines.size(), 0);
+    cur_tex = proj.textures.empty() ? 0 : proj.textures.begin()->first;
+    cur_def = 0;
+    art.pic = {P_TEXTURE, cur_tex};
+}
+
+bool App::save_project(const std::string &path)
+{
+    store_map();
+    std::string err;
+    if (!save_project_file(path, doc, err)) {
+        status = "Can't save " + path + ": " + err;
+        return false;
+    }
+    // (saving may have given a drawing of this map a key of its own: projectfile.h)
+    proj = doc.maps[cur_map].level;
+    clear_images();
+    doc_path = path;
+    unsaved = false;
+    set.add_recent(path);
+    set.last_dir = fs::path(path).parent_path().string();
+    set.save();
+    status = "Saved " + path;
+    SDL_SetWindowTitle(win, (std::string(TITLE) + " - " + fs::path(path).filename().string() + " - " +
+                             map_label(cur_map)).c_str());
+    return true;
+}
+
+void App::save_or_ask()
+{
+    if (!have_project) return;
+    if (doc_path.empty()) save_as();
+    else save_project(doc_path);
+}
+
+// the dialog starts in the project's folder (a new one: the last folder
+// used, else the export folder), with its name (a new one: my_project)
+void App::save_as()
+{
+    if (!have_project) return;
+    std::string dir = !doc_path.empty() ? fs::path(doc_path).parent_path().string()
+                      : !set.last_dir.empty() ? set.last_dir : export_start();
+    std::string name = doc_path.empty() ? std::string("my_project" PROJECT_EXT) : fs::path(doc_path).filename().string();
+    fd.open("Save project as", FileDialog::SAVE, PROJECT_EXT, dir, [this](const std::string &f) {
+        // (the extension added when the name has none)
+        save_project(fs::path(f).has_extension() ? f : f + PROJECT_EXT);
+    }, name);
 }
 
 // File > New map: everything on the map goes, every cell solid, then a 4x4
@@ -310,6 +401,7 @@ void App::new_map()
     p.entities.clear();
     p.lines.clear();
     p.events.clear();
+    p.thin.clear();
     std::fill(p.wall.begin(), p.wall.end(), 1);
     std::fill(p.static_block.begin(), p.static_block.end(), 0);
     int t = cur_tex;
@@ -323,18 +415,19 @@ void App::new_map()
     sel_x = 15;
     sel_z = 15;
     changed();
-    status = "New map: a 4x4 room. Draw with the Floor tool, add things, then File > Save ROM As.";
+    status = "New map: a 4x4 room. Draw with the Floor tool, add things, then File > Save project.";
 }
 
 // Runs the emulator command from the settings (the Master System one for
 // the Master System and Game Gear, the "Mega Drive" one for all the others).
 // "%f" in the command is replaced by the quoted ROM path; without it the path
 // is added at the end. The command runs in the background through the shell.
-void App::run_emulator(const std::string &rom_path)
+void App::run_emulator(const std::string &rom_path, Console c)
 {
-    std::string &emu = sms_family(rom.console) ? set.emulator : set.emulator_md;
+    std::string &emu = sms_family(c) ? set.emulator : set.emulator_md;
     if (emu.empty()) {
-        status = std::string("Set the ") + rom.console_name() + " emulator command in Help > Settings first";
+        status = std::string("Made ") + rom_path + ". Set the " + console_name(c) +
+                 " emulator command in Help > Settings to play it from here.";
         return;
     }
     std::string cmd = emu;
@@ -359,116 +452,115 @@ void App::add_log(const std::string &s)
     log.push_back(s);
 }
 
-// Save (Ctrl+S), Save as, Save and play (F5) and "put this level into the
-// other console's ROM" all come here. target: another ROM to build the
-// level into (nullptr: the open ROM).
-void App::start_build(const std::string &save_to, bool run_after, const Rom *target, bool locked)
+// see app.h. The checks first (each console must take the maps: the
+// Master System and Game Gear the map being edited, within their limits),
+// then the worker thread, which works on its own copy of the project so
+// the user can go on editing. The first failure stops the rest.
+void App::start_project_roms(const std::vector<Console> &cons, const std::string &out, bool folder, bool run_after)
 {
-    if (building) return;   // one build at a time
-    const Rom &dest = target ? *target : rom;
-    // the level must fit the destination: the Master System's limits, the
-    // campaign's (per map) or the Mega Drive game's single-level ROMs' (levelblob.h)
-    std::string err = sms_family(dest.console) ? check_limits(proj)
-                      : dest.is_campaign()          ? check_limits_md(proj)
-                                                    : check_limits_mdv1(proj);
-    if (!err.empty()) {
-        status = "Can't build: " + err;
-        return;
+    if (building || !jar || !have_project || cons.empty()) return;
+    store_map();
+    std::vector<std::pair<Console, std::string>> jobs;   // each console, its file
+    for (Console c : cons) {
+        std::string why = engine::why_not(c, doc, cur_map);
+        if (why.empty() && !engine::available(c)) why = std::string("its engine, ") + engine::file_name(c) + ", is missing";
+        if (!why.empty()) {
+            status = std::string("Can't make the ") + console_name(c) + " ROM: " + why;
+            return;
+        }
+        std::string file;
+        for (auto &nc : NEWROM_CONSOLES)
+            if (nc.c == c) file = nc.file;
+        jobs.push_back({c, folder ? unused_name(out, file) : out});
     }
     if (worker.joinable()) worker.join();   // the last build's thread (already finished)
     building = true;
     build_finished = false;
     cancel = false;
     progress = 0;
-    build_target = save_to;
+    build_target = jobs[0].second;
     build_then_run = run_after;
-    build_locked = locked;
+    run_console = jobs[0].first;
     {
         std::lock_guard<std::mutex> l(log_mu);
         log.clear();
     }
     requested_tab = 5;   // show the Build tab and its log
-    // the thread works on copies, so the user can go on editing
-    auto romcopy = std::make_shared<Rom>(target ? *target : rom);
-    auto projcopy = std::make_shared<Project>(proj);
-    add_log("Building the game ROM image...");
-    worker = std::thread([this, romcopy, projcopy, locked]() {
+    add_log("Making " + std::to_string(jobs.size()) + (jobs.size() > 1 ? " ROMs" : " ROM") + " of the project...");
+    status = jobs.size() > 1 ? "Making the ROMs... (see the Build tab)" : "Making the ROM... (see the Build tab)";
+    auto pf = std::make_shared<ProjectFile>(doc);
+    int map = cur_map;
+    worker = std::thread([this, jobs, pf, map]() {
         BuildOptions o;
-        o.locked = locked;
         o.threads = set.build_threads;
         o.cancel = &cancel;
         o.log = [this](const std::string &s) { add_log(s); };
-        o.progress = [this](float f) { progress = f; };
-        BuildStats st;
+        bool ok = true;
         std::string e;
-        bool ok = romcopy->build(*projcopy, o, st, e);   // rewrite the level-dependent parts
-        if (ok && !build_target.empty()) ok = romcopy->save(build_target, e);   // write the file
+        BuildStats st;
+        for (size_t j = 0; j < jobs.size() && ok; j++) {
+            Console c = jobs[j].first;
+            size_t n = jobs.size();
+            // the overall bar: job j's progress f within its 1/n share
+            o.progress = [this, j, n](float f) { progress = ((float)j + f) / (float)n; };
+            add_log(std::string("---- ") + console_name(c) + ": " + jobs[j].second);
+            Rom r;
+            st = BuildStats();
+            // (reads the shared jar from this thread; the UI does not change
+            // it while building is set)
+            ok = engine::project_rom(c, *jar, *pf, map, r, o, st, e) && r.save(jobs[j].second, e);
+            if (ok)
+                add_log("Saved " + jobs[j].second + ": " + std::to_string(st.rom_kb) + " KB; the maps use " +
+                        std::to_string(st.used_kb) + " KB, " + std::to_string(st.free_kb) + " KB still free");
+            else
+                e = std::string(console_name(c)) + ": " + e;
+        }
         // the results, for poll_build; build_finished last, so they are complete when it is seen
         build_ok = ok;
         build_err = e;
         build_stats = st;
-        if (ok) build_out = std::make_unique<Rom>(*romcopy);
         build_finished = true;
     });
 }
 
-// Once per frame (from frame()): when the worker has finished, takes its
-// result on the UI thread. New ROMs: opens the first one. A rebuild of the
-// open ROM's console: the rebuilt ROM replaces the open one (a build into
-// another console's ROM leaves it alone). Then records the save and, for
-// F5, starts the emulator.
+// see app.h. The ROM always goes to the same file in the export folder, so
+// the emulator plays the newest.
+void App::make_and_play()
+{
+    if (!have_project || building) return;
+    int k = std::max(0, std::min((int)NEWROM_CONSOLES.size() - 1, set.play_console));
+    const NewRomConsole &nc = NEWROM_CONSOLES[k];
+    if (!jar) {
+        status = "Making a ROM needs your DoomRPG.jar (File > Make ROMs from DoomRPG.jar finds it)";
+        return;
+    }
+    fs::path out = fs::path(export_start()) / ("play_" + std::string(nc.file));
+    start_project_roms({nc.c}, out.string(), false, true);
+}
+
+// Once per frame (from frame()): when the worker has finished, joins it and
+// reports the result; for F5, starts the emulator on the ROM.
 void App::poll_build()
 {
     if (!building || !build_finished) return;
     worker.join();
     building = false;
     if (!build_ok) {
-        status = "Build failed: " + build_err;
+        status = "Failed: " + build_err;
         add_log("FAILED: " + build_err);
-        build_is_new = false;
         return;
     }
-    if (build_is_new) {                 // new ROMs: the first opens (if it is an editable console's)
-        build_is_new = false;
-        Rom probe;
-        std::string e;
-        if (probe.load(build_target, e) && editable(probe.console)) open_rom(build_target);
-        else status = "Saved " + build_target + " (a locked ROM: play it; it isn't opened here)";
-        return;
-    }
-    // (a locked copy never replaces the open ROM: the editor couldn't build from it again)
-    bool same_console = build_out->console == rom.console && !build_locked;
-    for (auto &n : build_stats.notes) add_log(n);   // the builder's remarks
-    add_log("ROM: " + std::to_string(build_stats.rom_kb) + " KB; " +
-            (build_out->is_campaign() ? "the game's maps use " : "the level uses ") + std::to_string(build_stats.used_kb) +
-            " KB, " + std::to_string(build_stats.free_kb) + " KB still free");
-    if (same_console) {
-        rom = std::move(*build_out);
-        if (!build_target.empty()) {
-            unsaved = false;
-            rom.path = build_target;   // Save as: from now on the new file is the open ROM
-        }
-    }
-    build_out.reset();
-    if (!build_target.empty()) {
-        set.add_recent(build_target);
-        set.save();
-        status = "Saved " + build_target;
-        add_log("Saved " + build_target);
-        if (same_console)
-            SDL_SetWindowTitle(win, (std::string(TITLE) + " - " + rom.console_name() + " - " +
-                                     fs::path(build_target).filename().string()).c_str());
-        if (build_then_run) run_emulator(build_target);
-    } else
-        status = "Build finished";
+    for (auto &n : build_stats.notes) add_log(n);   // the builder's remarks (the last ROM's)
+    status = "Made " + build_target;
+    if (build_then_run) run_emulator(build_target, run_console);
 }
 
 // ---------------------------------------------------------------- main frame
 // The whole UI for one frame, called by main.cpp between ImGui::NewFrame and
 // ImGui::Render. One full-window ImGui window holds the menu bar, then
-// either the start page (no ROM open) or the six tabs, then the status line;
-// the modal windows (file dialog, jar windows, confirmations, help) are
-// drawn after.
+// either the start page (no project open) or the six tabs, then the status
+// line; the modal windows (file dialog, jar windows, confirmations, help)
+// are drawn after.
 void App::frame()
 {
     // textures dropped last frame are no longer in any draw list: free them
@@ -478,14 +570,14 @@ void App::frame()
     poll_build();   // a finished build's result
     ImGuiIO &io = ImGui::GetIO();
     // keyboard shortcuts, unless a text box or the file dialog has the keys:
-    // Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo, Ctrl+S save over the open
-    // ROM, F5 save and run the emulator
+    // Ctrl+Z undo, Ctrl+Y or Ctrl+Shift+Z redo, Ctrl+S save the project, F5
+    // make a ROM and play it
     if (!io.WantTextInput && !fd.active()) {
         bool ctrl = io.KeyCtrl;
         if (ctrl && ImGui::IsKeyPressed(ImGuiKey_Z)) undo();
         if (ctrl && (ImGui::IsKeyPressed(ImGuiKey_Y) || (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)))) redo();
-        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S) && have_rom && !building) start_build(rom.path, false);
-        if (ImGui::IsKeyPressed(ImGuiKey_F5) && have_rom && !building) start_build(rom.path, true);
+        if (ctrl && ImGui::IsKeyPressed(ImGuiKey_S) && have_project) save_or_ask();
+        if (ImGui::IsKeyPressed(ImGuiKey_F5) && have_project && !building) make_and_play();
     }
     // (note: Ctrl+Shift+Z also matches the Ctrl+Z test above, so it undoes
     // and then redoes in the same frame)
@@ -496,35 +588,38 @@ void App::frame()
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoCollapse);
     draw_menu();
-    if (!have_rom) {
-        // ---- the start page: what the editor does, Make ROMs / Open, recent ROMs
+    if (!have_project) {
+        // ---- the start page: what the editor does, New project / Open / Make ROMs, recent projects
         ImGui::Spacing();
-        para("This editor makes and changes Doom RPG ROMs for the Master System, Game Gear, Mega Drive, SNES (with or "
-             "without the SuperFX), 3DS, 32X, Game Boy Color and Game Boy Advance. It contains nothing of the original "
-             "game: give it your own copy of the phone game, DoomRPG.jar, and it makes the ROMs from it - the maps, "
-             "the art, the texts, the music.");
+        para("This editor makes Doom RPG ROMs for the Master System, Game Gear, Mega Drive, SNES (with or without "
+             "the SuperFX), 3DS, 32X, Game Boy Color and Game Boy Advance, and edits the game's maps. It contains "
+             "nothing of the original game: give it your own copy of the phone game, DoomRPG.jar, and it makes "
+             "everything from it - the maps, the art, the texts, the music.");
         ImGui::Spacing();
         if (building) {
-            // the first ROMs being made: progress and the last 12 log lines
+            // ROMs being made: progress and the last 12 log lines
             ImGui::ProgressBar(progress, ImVec2(reading_width(), 0));
             std::lock_guard<std::mutex> l(log_mu);
             for (size_t i = log.size() > 12 ? log.size() - 12 : 0; i < log.size(); i++) para("%s", log[i].c_str());
             ImGui::Spacing();
         }
-        ImGui::BeginDisabled(building);
-        if (ImGui::Button("Make ROMs from DoomRPG.jar...")) ask_new_rom();   // the new-ROMs window
-        ImGui::EndDisabled();
+        if (ImGui::Button("New project from DoomRPG.jar...")) ask_new_rom(NR_NEW_PROJECT);
         ImGui::SameLine();
-        if (ImGui::Button("Open a ROM...")) fd.open("Open ROM", FileDialog::OPEN, ROM_EXTS, set.last_dir.empty() ? export_start() : set.last_dir,
-                                                    [this](const std::string &f) { request_open(f); });
+        if (ImGui::Button("Open a project..."))
+            fd.open("Open project", FileDialog::OPEN, PROJECT_EXT, set.last_dir.empty() ? export_start() : set.last_dir,
+                    [this](const std::string &f) { request_open(f); });
+        ImGui::SameLine();
+        ImGui::BeginDisabled(building);
+        if (ImGui::Button("Make ROMs from DoomRPG.jar...")) ask_new_rom(NR_JAR_ROMS);   // straight from the jar
+        ImGui::EndDisabled();
         ImGui::Spacing();
-        para("An editable ROM made here (Mega Drive, 3DS, Game Boy Color or Game Boy Advance; also the Mega Drive game from 0.0.4 on) "
-             "keeps an editable copy of its levels inside: open it to change the map, the things in it, the "
-             "scripts and texts, the wall textures and the sprites, and save a new ROM. The game code is never "
-             "changed.");
+        para("A project (a .deimos file) holds the maps you edit: the whole game or a single level, with the map, "
+             "the things in it, the scripts and texts, the wall textures and the sprites. Make one from the "
+             "original game, change it, save it, and make ROMs of it for any of the consoles (File > Make ROMs). "
+             "The game code is never changed.");
         if (!set.recent.empty()) {
             ImGui::Spacing();
-            ImGui::Text("Recent:");
+            ImGui::Text("Recent projects:");
             for (auto &r : set.recent)
                 if (ImGui::Button(r.c_str())) {
                     request_open(r);
@@ -573,63 +668,19 @@ void App::frame()
     draw_jar_window();
     draw_newrom_window();
     draw_find_jar_window();
-    // "Discard changes?": request_open set pending_open because the level is unsaved
-    if (!pending_open.empty() && !ImGui::IsPopupOpen("Discard changes?")) ImGui::OpenPopup("Discard changes?");
+    // "Discard changes?": ask_discard set pending_discard because the project is unsaved
+    if (pending_discard && !ImGui::IsPopupOpen("Discard changes?")) ImGui::OpenPopup("Discard changes?");
     if (ImGui::BeginPopupModal("Discard changes?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("The level has unsaved changes. Open %s anyway?", fs::path(pending_open).filename().string().c_str());
-        if (ImGui::Button("Open it, lose the changes")) {
-            std::string p = pending_open;
-            pending_open.clear();
+        ImGui::Text("The project has unsaved changes. %s anyway?", pending_what.c_str());
+        if (ImGui::Button("Yes, lose the changes")) {
+            auto then = std::move(pending_discard);
+            pending_discard = nullptr;
             ImGui::CloseCurrentPopup();
-            open_rom(p);
+            then();
         }
         ImGui::SameLine();
         if (ImGui::Button("Cancel")) {
-            pending_open.clear();
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
-    // "Switch map?": the Map menu picked another map while this one is unsaved
-    if (pending_map >= 0 && !ImGui::IsPopupOpen("Switch map?")) ImGui::OpenPopup("Switch map?");
-    if (ImGui::BeginPopupModal("Switch map?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("This map has unsaved changes. Edit %s anyway?", map_label(pending_map).c_str());
-        if (ImGui::Button("Switch, lose the changes")) {
-            int m = pending_map;
-            pending_map = -1;
-            ImGui::CloseCurrentPopup();
-            switch_map(m);
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
-            pending_map = -1;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
-    }
-    // "Which map should it replace?": File > Put this level into the other
-    // console's ROM picked a campaign ROM; choose its map, then where to save
-    if (pending_other && !ImGui::IsPopupOpen("Which map should it replace?"))
-        ImGui::OpenPopup("Which map should it replace?");
-    if (ImGui::BeginPopupModal("Which map should it replace?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextWrapped("That ROM holds the whole game. Pick the map this level takes the place of:");
-        for (size_t m = 0; m < pending_other->maps.size(); m++) {
-            auto &mi = pending_other->maps[m];
-            if (ImGui::Selectable((mi.title + "  (" + mi.name + ")").c_str(), (int)m == pending_other->map))
-                pending_other->map = (int)m;   // the map the build will replace
-        }
-        if (ImGui::Button("Replace it")) {
-            auto other = pending_other;   // kept alive by the callback's copy of the pointer
-            pending_other.reset();
-            ImGui::CloseCurrentPopup();
-            // (the save dialog always offers ".md", whatever console the
-            // campaign ROM is for)
-            fd.open("Save the new ROM as", FileDialog::SAVE, ".md", export_start(),
-                    [this, other](const std::string &out) { start_build(out, false, other.get()); }, "my_level.md");
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
-            pending_other.reset();
+            pending_discard = nullptr;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -638,18 +689,18 @@ void App::frame()
     ImGui::End();
 }
 
-// The menu bar: File, Map (campaign ROMs only), Edit, Help, and on the right
-// the open ROM's console and size. Menu items that need a ROM, or no build
-// running, are greyed out otherwise. Most file actions go through the file
-// dialog, whose callback does the work later.
+// The menu bar: File, Map, Edit, Help, and on the right the map being
+// edited. Menu items that need a project, a jar or no build running are
+// greyed out otherwise. Most file actions go through the file dialog,
+// whose callback does the work later.
 void App::draw_menu()
 {
     if (!ImGui::BeginMenuBar()) return;
     if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("New ROMs from the original game (DoomRPG.jar)...", "", false, !building)) ask_new_rom();
-        if (ImGui::MenuItem("Open ROM...", "")) {
+        if (ImGui::MenuItem("New project from the original game (DoomRPG.jar)...")) ask_new_rom(NR_NEW_PROJECT);
+        if (ImGui::MenuItem("Open project...")) {
             // start in the last folder used, else the export folder
-            fd.open("Open ROM", FileDialog::OPEN, ROM_EXTS, set.last_dir.empty() ? export_start() : set.last_dir,
+            fd.open("Open project", FileDialog::OPEN, PROJECT_EXT, set.last_dir.empty() ? export_start() : set.last_dir,
                     [this](const std::string &f) { request_open(f); });
         }
         if (ImGui::BeginMenu("Open recent", !set.recent.empty())) {
@@ -660,111 +711,51 @@ void App::draw_menu()
                 }
             ImGui::EndMenu();
         }
+        if (ImGui::MenuItem("Save project", "Ctrl+S", false, have_project)) save_or_ask();
+        if (ImGui::MenuItem("Save project as...", "", false, have_project)) save_as();
         ImGui::Separator();
-        // Save: rebuild over the open ROM's own file
-        if (ImGui::MenuItem("Save ROM", "Ctrl+S", false, have_rom && !building)) start_build(rom.path, false);
-        if (ImGui::MenuItem("Save ROM as...", "", false, have_rom && !building))
-            fd.open("Save ROM as", FileDialog::SAVE, rom_ext(), export_start(),
-                    [this](const std::string &f) {
-                        set.last_dir = fs::path(f).parent_path().string();
-                        start_build(f, false);
-                    },
-                    "my_level" + rom_ext());
-        if (ImGui::MenuItem("Save and play", "F5", false, have_rom && !building)) start_build(rom.path, true);
-        // a copy without the editable level: smaller, more room for maps, but
-        // the editor can't open it (the open ROM stays as it is)
-        if (ImGui::MenuItem("Save a locked copy...", "", false, have_rom && !building))
-            fd.open("Save a locked copy (it can't be opened in the editor)", FileDialog::SAVE, rom_ext(), export_start(),
-                    [this](const std::string &f) {
-                        set.last_dir = fs::path(f).parent_path().string();
-                        start_build(f, false, nullptr, true);
-                    },
-                    "my_level_locked" + rom_ext());
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("Leaves out the ROM's editable copy of the level (about 250 KB on a whole-game ROM): more room "
-                              "for maps. Keep the unlocked ROM: the locked one can't be opened here.");
-        // a new ROM for another console, of the maps open here (every map of a
-        // campaign ROM; the level being edited for the Master System and Game
-        // Gear); the graphics and sounds from the jar; locked for the consoles
-        // the editor doesn't edit
-        if (ImGui::BeginMenu("Make a ROM for another console", have_rom && !building)) {
-            for (auto &nc : NEWROM_CONSOLES) {
-                bool have = engine::available(nc.c);   // (its engine file is beside the editor)
-                std::string label = std::string(nc.label) + (!have ? " (no engine)" : editable(nc.c) ? "..." : " (locked)...");
-                if (ImGui::MenuItem(label.c_str(), "", false, (bool)jar && have)) {
-                    Console c = nc.c;
-                    std::string base = fs::path(nc.file).stem().string(), ext = fs::path(nc.file).extension().string();
-                    fd.open(std::string("Save the ") + console_name(c) + " ROM", FileDialog::SAVE, ext, export_start(),
-                            [this, c](const std::string &f) {
-                                set.last_dir = fs::path(f).parent_path().string();
-                                start_make_rom(c, f);
-                            },
-                            "deimos_" + base + ext);
-                }
-            }
-            if (!jar) ImGui::TextDisabled("(needs your DoomRPG.jar: File > Your copy of Doom RPG)");
-            ImGui::EndMenu();
-        }
-        // another ROM (any console) gets this level: pick it, then (for a
-        // campaign ROM) the map to replace, then where to save the result
-        if (ImGui::MenuItem("Put this level into the other console's ROM...", "", false, have_rom && !building))
-            fd.open("Pick the other console's ROM (it is not changed)", FileDialog::OPEN, ROM_EXTS,
-                    set.last_dir, [this](const std::string &f) {
-                        auto other = std::make_shared<Rom>();
-                        std::string err;
-                        if (!other->load(f, err)) {
-                            status = err;
-                            return;
-                        }
-                        if (!editable(other->console)) {   // (made new, locked: File > Make a ROM for another console)
-                            status = std::string("The ") + other->console_name() + " version is made new, not edited: "
-                                     "use File > Make a ROM for another console";
-                            return;
-                        }
-                        if (other->is_campaign()) {
-                            pending_other = other;   // frame() asks which map next
-                            return;
-                        }
-                        std::string ext = console_ext(other->console);
-                        fd.open("Save the new ROM as", FileDialog::SAVE, ext, export_start(),
-                                [this, other](const std::string &out) { start_build(out, false, other.get()); },
-                                "my_level" + ext);
-                    });
+        // ROMs of the project for the consoles ticked, into the export folder
+        if (ImGui::MenuItem("Make ROMs of this project...", "", false, have_project && !building))
+            ask_new_rom(NR_PROJECT_ROMS);
+        if (ImGui::MenuItem("Make a ROM and play", "F5", false, have_project && !building)) make_and_play();
+        if (ImGui::MenuItem("Make ROMs from DoomRPG.jar (no project)...", "", false, !building))
+            ask_new_rom(NR_JAR_ROMS);
         ImGui::Separator();
-        if (ImGui::MenuItem("New map (keeps art and thing types)", "", false, have_rom)) new_map();
-        if (ImGui::MenuItem("Import a level from the original game (DoomRPG.jar)...", "", false, have_rom))
+        if (ImGui::MenuItem("New map (keeps art and thing types)", "", false, have_project)) new_map();
+        if (ImGui::MenuItem("Import a level from the original game (DoomRPG.jar)...", "", false, have_project))
             with_jar([this]() { show_jar = true; });
-        if (ImGui::MenuItem("Export level to folder...", "", false, have_rom))
+        // the map being edited as a level folder (project.json + PNGs), to
+        // edit its art in another program
+        if (ImGui::MenuItem("Export map to folder...", "", false, have_project))
             fd.open("Export to folder", FileDialog::FOLDER, "", set.last_dir, [this](const std::string &d) {
                 std::string err;
-                status = export_project(proj, d, err) ? "Exported to " + d + " (project.json + PNGs)" : "Export failed: " + err;
+                MapInfo info = doc.maps[cur_map].info;
+                info.title = proj.name;
+                status = export_project(proj, info, d, err) ? "Exported to " + d + " (project.json + PNGs)"
+                                                            : "Export failed: " + err;
             });
-        // a folder written by Export (project.json + PNGs) replaces the level; undoable
-        if (ImGui::MenuItem("Import level from folder...", "", false, have_rom))
+        // a folder written by Export replaces the map being edited; undoable
+        if (ImGui::MenuItem("Import map from folder...", "", false, have_project))
             fd.open("Import from folder", FileDialog::FOLDER, "", set.last_dir, [this](const std::string &d) {
                 Project p;
+                MapInfo info;   // (the folder's own place in its project: not used here)
                 std::string err;
-                if (!import_project(d, p, err)) {
+                if (!import_project(d, p, info, err)) {
                     status = "Import failed: " + err;
                     return;
                 }
-                push_undo();
-                proj = std::move(p);
-                changed(true);
+                replace_level(std::move(p));
                 status = "Imported " + d;
             });
         ImGui::Separator();
         if (ImGui::MenuItem("Quit")) want_quit = true;   // main.cpp asks first if unsaved
         ImGui::EndMenu();
     }
-    // the Map menu: a campaign ROM's maps, the one being edited ticked
-    if (have_rom && rom.is_campaign() && ImGui::BeginMenu("Map")) {
-        ImGui::TextDisabled("The game's maps, in order:");
-        for (size_t m = 0; m < rom.maps.size(); m++)
-            if (ImGui::MenuItem(map_label((int)m).c_str(), "", (int)m == rom.map, !building) && (int)m != rom.map) {
-                if (unsaved) pending_map = (int)m;   // ask first (frame()'s "Switch map?")
-                else switch_map((int)m);
-            }
+    // the Map menu: the project's maps, the one being edited ticked
+    if (have_project && ImGui::BeginMenu("Map")) {
+        ImGui::TextDisabled("The project's maps, in the order they are played:");
+        for (size_t m = 0; m < doc.maps.size(); m++)
+            if (ImGui::MenuItem(map_label((int)m).c_str(), "", (int)m == cur_map)) switch_map((int)m);
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Edit")) {
@@ -777,38 +768,31 @@ void App::draw_menu()
         if (ImGui::MenuItem("Settings / about")) show_about = true;
         ImGui::EndMenu();
     }
-    // right-aligned (at a fixed distance from the right edge): which ROM is open
-    if (have_rom) {
-        ImGui::SameLine(ImGui::GetWindowWidth() - (rom.is_campaign() ? 470 : 260) * g_ui);
-        if (rom.is_campaign()) {
-            ImGui::TextDisabled("%s - %s ROM, %d KB", rom.maps[rom.map].title.c_str(), rom.console_name(),
-                                (int)(rom.data.size() / 1024));
-        } else
-            ImGui::TextDisabled("%s ROM, %d KB", rom.console_name(), (int)(rom.data.size() / 1024));
+    // right-aligned (at a fixed distance from the right edge): which map is being edited
+    if (have_project) {
+        ImGui::SameLine(ImGui::GetWindowWidth() - 360 * g_ui);
+        ImGui::TextDisabled("%s - map %d of %d", proj.name.c_str(), cur_map + 1, (int)doc.maps.size());
     }
     ImGui::EndMenuBar();
 }
 
-void App::request_open(const std::string &path)
-{
-    if (unsaved && have_rom) pending_open = path;   // frame() asks "Discard changes?"
-    else open_rom(path);
-}
-
-// By extension (any case): .jar / .zip is the original game (its levels
-// window opens, once a ROM is open); .png is refused with a pointer to the
-// Art tab; anything else is tried as a ROM.
+// By extension (any case): .deimos is a project (opened); .jar / .zip the
+// original game (its levels window opens with a project open, else the new
+// project window); .png is refused with a pointer to the Art tab; anything
+// else (a ROM, say) is explained.
 void App::dropped(const std::string &path)
 {
     std::string ext = fs::path(path).extension().string();
     for (auto &c : ext) c = (char)tolower((unsigned char)c);
-    if (ext == ".jar" || ext == ".zip") {
-        if (!have_rom) status = "Open a ROM first, then drop the original game on the window to bring in its levels";
-        else open_jar(path);
-    } else if (ext == ".png" && have_rom) {
+    if (ext == PROJECT_EXT) request_open(path);
+    else if (ext == ".jar" || ext == ".zip") {
+        if (have_project) open_jar(path);
+        else if (load_jar(path) && jar_ok()) ask_new_rom(NR_NEW_PROJECT);
+    } else if (ext == ".png" && have_project)
         status = "To bring in a picture, use Import PNG in the Art tab";
-    } else
-        request_open(path);
+    else
+        status = "Drop a project (" PROJECT_EXT ") or DoomRPG.jar here. The editor makes ROMs from projects; it "
+                 "doesn't open them.";
 }
 
 // ---------------------------------------------------------------- the original game's maps
@@ -839,10 +823,9 @@ bool App::load_jar(const std::string &path)
             std::string sms = check_limits(p);   // the Master System's limits
             g.fits_sms = sms.empty();
             g.sms_verdict = sms;
-            // "fits" is judged against the open ROM: a campaign ROM's limits,
-            // else the Master System's (also used for a single-level Mega
-            // Drive ROM and when no ROM is open)
-            std::string lim = rom.is_campaign() ? check_limits_md(p) : sms;
+            // "fits": a map of the whole game's limits (the consoles but the
+            // Master System and Game Gear)
+            std::string lim = check_limits_md(p);
             g.fits = lim.empty();
             // open cells: 1024 cells minus the solid ones
             g.verdict = g.fits ? "fits: " + std::to_string(p.entities.size()) + " things, " +
@@ -857,7 +840,7 @@ bool App::load_jar(const std::string &path)
     return true;
 }
 
-// ---------------------------------------------------------------- new ROMs from DoomRPG.jar
+// ---------------------------------------------------------------- new projects and ROMs
 void App::newrom_reset()
 {
     newrom_maps = engine::campaign_maps(*jar);   // the maps in playing order
@@ -870,10 +853,11 @@ void App::newrom_reset()
     }
 }
 
-void App::ask_new_rom()
+void App::ask_new_rom(NewRomMode m)
 {
-    with_jar([this]() {
+    with_jar([this, m]() {
         newrom_reset();
+        newrom_mode = m;
         show_newrom = true;
     });
 }
@@ -987,12 +971,18 @@ void App::draw_find_jar_window()
 }
 
 // A whole-game console takes any maps. The Master System and Game Gear take
-// exactly one, and only one that fits their limits (checked by load_jar).
+// exactly one, and only one that fits their limits: of the jar's (checked
+// by load_jar), the one ticked; of the project's, the map being edited.
 std::string App::newrom_why_not(size_t k) const
 {
-    if (!engine::available(NEWROM_CONSOLES[k].c))   // (its engine file isn't beside the editor)
-        return std::string("no engine: ") + engine::file_name(NEWROM_CONSOLES[k].c) + " is not in " + engine::folder();
+    Console c = NEWROM_CONSOLES[k].c;
+    if (!engine::available(c))   // (its engine file isn't beside the editor)
+        return std::string("no engine: ") + engine::file_name(c) + " is not in " + engine::folder();
     if (NEWROM_CONSOLES[k].campaign) return "";
+    if (newrom_mode == NR_PROJECT_ROMS) {   // the map being edited, as the Master System has it
+        std::string lim = check_limits(proj.single_level());
+        return lim.empty() ? "" : "holds one map: " + proj.name + " doesn't fit: " + lim;
+    }
     std::vector<size_t> ticked;
     for (size_t i = 0; i < newrom_sel.size(); i++)
         if (newrom_sel[i]) ticked.push_back(i);
@@ -1003,127 +993,145 @@ std::string App::newrom_why_not(size_t k) const
     return "that map isn't in the jar";
 }
 
-// The "New ROMs from the original game" window: maps on the left (ticked
-// in newrom_sel), consoles on the right (newrom_cons; greyed out with the
-// reason when newrom_why_not says so), and "Make the ROMs".
+// The "maps and consoles" window, in its three modes (app.h NewRomMode):
+// maps on the left (ticked in newrom_sel; not for the project's ROMs),
+// consoles on the right (newrom_cons; greyed out with the reason when
+// newrom_why_not says so; not for a new project), and the button that
+// does it. The window keeps one ImGui id ("###newrom") whatever its title.
 void App::draw_newrom_window()
 {
     if (show_newrom) {
-        ImGui::OpenPopup("New ROMs from the original game");
+        ImGui::OpenPopup("###newrom");
         show_newrom = false;
     }
+    const char *title = newrom_mode == NR_NEW_PROJECT    ? "New project from the original game###newrom"
+                        : newrom_mode == NR_PROJECT_ROMS ? "Make ROMs of this project###newrom"
+                                                         : "Make ROMs from the original game###newrom";
     ImGui::SetNextWindowSize(ImVec2(980 * ui, 600 * ui), ImGuiCond_Appearing);
-    if (!ImGui::BeginPopupModal("New ROMs from the original game", nullptr)) return;
-    para("The editor makes each ROM from your DoomRPG.jar: the maps, the status bar, the fonts, the title screen, "
-         "and on the consoles that have them the music and the sounds. Tick the maps to put in, and every console "
-         "to make a ROM for: each gets its own, in the export folder. Then the first one opens, ready to change.");
+    if (!ImGui::BeginPopupModal(title, nullptr)) return;
+    bool show_maps = newrom_mode != NR_PROJECT_ROMS, show_cons = newrom_mode != NR_NEW_PROJECT;
+    if (newrom_mode == NR_NEW_PROJECT)
+        para("A new project of the original game's maps, from your DoomRPG.jar: tick the maps to put in, in the "
+             "order they are played (one map makes a single level). The project opens, ready to change; save it "
+             "with File > Save project.");
+    else if (newrom_mode == NR_PROJECT_ROMS)
+        para("A ROM of this project for every console ticked, in the export folder: every map, as each console "
+             "has it (its own pictures and texts). The Master System and the Game Gear hold one map: the one "
+             "you are editing, %s. The status bar, fonts, title screen, music and sounds come from your "
+             "DoomRPG.jar.", proj.name.c_str());
+    else
+        para("The editor makes each ROM from your DoomRPG.jar: the maps, the status bar, the fonts, the title "
+             "screen, and on the consoles that have them the music and the sounds. Tick the maps to put in, and "
+             "every console to make a ROM for: each gets its own, in the export folder. (To change the maps "
+             "first, make a new project instead.)");
     ImGui::Separator();
-    // the two columns fill the window above the bottom row of buttons
+    // the columns fill the window above the bottom row of buttons
     ImGui::BeginChild("which", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 1.6f), false);
-    ImGui::BeginTable("cols", 2, ImGuiTableFlags_BordersInnerV);
-    ImGui::TableNextColumn();
-    // ---- the maps
-    ImGui::TextUnformatted("Maps, in the order they are played:");
-    if (ImGui::Button("The whole game")) newrom_sel.assign(newrom_maps.size(), 1);
-    ImGui::SameLine();
-    if (ImGui::Button("UAC Base only")) {
-        newrom_sel.assign(newrom_maps.size(), 0);
-        if (!newrom_sel.empty()) newrom_sel[0] = 1;
-    }
+    ImGui::BeginTable("cols", show_maps && show_cons ? 2 : 1, ImGuiTableFlags_BordersInnerV);
     int n_maps = 0;   // maps ticked
-    for (size_t i = 0; i < newrom_maps.size(); i++) {
-        bool v = newrom_sel[i];
-        // the label shows the title; "##name" keeps each checkbox's ImGui id unique
-        if (ImGui::Checkbox((Jar::map_title(newrom_maps[i]) + "##" + newrom_maps[i]).c_str(), &v)) newrom_sel[i] = v;
-        n_maps += v;
-        // beside it, in green or red, whether it fits the Master System
-        for (auto &g : jar_maps)
-            if (g.name == newrom_maps[i]) {
-                ImGui::SameLine(250 * ui);
-                ImGui::TextColored(g.fits_sms ? ImVec4(0.6f, 1, 0.6f, 1) : ImVec4(1, 0.45f, 0.4f, 1),
-                                   "%s", g.fits_sms ? "fits the Master System" : "too big for the Master System");
-            }
+    if (show_maps) {
+        ImGui::TableNextColumn();
+        // ---- the maps
+        ImGui::TextUnformatted("Maps, in the order they are played:");
+        if (ImGui::Button("The whole game")) newrom_sel.assign(newrom_maps.size(), 1);
+        ImGui::SameLine();
+        if (ImGui::Button("UAC Base only")) {
+            newrom_sel.assign(newrom_maps.size(), 0);
+            if (!newrom_sel.empty()) newrom_sel[0] = 1;
+        }
+        for (size_t i = 0; i < newrom_maps.size(); i++) {
+            bool v = newrom_sel[i];
+            // the label shows the title; "##name" keeps each checkbox's ImGui id unique
+            if (ImGui::Checkbox((Jar::map_title(newrom_maps[i]) + "##" + newrom_maps[i]).c_str(), &v)) newrom_sel[i] = v;
+            n_maps += v;
+            // beside it, in green or red, whether it fits the Master System
+            for (auto &g : jar_maps)
+                if (g.name == newrom_maps[i]) {
+                    ImGui::SameLine(250 * ui);
+                    ImGui::TextColored(g.fits_sms ? ImVec4(0.6f, 1, 0.6f, 1) : ImVec4(1, 0.45f, 0.4f, 1),
+                                       "%s", g.fits_sms ? "fits the Master System" : "too big for the Master System");
+                }
+        }
+        hint("A map's exit to one that isn't in the game ends the game. The Master System and the Game Gear hold "
+             "one map, within their limits.");
     }
-    hint("A map's exit to one that isn't in the ROM ends the game. The Master System and the Game Gear hold one map, "
-         "within their limits.");
-    ImGui::TableNextColumn();
-    // ---- the consoles
-    ImGui::TextUnformatted("Consoles:");
     int n_cons = 0;   // consoles ticked (and able to take the maps)
-    for (size_t k = 0; k < NEWROM_CONSOLES.size(); k++) {
-        std::string why = newrom_why_not(k);
-        bool v = newrom_cons[k] && why.empty();   // shown unticked while it can't, but the tick is kept
-        ImGui::BeginDisabled(!why.empty());
-        if (ImGui::Checkbox(NEWROM_CONSOLES[k].label, &v)) newrom_cons[k] = v;
-        ImGui::EndDisabled();
-        if (why.empty())   // the engine's version and the file name the ROM gets
-            hint("version %s: %s", engine::version(NEWROM_CONSOLES[k].c).c_str(), NEWROM_CONSOLES[k].file);
-        else
-            hint("%s", why.c_str());
-        n_cons += v;
+    if (show_cons) {
+        ImGui::TableNextColumn();
+        // ---- the consoles
+        ImGui::TextUnformatted("Consoles:");
+        for (size_t k = 0; k < NEWROM_CONSOLES.size(); k++) {
+            std::string why = newrom_why_not(k);
+            bool v = newrom_cons[k] && why.empty();   // shown unticked while it can't, but the tick is kept
+            ImGui::BeginDisabled(!why.empty());
+            if (ImGui::Checkbox(NEWROM_CONSOLES[k].label, &v)) newrom_cons[k] = v;
+            ImGui::EndDisabled();
+            if (why.empty())   // the engine's version and the file name the ROM gets
+                hint("version %s: %s", engine::version(NEWROM_CONSOLES[k].c).c_str(), NEWROM_CONSOLES[k].file);
+            else
+                hint("%s", why.c_str());
+            n_cons += v;
+        }
     }
     ImGui::EndTable();
     ImGui::EndChild();
-    ImGui::BeginDisabled(n_maps == 0 || n_cons == 0 || building);
-    if (ImGui::Button(n_cons > 1 ? "Make the ROMs" : "Make the ROM")) {
-        ImGui::CloseCurrentPopup();
-        start_new_rom(export_start(), true);   // into the export folder, each under its usual name
+    if (newrom_mode == NR_NEW_PROJECT) {
+        ImGui::BeginDisabled(n_maps == 0);
+        if (ImGui::Button("Make the project")) {
+            ImGui::CloseCurrentPopup();
+            ask_discard("start a new project", [this]() { new_project(); });
+        }
+        ImGui::EndDisabled();
+    } else {
+        ImGui::BeginDisabled((show_maps && n_maps == 0) || n_cons == 0 || building);
+        if (ImGui::Button(n_cons > 1 ? "Make the ROMs" : "Make the ROM")) {
+            ImGui::CloseCurrentPopup();
+            if (newrom_mode == NR_JAR_ROMS) start_new_rom(export_start(), true);   // each under its usual name
+            else {
+                std::vector<Console> cons;
+                for (size_t k = 0; k < NEWROM_CONSOLES.size(); k++)
+                    if (newrom_cons[k] && newrom_why_not(k).empty()) cons.push_back(NEWROM_CONSOLES[k].c);
+                start_project_roms(cons, export_start(), true, false);
+            }
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("into %s", export_start().c_str());
+        ImGui::EndDisabled();
     }
-    ImGui::SameLine();
-    ImGui::TextDisabled("into %s", export_start().c_str());
-    ImGui::EndDisabled();
     ImGui::SameLine();
     if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }
 
-// Makes a ROM for console c of the maps open here (engine::make_rom_for) on
-// the worker thread and saves it as out; poll_build then reports it (it is
-// opened only if it is an editable console's).
-void App::start_make_rom(Console c, const std::string &out)
+// see app.h: the ticked maps read from the jar in the whole game's form
+// (engine::new_project), then the first one opens
+void App::new_project()
 {
-    if (building || !jar) return;
-    if (worker.joinable()) worker.join();
-    building = true;
-    build_finished = false;
-    build_is_new = true;
-    cancel = false;
-    progress = 0;
-    build_target = out;
-    build_then_run = false;
-    {
-        std::lock_guard<std::mutex> l(log_mu);
-        log.clear();
+    if (!jar) return;
+    std::vector<std::string> maps;   // the ticked maps, in playing order
+    for (size_t i = 0; i < newrom_maps.size(); i++)
+        if (newrom_sel[i]) maps.push_back(newrom_maps[i]);
+    ProjectFile pf;
+    std::string err;
+    std::vector<std::string> notes;
+    if (!engine::new_project(*jar, maps, pf, BuildOptions(), err, &notes)) {
+        status = "Can't make the project: " + err;
+        return;
     }
-    requested_tab = 5;
-    add_log(std::string("Making the ") + console_name(c) + " ROM " + out + "...");
-    status = "Making the ROM... (see the Build tab)";
-    auto src = std::make_shared<Rom>(rom);
-    auto cur = std::make_shared<Project>(proj);
-    worker = std::thread([this, c, out, src, cur]() {
-        BuildOptions o;
-        o.threads = set.build_threads;
-        o.cancel = &cancel;
-        o.log = [this](const std::string &s) { add_log(s); };
-        o.progress = [this](float f) { progress = f; };
-        Rom r;
-        BuildStats st;
-        std::string e;
-        bool ok = engine::make_rom_for(c, *jar, *src, *cur, r, o, st, e);
-        if (ok) ok = r.save(out, e);
-        if (ok) add_log("Saved " + out + (editable(c) ? "" : " (locked)"));
-        build_ok = ok;
-        build_err = e;
-        build_stats = st;
-        build_finished = true;
-    });
+    doc = std::move(pf);
+    doc_path.clear();   // (no file until it is saved)
+    cur_map = 0;
+    proj = doc.maps[0].level;
+    have_project = true;
+    unsaved = true;
+    reset_view("New project of " + std::to_string(doc.maps.size()) + (doc.maps.size() == 1 ? " map" : " maps") +
+               " from the original game; File > Save project keeps it");
 }
 
 // Makes a ROM for each ticked console that can take the ticked maps, one
 // after another on the worker thread (engine::new_rom builds the ROM from
 // the jar with the console's engine file). The first failure stops the
-// rest. poll_build then opens the first ROM. build_stats ends up holding the
-// last console's figures.
+// rest. build_stats ends up holding the last console's figures.
 void App::start_new_rom(const std::string &out, bool folder)
 {
     if (building || !jar) return;
@@ -1138,10 +1146,9 @@ void App::start_new_rom(const std::string &out, bool folder)
     if (worker.joinable()) worker.join();
     building = true;
     build_finished = false;
-    build_is_new = true;
     cancel = false;
     progress = 0;
-    build_target = jobs[0].second;   // the ROM poll_build opens
+    build_target = jobs[0].second;
     build_then_run = false;
     {
         std::lock_guard<std::mutex> l(log_mu);
@@ -1184,8 +1191,8 @@ void App::start_new_rom(const std::string &out, bool folder)
 
 // The "original game's levels" window (File > Import a level from the
 // original game, or a jar dropped on the window): each map of the jar with
-// its verdict and notes, and an Open button that converts it into the level
-// being edited (undoable).
+// its verdict and notes, and an Open button that converts it into the map
+// being edited (replace_level: undoable).
 void App::draw_jar_window()
 {
     if (show_jar) {
@@ -1194,10 +1201,10 @@ void App::draw_jar_window()
     }
     ImGui::SetNextWindowSize(ImVec2(760 * ui, 520 * ui), ImGuiCond_Appearing);
     if (!ImGui::BeginPopupModal("The original game's levels", nullptr)) return;
-    para("Pick a level to bring in. It replaces the level you are editing (Undo brings it back), "
-                       "with the game's own art, thing types and texts. Levels marked in red have more than the "
-                       "consoles can hold; you can still open them and cut them down to size. Saving checks the "
-                       "rest (very big open areas can show too much at once for the Master System).");
+    para("Pick a level to bring in. It replaces the map you are editing (Undo brings it back), with the game's "
+         "own art, thing types and texts, and takes its place in the project. Levels marked in red have more "
+         "than the consoles can hold; you can still open them and cut them down to size. Making a ROM checks "
+         "the rest (very big open areas can show too much at once for the Master System).");
     ImGui::Separator();
     ImGui::BeginChild("maps", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 1.5f), false);
     for (auto &g : jar_maps) {
@@ -1206,22 +1213,11 @@ void App::draw_jar_window()
             Project p;
             std::string err;
             std::vector<std::string> notes;
-            // the last argument: convert it as a campaign map (for a
-            // whole-game ROM), else as a single level
-            if (import_map(*jar, g.name, p, err, &notes, md_family(rom.console) && rom.is_campaign())) {
-                push_undo();
-                proj = std::move(p);
-                changed(true);
-                // as reset_view does, but keeping undo: start cell, doors closed, first texture
-                sel_x = proj.spawn_x;
-                sel_z = proj.spawn_z;
-                preview_facing = proj.spawn_f;
-                preview_open.assign(proj.lines.size(), 0);
-                cur_tex = proj.textures.empty() ? 0 : proj.textures.begin()->first;
-                cur_def = 0;
-                art.pic = {P_TEXTURE, cur_tex};
+            // (true: as a map of the whole game, the project's form)
+            if (import_map(*jar, g.name, p, err, &notes, true)) {
+                replace_level(std::move(p));
                 status = "Opened " + g.title + " from the original game" +
-                         (g.fits ? "" : " - it has more than the console allows (see the Limits tab)");
+                         (g.fits ? "" : " - it has more than the consoles allow (see the Limits tab)");
                 requested_tab = g.fits ? 0 : 4;   // the Map tab, or Limits if too big
                 ImGui::CloseCurrentPopup();
             } else

@@ -135,7 +135,7 @@ std::string Jar::map_title(const std::string &m)
     return m;
 }
 
-// ---------------------------------------------------------------- the art (source_container.JarArt)
+// ---------------------------------------------------------------- the art (JarArt)
 namespace {
 // reads little-endian values from a file in order; every read throws
 // std::runtime_error when the file ends too early
@@ -174,8 +174,8 @@ struct Rd {
     }
 };
 
-// The original game's art, decoded the way tools/source_container.py's
-// JarArt does:
+// The original game's art, decoded as the ports' tools/extract_textures.py
+// and extract_sprites.py decode it:
 //   palettes.bin   u32 byte count, then RGB565 colours;
 //   mappings.bin   four u32 counts, then per wall texture (offset into
 //                  wtexels in texels, palette index) pairs, the same per
@@ -373,7 +373,7 @@ bool import_art(const Jar &jar, Project &p, std::string &err)
         std::set<int> tex, spr;
         for (auto &w : p.walls) tex.insert(w.tex);
         // (+ the textures the Reactor's portal takes once it is closed:
-        // md_build.cpp's PORTAL_CLOSED_TEX, tools/source_container.py)
+        // megadrive/tools/build_render_data.py's PORTAL_CLOSED_TEX)
         if (tex.count(34)) tex.insert(92);
         if (tex.count(33)) tex.insert(91);
         for (auto &d : p.defs) spr.insert(d.tile);
@@ -397,8 +397,8 @@ bool import_art(const Jar &jar, Project &p, std::string &err)
                 // its own (its sprite id is the axe's); the original draws
                 // the single item, t - 1, four times round the spot, so here:
                 // three copies side by side, 16 columns apart, the middle
-                // one last (tools/sprite_art.py's PLURAL_TILES, and
-                // source_container.py's JarArt.sprite: key + "x3")
+                // one last (tools/sprite_art.py's PLURAL_TILES); the
+                // drawing's key is the single item's + "x3")
                 Drawing one;
                 r.shape = art.sprite_slot(JarArt::resolve(art.sprite_resolve, t - 1), one, r.pal) + "x3";
                 for (int i = 0; i < 64 * 64; i++) d.px[i] = CLEAR;

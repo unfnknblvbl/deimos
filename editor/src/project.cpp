@@ -4,13 +4,14 @@
 // Free software under the GNU General Public License, version 2 or (at your
 // option) any later version, with NO WARRANTY: see the LICENSE file.
 
-// Project <-> JSON (the "project.json" entry of the ROM's source container).
-// The written JSON is byte-for-byte what tools/source_container.py writes:
-// the same keys in the same order, no spaces.
+// Project <-> JSON (each map of a project file, projectfile.h, and a level
+// folder's project.json): the same keys in the same order every time, no
+// spaces, so an unchanged level is written back byte for byte.
 // Licence: GPL-2.0-or-later.
 //
 // Also the Project's small helpers for the art (flat, drawing, users,
-// new_shape_key, drop_unused_shapes) and the script command names.
+// new_shape_key, drop_unused_shapes, rename_shape), its Master System
+// form (single_level) and the script command names.
 // Reading uses nlohmann::json (key order doesn't matter); writing uses
 // ordered_json so the keys come out in insertion order, as Python's
 // json.dumps does.
@@ -107,9 +108,9 @@ bool Project::from_json(const std::string &text, std::string &err)
             events.push_back(ev);
         }
         strings = j["strings"].get<std::vector<std::string>>();
-        // version 1 had no per-picture art: such ROMs must be rebuilt
+        // version 1 had no per-picture art
         if (j.value("version", 1) < 2 || !j.contains("textures")) {
-            err = "this ROM was made by an older version of the port; rebuild it with a current one";
+            err = "this level is in an old format the editor no longer reads";
             return false;
         }
         // textures and sprites are objects keyed by the id as a string
@@ -134,19 +135,18 @@ bool Project::from_json(const std::string &text, std::string &err)
                 }
             }
         if (weapons.size() != (size_t)N_WEAPON_FRAMES) {
-            err = "project.json: expected 18 weapon pictures";
+            err = "the level should have 18 weapon pictures";
             return false;
         }
     } catch (const std::exception &e) {
-        err = std::string("project.json: ") + e.what();
+        err = std::string("the level's JSON: ") + e.what();
         return false;
     }
     return true;
 }
 
-// see project.h. The keys' order and the optional ones (new_game, map_id,
-// sms_*_rgb, thin, a prop's cell, a thing's spawns) must match
-// tools/source_container.py, or the ROM would differ from the tools'.
+// see project.h. The optional keys (new_game, map_id, sms_*_rgb, thin, a
+// prop's cell, a thing's spawns, per_console) are written only when used.
 std::string Project::to_json() const
 {
     ojson j;
@@ -367,7 +367,7 @@ std::string Project::new_shape_key(const std::string &prefix) const
     }
 }
 
-// see project.h (called before writing the container, so only drawings in use are stored)
+// see project.h (called before writing a project file, so only drawings in use are stored)
 void Project::drop_unused_shapes()
 {
     std::set<std::string> used;
@@ -382,6 +382,51 @@ void Project::drop_unused_shapes()
     for (auto it = shapes.begin(); it != shapes.end();)
         if (used.count(it->first)) ++it;
         else it = shapes.erase(it);
+}
+
+// see project.h. The drawing is replaced if `to` already names one.
+void Project::rename_shape(const std::string &from, const std::string &to)
+{
+    auto it = shapes.find(from);
+    if (it == shapes.end() || from == to) return;
+    Drawing d = it->second;
+    shapes.erase(it);
+    shapes[to] = d;
+    // every reference: the shared pictures, the border, the weapon and the consoles' own versions
+    auto re = [&](ArtRef &r) {
+        if (r.shape == from) r.shape = to;
+    };
+    for (auto &kv : textures) re(kv.second);
+    for (auto &kv : sprites) re(kv.second);
+    re(border);
+    for (auto &w : weapons) re(w);
+    for (auto &pc : per_console) {
+        for (auto &kv : pc.second.textures) re(kv.second);
+        for (auto &kv : pc.second.sprites) re(kv.second);
+    }
+}
+
+// see project.h. The steps undo, one by one, what import_map (jar.cpp)
+// does differently for a campaign map; the result is the level import_map
+// gives in the single-level form.
+Project Project::single_level() const
+{
+    if (!campaign()) return *this;
+    Project p = *this;
+    p.new_game = map_id == 1;   // the UAC Base: the game starts there
+    p.map_id = -1;
+    // a thin blocker on a cell's edge: the Master System's rules have no
+    // thin walls, so it blocks the whole cell (with its type, 14 or 15)
+    for (auto &t : thin)
+        if (t.x >= 0 && t.x < 32 && t.z >= 0 && t.z < 32) p.static_block[t.z * 32 + t.x] = (u8)t.type;
+    p.thin.clear();
+    for (auto &sc : p.scenery) sc.cell = -1;   // (no HIDE takes a prop away)
+    for (auto &e : p.entities) e.spawns.clear();
+    // SHOW (op 7) of no thing: $FFFF on a campaign map, 255 here
+    for (auto &ev : p.events)
+        for (auto &c : ev.cmds)
+            if (c.op == 7 && c.a1 == 0xFFFF) c.a1 = 0xFF;
+    return p;
 }
 
 // see project.h. The names follow the original game's script byte codes

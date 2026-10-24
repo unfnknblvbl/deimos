@@ -10,16 +10,16 @@
 // Licence: GPL-2.0-or-later.
 //
 // One Settings object lives in App::set. main.cpp loads it at start and
-// saves it at exit; the editor also saves it when it opens or saves a ROM
-// or loads a jar. The file is a small .ini: [section] headers, key=value
+// saves it at exit; the editor also saves it when it opens or saves a
+// project or loads a jar. The file is a small .ini: [section] headers, key=value
 // lines, ';' or '#' comments (see Settings::save for the sections).
 #pragma once
 #include <string>
 #include <vector>
 
 struct Settings {
-    std::string last_rom;                     // the ROM opened at start (the most recent one)
-    std::vector<std::string> recent;          // most recent first, max 8
+    std::string last_project;                 // the project opened at start (the most recent one)
+    std::vector<std::string> recent;          // projects, most recent first, max 8
     std::string last_dir;                     // file dialog start folder
     std::string jar;                          // the user's copy of DoomRPG.jar
     std::string emulator = "";                // Master System emulator command, %f = ROM file
@@ -42,6 +42,7 @@ struct Settings {
     bool preview_low = false;                 // SMS low detail (pause menu DETAIL)
     bool preview_solid = false;               // SMS solid-colour walls (pause menu WALLS)
     int build_threads = 0;                    // 0 = all cores
+    int play_console = 2;                     // F5's console: an index into App::NEWROM_CONSOLES (2: the Mega Drive)
     int art_zoom = 8;                         // the Art tab's zoom, screen pixels per picture pixel (2..48)
     bool art_grid = true, art_pixel_grid = true;   // the Art tab's 8x8 tile grid and pixel grid
     bool art_fit = true;                      // zoom the picture to fit its panel
@@ -53,7 +54,7 @@ struct Settings {
     void load();
     // Writes every setting (failures are silently ignored).
     void save() const;
-    // Puts rom first in the recent list (removing it from further down),
-    // keeps 8 at most, and makes it last_rom. Does not save.
-    void add_recent(const std::string &rom);
+    // Puts a project first in the recent list (removing it from further
+    // down), keeps 8 at most, and makes it last_project. Does not save.
+    void add_recent(const std::string &path);
 };

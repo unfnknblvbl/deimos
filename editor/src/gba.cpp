@@ -6,8 +6,8 @@
 
 // Licence: GPL-2.0-or-later.
 //
-// The Game Boy Advance cartridge's wrap and unwrap (see gba.h for the
-// layout). Called by rom.cpp.
+// The Game Boy Advance cartridge's wrap (see gba.h for the layout).
+// Called by rom.cpp.
 #include "gba.h"
 
 #include <cstring>
@@ -15,29 +15,10 @@
 namespace gba {
 
 // true when f starts with this game's GBA header: the game title
-// "DOOM RPG ADV" at $A0 and the fixed value $96 at $B2
+// "DEIMOS" at $A0 and the fixed value $96 at $B2
 static bool header_ok(const Bytes &f)
 {
-    return f.size() >= 0xC0 && (memcmp(&f[0xA0], "DEIMOS      ", 12) == 0 || memcmp(&f[0xA0], "DOOM RPG ADV", 12) == 0) && f[0xB2] == 0x96;
-}
-
-// a cartridge: the header, and something after the code
-bool is_gba(const Bytes &f) { return f.size() > DATA_AT && header_ok(f); }
-
-// see gba.h
-bool unwrap(const Bytes &f, Bytes &w, Bytes &image, std::string &err)
-{
-    if (!is_gba(f)) {
-        err = "this is not Doom RPG for the Game Boy Advance";
-        return false;
-    }
-    w.assign(f.begin(), f.begin() + DATA_AT);
-    image.assign(f.begin() + DATA_AT, f.end());
-    size_t size = 0x40000;              // (as the SNES build made it: a power of two, the rest $FF)
-    while (size < image.size()) size *= 2;
-    if (size > 0x400000) size = 0x400000;   // (an image over 4 MB is cut)
-    image.resize(size, 0xFF);
-    return true;
+    return f.size() >= 0xC0 && memcmp(&f[0xA0], "DEIMOS      ", 12) == 0 && f[0xB2] == 0x96;
 }
 
 // see gba.h

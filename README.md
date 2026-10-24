@@ -4,10 +4,10 @@
 nine retro consoles. It includes the **Deimos Editor**, which makes the ROMs
 for all of them from the original game and lets you edit its maps.
 
-To save cartridge space, the Master System, Game Gear, SNES, Super FX and 32X
-ROMs are *locked*: the editor cannot open them. Edit an editable ROM (Mega
-Drive, 3DS, Game Boy Color or Game Boy Advance) and make the locked ones from
-it with **File > Make a ROM for another console** (`editor/README.md`).
+The editor keeps the maps you edit in a project (a `.deimos` file: the whole
+game or a single level) and makes the ROMs of it for any of the consoles
+(`editor/README.md`). The ROMs carry no copy of the maps for the editor: all
+their room goes to the maps themselves.
 
 Made by AI. Directed by unfnknblvbl.
 
@@ -52,7 +52,8 @@ The ROMs go to `roms/`. The editor goes to `editor/build/linux/` and/or
   each console's game code, with nothing of the original game in it. It
   needs only CMake and a C++ compiler — none of the console toolchains and
   no jar. The editor's users give it their own `DoomRPG.jar`, and it makes
-  every console's ROM from it, the same bytes as the builds below.
+  every console's ROM from it (or from a project of maps edited in it), the
+  same bytes as the builds below.
 - **engines** remakes those engines from this source, after a change to a
   game's code: every console is built from your jar, then everything that
   came from the jar is cut out of each ROM again. No ROMs are kept.
@@ -109,7 +110,7 @@ with NO WARRANTY.
 If you pass on a built ROM or editor, the GPL asks you to make the matching
 source available too (this repository, or a link to it).
 The editor includes third-party code under its own licences (Dear ImGui, MIT;
-nlohmann/json, MIT; stb, MIT / public domain; ZX0, BSD-3-Clause; DejaVu fonts;
+nlohmann/json, MIT; stb, MIT / public domain; DejaVu fonts;
 SDL2, zlib) — see `editor/third_party/` and the licences the editor's build
 puts in `docs/`. The 3DS game links devkitPro's libctru and citro3d (zlib)
 and newlib's C library (BSD-style licences): their notices are in

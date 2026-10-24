@@ -12,16 +12,16 @@
 //    instead (run_cli in cli.cpp) and never opens a window.
 // 2. Otherwise it sets up SDL2 (window, renderer), Dear ImGui (context, the
 //    SDL2 + SDL_Renderer backends, the DejaVu Sans font sized to the display)
-//    and the App (app.h), finds DoomRPG.jar and opens the ROM named on the
-//    command line, or the last one used.
+//    and the App (app.h), finds DoomRPG.jar and opens the project named on
+//    the command line, or the last one used.
 // 3. It runs the main loop: read SDL events (quit, dropped files, display
 //    changes), call App::frame() to build the UI, render it, present.
 // On exit it waits for a running build, saves the settings and shuts down.
 //
 // Several DRPG_* environment variables are test hooks used by the
 // project's automatic tests: they take screenshots, play mouse events,
-// open tabs or make ROMs without anyone at the keyboard. Normal use sets
-// none of them.
+// open tabs, make projects or ROMs without anyone at the keyboard. Normal
+// use sets none of them.
 #include "app.h"
 #include "engine.h"
 #include "cli.h"
@@ -148,25 +148,26 @@ int main(int argc, char **argv)
     // look for DoomRPG.jar in the import folder (asks for it if none); the
     // test hooks skip this
     if (!std::getenv("DRPG_NEWROM") && !std::getenv("DRPG_NO_JAR")) app.find_jar_at_start();
-    // the ROM named on the command line, else the last one opened
-    std::string start = argc >= 2 ? argv[1] : app.set.last_rom;
-    if (!start.empty() && std::filesystem::exists(start, ec)) app.open_rom(start);
-    else app.status = "File > Open ROM to start.";
+    // the project named on the command line, else the last one opened
+    std::string start = argc >= 2 ? argv[1] : app.set.last_project;
+    if (!start.empty() && std::filesystem::exists(start, ec)) app.open_project(start);
+    else app.status = "Make a new project from DoomRPG.jar, or open one, to start.";
 
     // test hook: DRPG_SCREENSHOT=file.bmp [DRPG_FRAMES=n DRPG_TAB=t] saves one frame and quits
     const char *shot = std::getenv("DRPG_SCREENSHOT");
     int shot_frames = std::getenv("DRPG_FRAMES") ? std::atoi(std::getenv("DRPG_FRAMES")) : 10;   // the frame to save (default 10)
     if (std::getenv("DRPG_TAB")) app.requested_tab = std::atoi(std::getenv("DRPG_TAB"));   // tab 0 Map ... 5 Build
-    // more test hooks: a campaign map, the Settings window, the preview's
+    // more test hooks: a project's map, the Settings window, the preview's
     // console, the Map tool, the original game's levels window
-    if (const char *m = std::getenv("DRPG_MAP")) app.switch_map(std::atoi(m));   // test hook: a campaign's map
+    if (const char *m = std::getenv("DRPG_MAP")) app.switch_map(std::atoi(m));   // test hook: a project's map
     if (std::getenv("DRPG_ABOUT")) app.show_about = true;   // test hook
     if (const char *pv = std::getenv("DRPG_PREVIEW")) app.set.preview_console = std::atoi(pv);   // test hook
     if (std::getenv("DRPG_TOOL")) app.tool = std::atoi(std::getenv("DRPG_TOOL"));
     if (const char *jp = std::getenv("DRPG_JAR")) app.open_jar(jp);   // test hook
     // test hook: DRPG_NEWROM=jar [DRPG_NEWROM_CONSOLE=n,m...: indexes into NEWROM_CONSOLES] [DRPG_NEWROM_MAPS=1:
-    // the UAC Base only] [DRPG_NEWROM_OUT=file, or a folder for several consoles]: the new-ROM window, or (with OUT)
-    // its build, then quit once the (first) ROM is open
+    // the UAC Base only] [DRPG_NEWROM_OUT=file, or a folder for several consoles]: the "make ROMs from
+    // DoomRPG.jar" window, or (with OUT) its build, then quit once it is done; DRPG_NEWPROJECT=1 with
+    // DRPG_NEWROM: a new project of those maps instead (DRPG_SAVE then saves it)
     const char *newrom_out = std::getenv("DRPG_NEWROM_OUT");
     if (const char *nj = std::getenv("DRPG_NEWROM")) {
         if (app.load_jar(nj)) {
@@ -185,8 +186,13 @@ int main(int argc, char **argv)
                 for (size_t i = 1; i < app.newrom_sel.size(); i++) app.newrom_sel[i] = 0;
             int n = 0;
             for (char v : app.newrom_cons) n += v;   // consoles ticked
-            if (newrom_out) app.start_new_rom(newrom_out, n > 1);   // several: OUT is a folder
-            else app.show_newrom = true;
+            if (std::getenv("DRPG_NEWPROJECT")) {
+                app.newrom_mode = App::NR_NEW_PROJECT;
+                app.new_project();
+            } else if (newrom_out)
+                app.start_new_rom(newrom_out, n > 1);   // several: OUT is a folder
+            else
+                app.show_newrom = true;
         }
     }
     // test hook: DRPG_PIC=kind,id,tile picks the Art tab's picture and tile
@@ -209,9 +215,12 @@ int main(int argc, char **argv)
             p = q + 1;
         }
     }
-    // test hook: DRPG_SAVE=out.rom saves through the window's build (on its thread) and quits
+    // test hooks: DRPG_SAVE=out.deimos saves the project on frame 5 and
+    // quits; DRPG_ROMS=folder (with DRPG_NEWROM_CONSOLE) then makes the
+    // project's ROMs there through the window's build (on its thread)
     const char *save_to = std::getenv("DRPG_SAVE");
-    bool save_started = false;
+    const char *roms_to = std::getenv("DRPG_ROMS");
+    bool roms_started = false;
     int frame_no = 0;     // frames drawn so far (the test hooks count them)
     bool quit = false;
     // ---- the main loop: one pass per frame (vsync paces it)
@@ -249,7 +258,7 @@ int main(int argc, char **argv)
         while (SDL_PollEvent(&e)) {
             ImGui_ImplSDL2_ProcessEvent(&e);   // keyboard, mouse, text for ImGui
             if (e.type == SDL_QUIT) app.want_quit = true;
-            if (e.type == SDL_DROPFILE && e.drop.file) {   // a ROM (or the original game) dropped on the window
+            if (e.type == SDL_DROPFILE && e.drop.file) {   // a project (or the original game) dropped on the window
                 app.dropped(e.drop.file);
                 SDL_free(e.drop.file);
             }
@@ -288,21 +297,23 @@ int main(int argc, char **argv)
         SDL_RenderClear(app.ren);
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), app.ren);
         ++frame_no;
-        // test hooks: start the DRPG_SAVE build on frame 5; once a test build
-        // has finished, print the log and quit
-        if (save_to && frame_no == 5) {
-            app.start_build(save_to, false);
-            save_started = true;
+        // test hooks: DRPG_SAVE and DRPG_ROMS on frame 5; once a test build
+        // has finished (or with DRPG_SAVE alone, at once), print the log and
+        // the status line and quit
+        if (frame_no == 5) {
+            if (save_to) app.save_project(save_to);
+            if (roms_to) {
+                std::vector<Console> cons;
+                for (size_t k = 0; k < app.NEWROM_CONSOLES.size(); k++)
+                    if (k < app.newrom_cons.size() && app.newrom_cons[k]) cons.push_back(app.NEWROM_CONSOLES[k].c);
+                app.start_project_roms(cons, roms_to, true, false);
+                roms_started = true;
+            }
         }
-        if (newrom_out && !app.building && frame_no > 6 && !shot) {   // (test hook: the new ROM is made)
+        if ((newrom_out || roms_started || save_to) && !app.building && frame_no > 6 && !shot) {
             std::lock_guard<std::mutex> l(app.log_mu);
             for (auto &s : app.log) printf("%s\n", s.c_str());
-            printf("open: %s\n", app.have_rom ? app.rom.path.c_str() : "-");
-            quit = true;
-        }
-        if (save_to && save_started && !app.building && frame_no > 6) {
-            std::lock_guard<std::mutex> l(app.log_mu);
-            for (auto &s : app.log) printf("%s\n", s.c_str());
+            printf("status: %s\n", app.status.c_str());
             quit = true;
         }
         if (shot && frame_no == shot_frames) {
@@ -323,9 +334,9 @@ int main(int argc, char **argv)
     }
     // ---- shut down
     if (app.worker.joinable()) app.worker.join();   // a build still running finishes first
-    if (const char *ex = std::getenv("DRPG_EXPORT")) {   // test hook: the level as files, at exit
+    if (const char *ex = std::getenv("DRPG_EXPORT")) {   // test hook: the map being edited as files, at exit
         std::string err;
-        export_project(app.proj, ex, err);
+        if (app.have_project) export_project(app.proj, app.doc.maps[app.cur_map].info, ex, err);
     }
     app.set.save();       // window size, zoom, recent files...
     app.clear_images();   // (moves them to the graveyard; the renderer frees them below)

@@ -10,14 +10,14 @@
 // game's data as they are (its cartridge image from the resources' bank
 // on: the resources made from the jar, then the campaign's block), then
 // the Game Boy's own resources, made from those data (gbc/tools/gb_res.py:
-// the same bytes). The editor works on the SNES image: opening a GBC
-// cartridge puts the SNES engine's first part back in front of its data.
+// the same bytes). The editor makes the SNES image, then the cartridge
+// from it.
 // Licence: GPL-2.0-or-later.
 //
 // Cartridge layout: $000000 the Game Boy code (up to 1 MB), $100000 the
-// SNES image from its resources' bank on ("DRPGRES1" ...), then on the
+// SNES image from its resources' bank on ("DEIMRES1" ...), then on the
 // next 16 KB boundary the Game Boy resources ("GBRES1"), the rest $FF.
-// rom.cpp calls unwrap / wrap; the Map tab's Game Boy Color preview calls
+// rom.cpp calls wrap; the Map tab's Game Boy Color preview calls
 // view_colours.
 #pragma once
 #include "build.h"
@@ -27,11 +27,6 @@
 
 namespace gbc {
 const unsigned DATA_AT = 0x100000;   // where the SNES data start in the cartridge (1 MB)
-// a 4 MB cartridge with the CGB flag, the title "DOOM RPG" and GBRES1 resources
-bool is_gbc(const Bytes &f);
-// splits a cartridge into its code (wrap) and a full SNES image: the GBC
-// engine's SNES part up to its resources, then the cartridge's SNES data
-bool unwrap(const Bytes &f, Bytes &wrap, Bytes &image, std::string &err);
 // code + SNES image -> a 4 MB cartridge, with the Game Boy resources made
 // anew from the image and the header's checksums set
 bool wrap(const Bytes &wrap, const Bytes &image, Bytes &out, std::string &err);

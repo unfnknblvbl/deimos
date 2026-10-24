@@ -7,10 +7,12 @@
 // Licence: GPL-2.0-or-later.
 //
 // Reading the engine files (format in engine.h, in the engines/ folder
-// beside the program) and making new ROMs from them and the user's jar.
-// Called by the "Make ROMs" window and the command-line tool's --new-rom.
+// beside the program) and making new ROMs from them, the user's jar and
+// the maps (the jar's own or a project's). Called by the App's "Make ROMs"
+// windows and the command-line tool's --new-rom and --make-rom.
 #include "engine.h"
 #include "assets.h"
+#include "levelblob.h"
 #include "md_build.h"
 #include "sms_build.h"
 #include "zx0.h"
@@ -103,9 +105,8 @@ bool load(Console c, Engine &e, std::string &err)
         err = std::string("the engine file ") + path.string() + " is damaged";
         return false;
     };
-    // 20 = magic, console and padding (12), template size, region count;
-    // the magic is "DEIMENG1" ("DRPGENG1" in engines made before 0.9.10)
-    if (n < 20 || (memcmp(d, "DEIMENG1", 8) != 0 && memcmp(d, "DRPGENG1", 8) != 0)) return bad();
+    // 20 = magic, console and padding (12), template size, region count
+    if (n < 20 || memcmp(d, "DEIMENG1", 8) != 0) return bad();
     e = Engine();
     e.console = c;
     u32 size = le32(d + 12), nreg = le32(d + 16);
@@ -175,9 +176,6 @@ std::vector<std::string> campaign_maps(const Jar &jar)
     return out;
 }
 
-// see engine.h. Steps: unpack the engine, make the console's assets from
-// the jar and copy each into its region of the template, then import and
-// build the map(s) into it.
 // The console's engine with every blanked region filled from the jar (the
 // status bar, fonts, title screen, music and sounds): the ROM to build the
 // map(s) into, in rom. False with err when the jar's pictures don't match.
@@ -215,12 +213,11 @@ static bool filled_engine(Console c, const Jar &jar, Engine &e, Bytes &rom, cons
 
 // The ROM for console c from an engine filled from the jar and the given
 // maps' projects (infos: their names, titles and ids; the Master System
-// and Game Gear take the first only). Each project is built as console c
-// has it (Project::for_console), and the ROMs of the consoles the editor
-// doesn't edit (editable()) are made locked.
-static bool rom_from_projects(Console c, const Jar &jar, const std::vector<md::MapInfo> &infos,
-                              std::vector<Project> projects, Rom &out, const BuildOptions &opt_in, BuildStats &stats,
-                              std::string &err)
+// and Game Gear take the first only, which must be a single level). Each
+// project is built as console c has it (Project::for_console).
+static bool rom_from_projects(Console c, const Jar &jar, const std::vector<MapInfo> &infos,
+                              const std::vector<Project> &projects, Rom &out, const BuildOptions &opt_in,
+                              BuildStats &stats, std::string &err)
 {
     if (projects.empty()) {
         err = "no map chosen";
@@ -228,7 +225,6 @@ static bool rom_from_projects(Console c, const Jar &jar, const std::vector<md::M
     }
     BuildOptions opt = opt_in;
     opt.console = CONSOLE_KEYS[(int)c];
-    opt.locked = !editable(c);
     Engine e;
     Bytes rom;
     if (!filled_engine(c, jar, e, rom, opt, err)) return false;
@@ -246,12 +242,11 @@ static bool rom_from_projects(Console c, const Jar &jar, const std::vector<md::M
     out.console = c;
     out.data = std::move(rom);
     out.wrap = e.wrap;
-    std::string e2;   // (an error here is ignored: the ROM was just made)
-    if (md_family(c)) md::campaign_maps(out.data, out.maps, e2);   // fill the map list
     return true;
 }
 
-// see engine.h. The maps are read from the jar, then built as above.
+// see engine.h. The maps are read from the jar (the Master System's one as
+// a single level), then built as above.
 bool new_rom(Console c, const Jar &jar, const std::vector<std::string> &maps, Rom &out, const BuildOptions &opt,
              BuildStats &stats, std::string &err, std::vector<std::string> *notes)
 {
@@ -259,7 +254,7 @@ bool new_rom(Console c, const Jar &jar, const std::vector<std::string> &maps, Ro
         err = "no map chosen";
         return false;
     }
-    std::vector<md::MapInfo> infos;
+    std::vector<MapInfo> infos;
     std::vector<Project> projects;
     for (auto &m : maps) {
         Project p;
@@ -269,40 +264,61 @@ bool new_rom(Console c, const Jar &jar, const std::vector<std::string> &maps, Ro
         projects.push_back(std::move(p));
         if (sms_family(c)) break;   // (one map)
     }
-    return rom_from_projects(c, jar, infos, std::move(projects), out, opt, stats, err);
+    return rom_from_projects(c, jar, infos, projects, out, opt, stats, err);
 }
 
 // see engine.h
-bool make_rom_for(Console c, const Jar &jar, const Rom &src, const Project &current, Rom &out, const BuildOptions &opt,
-                  BuildStats &stats, std::string &err)
+bool new_project(const Jar &jar, const std::vector<std::string> &maps, ProjectFile &out, const BuildOptions &opt,
+                 std::string &err, std::vector<std::string> *notes)
 {
-    std::vector<md::MapInfo> infos;
-    std::vector<Project> projects;
-    if (!src.is_campaign() || sms_family(c)) {   // one level: the one being edited
-        md::MapInfo mi;
-        if (src.is_campaign()) mi = src.maps[src.map];
-        else mi = {"level", current.name, current.map_id};
-        infos.push_back(mi);
-        projects.push_back(current);
-    } else {   // every map, in order; the one being edited as it is now
-        for (int i = 0; i < (int)src.maps.size(); i++) {
-            infos.push_back(src.maps[i]);
-            if (i == src.map) projects.push_back(current);
-            else {
-                Project p;
-                opt.say("reading " + src.maps[i].title + "...");
-                if (!md::read_project(src.data, i, p, err)) return false;
-                projects.push_back(std::move(p));
-            }
-        }
+    if (maps.empty()) {
+        err = "no map chosen";
+        return false;
     }
-    return rom_from_projects(c, jar, infos, std::move(projects), out, opt, stats, err);
+    ProjectFile pf;
+    for (auto &m : maps) {
+        ProjectMap pm;
+        opt.say("reading " + Jar::short_title(m) + " from the game...");
+        if (!import_map(jar, m, pm.level, err, notes, true)) return false;   // (the whole game's form)
+        pm.info = {m, Jar::short_title(m), pm.level.map_id};
+        pf.maps.push_back(std::move(pm));
+    }
+    out = std::move(pf);
+    return true;
 }
 
 // see engine.h
-bool new_rom_from(Console c, const Jar &jar, const std::vector<md::MapInfo> &infos, const std::vector<Project> &projects,
-                  Rom &out, const BuildOptions &opt, BuildStats &stats, std::string &err)
+std::string why_not(Console c, const ProjectFile &pf, int map)
 {
+    if (pf.maps.empty()) return "the project has no maps";
+    if (!sms_family(c)) return "";
+    if (map < 0 || map >= (int)pf.maps.size()) return "no such map";
+    std::string lim = check_limits(pf.maps[map].level.single_level());   // the Master System's limits
+    return lim.empty() ? "" : pf.maps[map].info.title + " doesn't fit: " + lim;
+}
+
+// see engine.h
+bool project_rom(Console c, const Jar &jar, const ProjectFile &pf, int map, Rom &out, const BuildOptions &opt,
+                 BuildStats &stats, std::string &err)
+{
+    if (pf.maps.empty()) {
+        err = "the project has no maps";
+        return false;
+    }
+    std::vector<MapInfo> infos;
+    std::vector<Project> projects;
+    if (sms_family(c)) {   // the one map, as the Master System has it
+        if (map < 0 || map >= (int)pf.maps.size()) {
+            err = "the project has no map " + std::to_string(map);
+            return false;
+        }
+        infos.push_back(pf.maps[map].info);
+        projects.push_back(pf.maps[map].level.single_level());
+    } else
+        for (auto &pm : pf.maps) {
+            infos.push_back(pm.info);
+            projects.push_back(pm.level);
+        }
     return rom_from_projects(c, jar, infos, projects, out, opt, stats, err);
 }
 

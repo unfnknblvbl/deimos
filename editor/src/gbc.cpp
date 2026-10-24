@@ -18,7 +18,6 @@
 // colour is a 15-bit word (r | g << 5 | b << 10, 5 bits each),
 // little-endian.
 #include "gbc.h"
-#include "engine.h"
 #include "rom.h"
 
 #include <algorithm>
@@ -174,7 +173,7 @@ enum { E_FONT, E_FACES, E_ICONS, E_HUD_PAL, E_DLG_PAL, E_TITLE_TILES, E_TITLE_MA
 
 // finds the resources and the block through the SNES header ($FFB7: the
 // resources' bank, $FFB6: the block's, each $C0 + n) and reads the
-// resources' directory ("DRPGRES1", u16 count at 8, then from 12 per
+// resources' directory ("DEIMRES1", u16 count at 8, then from 12 per
 // entry u32 offset and u32 size, little-endian)
 static bool parse(const Bytes &rom, Snes &s, std::string &err)
 {
@@ -183,7 +182,7 @@ static bool parse(const Bytes &rom, Snes &s, std::string &err)
     s.blk_at = (size_t)(rom[0xFFB6] & 0x3F) * 0x10000;
     size_t end = rom.size();
     while (end > s.res_at && rom[end - 1] == 0xFF) end--;
-    if (s.res_at + 12 > end || s.blk_at < s.res_at || s.blk_at > end || memcmp(&rom[s.res_at], "DRPGRES1", 8) != 0)
+    if (s.res_at + 12 > end || s.blk_at < s.res_at || s.blk_at > end || memcmp(&rom[s.res_at], "DEIMRES1", 8) != 0)
         return err = "the SNES image has no resources", false;
     s.data.assign(rom.begin() + (long)s.res_at, rom.begin() + (long)end);
     s.block.assign(rom.begin() + (long)s.blk_at, rom.begin() + (long)end);
@@ -875,42 +874,6 @@ bool resources(const Bytes &image, Bytes &res, std::string &err)
 
 // ------------------------------------------------------------ the cartridge
 static const size_t SIZE = 0x400000;   // the cartridge: 4 MB
-
-// where the Game Boy resources start (a 16 KB boundary after DATA_AT), or 0
-static size_t find_res(const Bytes &f)
-{
-    for (size_t b = DATA_AT; b + 6 <= f.size(); b += 0x4000)
-        if (memcmp(&f[b], "GBRES1", 6) == 0) return b;
-    return 0;
-}
-
-// see gbc.h ($143 bit 7: the Game Boy Color flag; $134: the title)
-bool is_gbc(const Bytes &f)
-{
-    return f.size() == SIZE && (f[0x143] & 0x80) && game_title(&f[0x134]) && find_res(f) != 0;
-}
-
-// see gbc.h
-bool unwrap(const Bytes &f, Bytes &w, Bytes &image, std::string &err)
-{
-    if (!is_gbc(f)) return err = "this is not Deimos (Doom RPG) for the Game Boy Color", false;
-    size_t r = find_res(f);
-    // the SNES engine's part before its resources, then the cartridge's SNES data
-    engine::Engine e;
-    if (!engine::load(Console::GBC, e, err)) return false;
-    size_t res_at = 0;
-    for (auto &rg : e.regions)
-        if (rg.name == "snes_res") res_at = rg.offset;
-    if (!res_at || res_at > e.rom.size()) return err = "the editor's Game Boy Color engine is damaged", false;
-    w.assign(f.begin(), f.begin() + DATA_AT);
-    image.assign(e.rom.begin(), e.rom.begin() + (long)res_at);
-    image.insert(image.end(), f.begin() + DATA_AT, f.begin() + (long)r);
-    image.resize(SIZE, 0xFF);
-    // the image's own header must name the same resources bank
-    if (image.size() < 0x10000 || (size_t)(image[0xFFB7] & 0x3F) * 0x10000 != res_at)
-        return err = "this Game Boy Color cartridge's data are laid out differently from the editor's engine", false;
-    return true;
-}
 
 // see gbc.h. (The SNES data are copied before the size check below, so
 // data longer than 3 MB would run past the end of out.)

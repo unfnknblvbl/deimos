@@ -31,8 +31,7 @@ Coordinates: world x and z (the .bsp's), 64 units per grid cell; in this
 file the z axis is called y in the camera maths. A wall is a dict from
 bsp_parser.py (ax, az, bx, bz, tex). The renderer is floating point and not
 bit-exact: live_data.py has the integer model of the ROM's renderer and
-uses this one only as a visual reference (its --preview). LevelTextures is
-also used by pack_source.py to check the editor's texture source; the
+uses this one only as a visual reference (its --preview). The
 pre-rendered-view tools (gen_views.py, pack_views.py) render with
 ViewRenderer.
 

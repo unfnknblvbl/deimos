@@ -8,7 +8,7 @@
 """
 The Game Boy Color's resources, made from the SNES game's data (the SNES
 cartridge from its resources' bank on: the resources the SNES makes from
-the original game, snes_ui_res.py's DRPGRES1, then the campaign's block).
+the original game, snes_ui_res.py's DEIMRES1, then the campaign's block).
 The editor makes the same bytes the same way (editor/src/gbc.cpp): every
 step in whole numbers, the first of equals always taken.
 
@@ -139,7 +139,7 @@ def nearest(D, i, c):
 
 # ------------------------------------------------------------ the SNES's data
 class Snes:
-    """The SNES ROM's data: its resources (snes_ui_res.py's DRPGRES1 entries,
+    """The SNES ROM's data: its resources (snes_ui_res.py's DEIMRES1 entries,
     ent[i]) and the campaign's block, found through the header bytes
     $FFB7 / $FFB6 (their banks); data: from the resources to the last
     non-$FF byte, as gb_pack.py copies it."""
@@ -152,7 +152,7 @@ class Snes:
             end -= 1
         self.data = rom[self.res_at:end]
         r = self.data
-        assert r[:8] == b"DRPGRES1"
+        assert r[:8] == b"DEIMRES1"
         n = struct.unpack_from("<H", r, 8)[0]
         self.ent = []
         for i in range(n):

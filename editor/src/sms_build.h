@@ -8,16 +8,16 @@
 // Master System: everything in the ROM that depends on the level, rebuilt
 // from a project. Port of tools/live_data.py (renderer data, level header,
 // border), tools/build_sprites.py (hardware sprites, both view sizes),
-// tools/gen_cdata.py (level + strings) and tools/pack_source.py (editable
-// level, ROM directory), producing byte-identical output.
+// tools/gen_cdata.py (level + strings) and tools/rom_dir.py (the ROM
+// directory), producing byte-identical output.
 // Licence: GPL-2.0-or-later.
 //
-// Called by rom.cpp (Rom::build, Rom::read_project), engine.cpp (new
-// ROMs) and the editor's previews (level_data, render, sprite_set). The
+// Called by engine.cpp (new ROMs) and the editor's previews (level_data,
+// render, sprite_set). The
 // ROM layout it writes is described in docs/rom_format.md: the level
 // blob in bank 2, the level header in bank 3, strings and hardware sprite
 // directories in bank 4, the level's big tables from bank 9 on, then the
-// hardware sprites, then the source container.
+// hardware sprites.
 // Jargon: a "pair byte" is how the renderer stores a texel: two of the
 // level's 16 colours, high nibble on even (x + y), low nibble on odd, so
 // the eye sees their 50/50 mix. A "billboard" is a prop drawn by the
@@ -103,16 +103,11 @@ struct SpriteSet {
 SpriteSet sprite_set(const Art &canvas, int size);   // size 0 = large, 1 = small
 void sprite_colours(const Art &canvas, RGB pal[16]); // the 15 console colours a thing gets (+ 0)
 
-// rewrites the level-dependent parts of a ROM image
-// rom is replaced only on success (then a power of two, 128 KB to 1 MB)
+// writes the level-dependent parts of a ROM image (the engine's): p in
+// the single-level form (Project::single_level), as console opt.console
+// ("sms" or "gg") has it. rom is replaced only on success (then a power of
+// two, 128 KB to 1 MB)
 bool build(Bytes &rom, const Project &p, const BuildOptions &opt, BuildStats &stats, std::string &err);
-// the level stored in the ROM's source container (found via the ROM directory)
-bool read_project(const Bytes &rom, Project &p, std::string &err);
-// a Master System or Game Gear ROM of this port: the "TMR SEGA" header at
-// $7FF0 and the "DRPGDIR1" ROM directory at $7FC0
-bool is_rom(const Bytes &rom);
-// a Game Gear ROM (header region 5, 6 or 7)
-bool is_gg(const Bytes &rom);
 
 // the bit-exact model of rom/render.asm: H x W colour indices
 // (sms_model.cpp) size 0 large, 1 small; (gx, gz, f) the cell and facing;

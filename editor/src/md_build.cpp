@@ -10,23 +10,19 @@
 //   the weapon     frame_screen and make_weapons: the 18 weapon frames as
 //                  hardware sprites (shared by every map);
 //   one map        make_tables: wall pieces, textures, visibility,
-//                  sprites, props; make_pack wraps them with the level and
-//                  strings blobs into a single-level pack;
-//   the campaign   read_block, make_cmap, assemble, build_campaign and
-//                  new_campaign: the block of every map.
-// A pack ("MDPK"): 32-byte header (u16 version at 4, u16 entry count at 6,
-// six u16 counts at 8: walls, textures, sprites, props, floor and ceiling
-// colour, then the portal's texture swaps at 20..30), then per entry a u32
-// offset (from the pack's start) and u32 size, then the entries, each at
-// a multiple of 4.
+//                  sprites, props;
+//   the campaign   make_cmap, assemble and new_campaign: the block of
+//                  every map.
+// A map's pack ("MDPK"): 32-byte header (u16 version at 4, u16 entry count
+// at 6, six u16 counts at 8: walls, textures, sprites, props, floor and
+// ceiling colour, then the portal's texture swaps at 20..30), then per
+// entry a u32 offset and u32 size, then the entries, each at a multiple
+// of 4.
 #include "md_build.h"
 #include "md_areas.h"
 #include "colour.h"
-#include "container.h"
 #include "geometry.h"
 #include "levelblob.h"
-
-#include "../third_party/json/json.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -37,11 +33,6 @@
 namespace md {
 namespace {
 
-// a single-level pack's entries, in order (the index is the entry number)
-const char *ENTRIES[] = {"walls", "tex", "tex_pal", "tex_hist", "spr_cols", "spr_off", "spr_data", "spr_coff",
-                         "pvs_index", "pvs", "spr_pal", "spr_hist", "scenery", "def_spr", "vis_index", "vis",
-                         "level", "strings", "wp_frames", "wp_sprites", "wp_pal", "wp_tiles", "source"};
-const int N_ENTRIES = 23, P_SOURCE = 22;   // P_SOURCE: the "source" entry (the container)
 // the 3D view's size in pixels; the most weapon tiles per frame; SPLIT:
 // the tile number where the weapon's VRAM area is interrupted (a sprite's
 // tiles may not straddle it)
@@ -268,22 +259,17 @@ void put_swaps(Bytes &head, const std::vector<std::pair<int, int>> &sw)
     }
 }
 
-// One map's render tables (tools/build_render_data.py tables()). campaign:
-// the campaign's form - things hidden at the start that aren't entities left
-// out, each prop with its cell.
-bool make_tables(const Project &p0, const BuildOptions &opt, bool campaign, std::map<std::string, Bytes> &blobs,
-                 Counts &cnt, std::string &err)
+// One map's render tables (tools/build_render_data.py tables()), in the
+// campaign's form: the props hidden at the start left out, each prop with
+// its cell.
+bool make_tables(const Project &p0, const BuildOptions &opt, std::map<std::string, Bytes> &blobs, Counts &cnt,
+                 std::string &err)
 {
-    Project pf;
-    const Project *pp = &p0;
-    if (campaign) {   // drop the props hidden at the start (sprite flag 0x10000)
-        pf = p0;
-        pf.scenery.clear();
-        for (auto &sc : p0.scenery)
-            if (!(sc.info & 0x10000)) pf.scenery.push_back(sc);
-        pp = &pf;
-    }
-    const Project &p = *pp;
+    Project pf = p0;   // drop the props hidden at the start (sprite flag 0x10000)
+    pf.scenery.clear();
+    for (auto &sc : p0.scenery)
+        if (!(sc.info & 0x10000)) pf.scenery.push_back(sc);
+    const Project &p = pf;
     Geometry geo;
     try {
         geo = build_geometry(p);
@@ -486,12 +472,10 @@ bool make_tables(const Project &p0, const BuildOptions &opt, bool campaign, std:
         return false;
     }
     // ---- scenery + entity types
-    // scenery: per prop x, z, sprite slot, the info's high 16 bits (and on
-    // campaign maps its cell); def_spr: each thing type's sprite slot
-    for (auto &s : geo.scenery) {
-        for (int v : {s.x, s.z, slot[s.tile], (int)((s.info >> 16) & 0xFFFF)}) be16(blobs["scenery"], (u16)v);
-        if (campaign) be16(blobs["scenery"], (u16)s.cell);
-    }
+    // scenery: per prop x, z, sprite slot, the info's high 16 bits and its
+    // cell; def_spr: each thing type's sprite slot
+    for (auto &s : geo.scenery)
+        for (int v : {s.x, s.z, slot[s.tile], (int)((s.info >> 16) & 0xFFFF), s.cell}) be16(blobs["scenery"], (u16)v);
     for (auto &d : p.defs) blobs["def_spr"].push_back((u8)slot[d.tile]);
     cnt.walls = (int)walls.size();
     cnt.tex = (int)geo.tex_imgs.size();
@@ -500,76 +484,6 @@ bool make_tables(const Project &p0, const BuildOptions &opt, bool campaign, std:
     return true;
 }
 }  // namespace
-
-// see md_build.h: the single-level pack (layout at the top of this file)
-bool make_pack(const Project &p, const BuildOptions &opt, Bytes &pack, std::string &err)
-{
-    std::map<std::string, Bytes> blobs;
-    Counts cnt;
-    try {
-        blobs["level"] = make_level_blob(p, true);
-        blobs["strings"] = make_strings_blob(p, true);
-    } catch (const std::exception &e) {
-        err = e.what();
-        return false;
-    }
-    if (!make_tables(p, opt, false, blobs, cnt, err)) return false;
-    // ---- weapons
-    try {
-        Weapons w = make_weapons(p);
-        blobs["wp_frames"] = w.frames;
-        blobs["wp_sprites"] = w.sprites;
-        blobs["wp_pal"] = w.pal;
-        blobs["wp_tiles"] = w.tiles;
-    } catch (const std::exception &e) {
-        err = e.what();
-        return false;
-    }
-    opt.say("packing the editable level...");
-    blobs["source"] = make_container(p);
-    // ---- the pack
-    pack.assign(32 + 8 * N_ENTRIES, 0);
-    memcpy(pack.data(), "MDPK", 4);
-    pack[5] = 1;           // version 1
-    pack[7] = N_ENTRIES;
-    Bytes counts;
-    for (int v : {cnt.walls, cnt.tex, cnt.spr, cnt.scenery, (int)md_colour(p.floor), (int)md_colour(p.ceiling)})
-        be16(counts, (u16)v);
-    memcpy(&pack[8], counts.data(), counts.size());
-    put_swaps(pack, cnt.swaps);
-    for (int i = 0; i < N_ENTRIES; i++) {
-        while (pack.size() % 4) pack.push_back(0);
-        const Bytes &b = blobs[ENTRIES[i]];
-        Bytes e;
-        be32(e, (u32)pack.size());
-        be32(e, (u32)b.size());
-        memcpy(&pack[32 + 8 * i], e.data(), 8);
-        pack.insert(pack.end(), b.begin(), b.end());
-    }
-    while (pack.size() % 4) pack.push_back(0);
-    return true;
-}
-
-// see md_build.h: the SNES header's title at $FFC0, "DRPG" at $FFB2, and
-// at $FFB6 the HiROM bank ($C0 + n) of the block, which must start "MDCP"
-bool is_snes(const Bytes &rom)
-{
-    if (rom.size() < 0x10000 || !game_title(&rom[0xFFC0]) || memcmp(&rom[0xFFB2], "DRPG", 4) != 0 ||
-        rom[0xFFB6] < 0xC0)
-        return false;
-    size_t a = (size_t)(rom[0xFFB6] - 0xC0) << 16;
-    return a + 8 <= rom.size() && memcmp(&rom[a], "MDCP", 4) == 0;
-}
-
-// see md_build.h: the same at $7FC0 / $7FB2 / $7FB6, bank $40..$5F
-bool is_snes_fx(const Bytes &rom)
-{
-    if (rom.size() < 0x10000 || !game_title(&rom[0x7FC0]) || memcmp(&rom[0x7FB2], "DRPG", 4) != 0 ||
-        rom[0x7FB6] < 0x40 || rom[0x7FB6] >= 0x60)
-        return false;
-    size_t a = (size_t)(rom[0x7FB6] - 0x40) << 16;
-    return a + 8 <= rom.size() && memcmp(&rom[a], "MDCP", 4) == 0;
-}
 
 // the SNES cartridge (the Deimos repository's tools/snes_rom.py
 // finish): a power of two from 256 KB, the header's size code and checksum
@@ -598,29 +512,6 @@ static void finish_snes(Bytes &out, size_t hdr = 0xFFB0)
     out[hdr + 0x2F] = (u8)(sum >> 8);
 }
 
-// see md_build.h
-bool is_rom(const Bytes &rom)
-{
-    return rom.size() >= 0x200 && memcmp(&rom[0x100], "SEGA", 4) == 0 && memcmp(&rom[0x1C8], "MDRPGDIR", 8) == 0;
-}
-
-// a single-level ROM's level: the pack's "source" entry
-static bool read_project_v1(const Bytes &rom, Project &p, std::string &err)
-{
-    u32 addr = get_be32(&rom[0x1D0]);
-    if (addr + 32 + 8 * N_ENTRIES > rom.size() || memcmp(&rom[addr], "MDPK", 4) != 0) {
-        err = "this Mega Drive ROM's level data is missing or damaged";
-        return false;
-    }
-    const u8 *pk = &rom[addr];
-    u32 off = get_be32(pk + 32 + 8 * P_SOURCE), size = get_be32(pk + 32 + 8 * P_SOURCE + 4);
-    if (addr + off + size > rom.size()) {
-        err = "this Mega Drive ROM's copy of the level is cut short";
-        return false;
-    }
-    return read_container(pk + off, size, p, err);
-}
-
 // tools/fix_header.py: padded with $FF to a power of two (at least 128 KB),
 // ROM end, checksum
 static void finish_rom(Bytes &out)
@@ -637,44 +528,15 @@ static void finish_rom(Bytes &out)
     out[0x18F] = sum & 0xFF;
 }
 
-// a single-level ROM: the code up to the pack's address, the new pack,
-// then the header fixed up
-static bool build_v1(Bytes &rom, const Project &p, const BuildOptions &opt, BuildStats &stats, std::string &err)
-{
-    u32 addr = get_be32(&rom[0x1D0]), limit = get_be32(&rom[0x1D4]);
-    if (addr == 0 || addr > rom.size() || limit > PACK_LIMIT) {
-        err = "this ROM's directory is damaged";
-        return false;
-    }
-    Bytes pack;
-    if (!make_pack(p, opt, pack, err)) return false;
-    if (addr + pack.size() > limit) {
-        err = "the level is too big: it needs " + std::to_string(pack.size() / 1024) + " KB and there is room for " +
-              std::to_string((limit - addr) / 1024) + " KB";
-        return false;
-    }
-    Bytes out(rom.begin(), rom.begin() + addr);
-    out.insert(out.end(), pack.begin(), pack.end());
-    finish_rom(out);
-    size_t size = out.size();
-    rom = std::move(out);
-    stats.rom_kb = (int)(size / 1024);
-    stats.used_kb = (int)(pack.size() / 1024);
-    stats.free_kb = (int)((limit - addr - pack.size()) / 1024);
-    opt.at(1.0f);
-    return true;
-}
-
 // ======================================================================
-// The campaign (Mega Drive version 0.0.6 and later): every map of the game in one
-// block (tools/md_campaign.py), the textures and sprites in shared banks,
-// and the editable copy of every map (one source container).
+// The campaign: every map in one block (tools/md_campaign.py), the
+// textures and sprites in shared banks.
 //
 // The block ("MDCP"), from its start: u16 version (2) at 4, u16 map count
 // at 6, u32 offsets of the shared textures (8), shared sprites (12), the
-// weapon directory (16), the block's size (20), the source container (24)
-// and its size (28). Then a 32-byte record per map: u32 offset of its
-// pack, its map id at 4, its title (upper case, up to 25 characters) at 6.
+// weapon directory (16), the block's size (20), then two zero u32s (24,
+// 28). Then a 32-byte record per map: u32 offset of its pack, its map id
+// at 4, its title (upper case, up to 25 characters) at 6.
 // The weapon directory: 4 x (u32 offset, u32 size) of the wp_* tables.
 // Each map's pack is as above (version 2, the CENTRIES entries); its
 // tex_off and spr_off give offsets into the shared textures and sprites,
@@ -689,7 +551,6 @@ const char *CENTRIES[] = {"walls", "tex_off", "tex_pal", "tex_hist", "spr_cols",
                           "strings"};
 const int N_CENTRIES = 17, C_TEX_OFF = 1, C_SPR_COLS = 4, C_SPR_OFF = 5, C_SPR_COFF = 6;
 const int CAMP_HEAD = 32, MAP_REC = 32;   // the block header and a map record, in bytes
-const char *WP_NAMES[] = {"wp_frames", "wp_sprites", "wp_pal", "wp_tiles"};   // (not used)
 
 // big-endian read; big-endian write at a position
 u16 get_be16(const u8 *p) { return (u16)((p[0] << 8) | p[1]); }
@@ -714,105 +575,7 @@ struct CBlock {
     bool fx = false;           // the SuperFX one (no visibility tables)
     std::vector<CMap> maps;
     Bytes weapons[4];          // wp_frames, wp_sprites, wp_pal, wp_tiles
-    std::vector<SrcEntry> source;   // the source container's entries
 };
-
-// a ROM holding a campaign block (SNES, SuperFX, or a Mega Drive ROM whose
-// directory address points at "MDCP")
-bool is_campaign(const Bytes &rom)
-{
-    if (is_snes(rom) || is_snes_fx(rom)) return true;
-    if (rom.size() < 0x200) return false;
-    u32 a = get_be32(&rom[0x1D0]);
-    return a + 8 <= rom.size() && memcmp(&rom[a], "MDCP", 4) == 0;
-}
-
-// unpacks the ROM's block into cb (every map's tables, its textures and
-// sprites copied out of the shared areas); false with err when damaged.
-// (The block's address itself is not checked against the ROM's size.)
-bool read_block(const Bytes &rom, CBlock &cb, std::string &err)
-{
-    cb.snes = is_snes(rom);
-    cb.fx = is_snes_fx(rom);
-    // where the block is and how far it may go
-    if (cb.snes) {
-        cb.addr = (u32)(rom[0xFFB6] - 0xC0) << 16;
-        cb.limit = 0x400000;
-    } else if (cb.fx) {
-        cb.snes = true;
-        cb.addr = (u32)(rom[0x7FB6] - 0x40) << 16;
-        cb.limit = 0x200000;
-    } else {
-        cb.addr = get_be32(&rom[0x1D0]);
-        cb.limit = get_be32(&rom[0x1D4]);
-    }
-    const u8 *b = &rom[cb.addr];
-    size_t room = rom.size() - cb.addr;
-    auto bad = [&](const std::string &what) {
-        err = "this Mega Drive ROM's maps are damaged (" + what + ")";
-        return false;
-    };
-    if (get_be16(b + 4) != 2) {
-        err = "this the Mega Drive game ROM is from a development build; use a released one (0.0.6 or later)";
-        return false;
-    }
-    int n = get_be16(b + 6);
-    u32 tb = get_be32(b + 8), sb = get_be32(b + 12), wp = get_be32(b + 16), size = get_be32(b + 20);
-    u32 so = get_be32(b + 24), ss = get_be32(b + 28);
-    if (size > room || so + ss > size || CAMP_HEAD + MAP_REC * n > (int)size || wp + 32 > size) return bad("header");
-    for (int i = 0; i < 4; i++) {
-        u32 o = get_be32(b + wp + 8 * i), l = get_be32(b + wp + 8 * i + 4);
-        if (o + l > size) return bad("weapons");
-        cb.weapons[i].assign(b + o, b + o + l);
-    }
-    if (!read_entries(b + so, ss, cb.source, err)) return false;
-    const SrcEntry *cj = nullptr;
-    for (auto &e : cb.source)
-        if (e.name == "campaign.json") cj = &e;
-    if (!cj) return bad("no campaign.json");
-    nlohmann::json j;
-    try {
-        j = nlohmann::json::parse(std::string(cj->data.begin(), cj->data.end()));
-    } catch (const std::exception &e) {
-        return bad(e.what());
-    }
-    if ((int)j["maps"].size() != n) return bad("map count");
-    for (int i = 0; i < n; i++) {
-        CMap m;
-        m.info.name = j["maps"][i]["name"].get<std::string>();
-        m.info.title = j["maps"][i]["title"].get<std::string>();
-        m.info.id = j["maps"][i]["id"].get<int>();
-        const u8 *rec = b + CAMP_HEAD + MAP_REC * i;
-        u32 po = get_be32(rec);
-        if (po + 32 + 8 * N_CENTRIES > size || memcmp(b + po, "MDPK", 4) != 0) return bad("map " + m.info.name);
-        // the pack's header: counts, swaps, then the entries
-        for (int k = 0; k < 6; k++) m.counts[k] = get_be16(b + po + 8 + 2 * k);
-        for (int k = 0; k < b[po + 20] && k < MAX_SWAPS; k++) m.swaps.push_back({b[po + 21 + 2 * k], b[po + 22 + 2 * k]});
-        for (int k = 0; k < N_CENTRIES; k++) {
-            u32 o = get_be32(b + po + 32 + 8 * k), l = get_be32(b + po + 36 + 8 * k);
-            if (o + l > size) return bad("map " + m.info.name);
-            m.tabs[k].assign(b + o, b + o + l);
-        }
-        int nt = m.counts[1], ns = m.counts[2];
-        if ((int)m.tabs[C_TEX_OFF].size() < 4 * nt || (int)m.tabs[C_SPR_OFF].size() < 4 * ns ||
-            (int)m.tabs[C_SPR_COLS].size() < 128 * ns || (int)m.tabs[C_SPR_COFF].size() < 128 * ns)
-            return bad("map " + m.info.name);
-        for (int k = 0; k < nt; k++) {
-            u32 o = tb + get_be32(&m.tabs[C_TEX_OFF][4 * k]);
-            if (o + 4096 > size) return bad("textures");
-            m.tex.emplace_back(b + o, b + o + 4096);
-        }
-        for (int k = 0; k < ns; k++) {
-            u32 o = sb + get_be32(&m.tabs[C_SPR_OFF][4 * k]);
-            // its length: the last column's offset plus its row count
-            u32 len = get_be16(&m.tabs[C_SPR_COFF][128 * k + 126]) + m.tabs[C_SPR_COLS][128 * k + 127];
-            if (o + len > size) return bad("sprites");
-            m.spr.emplace_back(b + o, b + o + len);
-        }
-        cb.maps.push_back(std::move(m));
-    }
-    return true;
-}
 
 // md_campaign.py vis_lists: 128-byte cell maps -> word lists ($FFFF ends one; map 0, every cell, is $FFFF)
 // idx_out: per view the word offset of its list in list_out ($FFFF for
@@ -839,31 +602,8 @@ bool vis_lists(const Bytes &maps, const Bytes &index, Bytes &idx_out, Bytes &lis
     return true;
 }
 
-// compact JSON, as Python's json.dumps(separators=(",", ":")) writes it
-std::string json_text(const nlohmann::ordered_json &j) { return j.dump(-1, ' ', true); }
 
 }  // namespace
-
-// see md_build.h
-bool campaign_maps(const Bytes &rom, std::vector<MapInfo> &out, std::string &err)
-{
-    out.clear();
-    if (!is_campaign(rom)) return true;
-    CBlock cb;
-    if (!read_block(rom, cb, err)) return false;
-    for (auto &m : cb.maps) out.push_back(m.info);
-    return true;
-}
-
-// see md_build.h (an out-of-range map reads the first)
-bool read_project(const Bytes &rom, int map, Project &p, std::string &err)
-{
-    if (!is_campaign(rom)) return read_project_v1(rom, p, err);
-    CBlock cb;
-    if (!read_block(rom, cb, err)) return false;
-    if (map < 0 || map >= (int)cb.maps.size()) map = 0;
-    return project_from_entries(cb.source, "map/" + cb.maps[map].info.name + ".json", p, err);
-}
 
 // one map's part of the block: its tables, textures and sprites (nm.info is the caller's)
 static bool make_cmap(const Project &p, const std::vector<std::string> &names, CMap &nm, const BuildOptions &opt,
@@ -880,7 +620,7 @@ static bool make_cmap(const Project &p, const std::vector<std::string> &names, C
         err = e.what();
         return false;
     }
-    if (!make_tables(p, opt, true, blobs, cnt, err)) return false;   // the campaign's form
+    if (!make_tables(p, opt, blobs, cnt, err)) return false;
     int cv[6] = {cnt.walls, cnt.tex, cnt.spr, cnt.scenery, (int)md_colour(p.floor), (int)md_colour(p.ceiling)};
     memcpy(nm.counts, cv, sizeof cv);
     nm.swaps = cnt.swaps;
@@ -906,9 +646,9 @@ static bool make_cmap(const Project &p, const std::vector<std::string> &names, C
     return true;
 }
 
-// the block (tools/md_campaign.py) after rom[0, cb.addr), the editable copy last
-static bool assemble(Bytes &rom, CBlock &cb, const std::vector<SrcEntry> &src, const BuildOptions &opt,
-                     BuildStats &stats, std::string &err)
+// the block (tools/md_campaign.py) after rom[0, cb.addr), then (the Mega
+// Drive) its colours per area; the cartridge finished as its console's
+static bool assemble(Bytes &rom, CBlock &cb, const BuildOptions &opt, BuildStats &stats, std::string &err)
 {
     int n = (int)cb.maps.size();
     // ---- the block (tools/md_campaign.py)
@@ -987,10 +727,6 @@ static bool assemble(Bytes &rom, CBlock &cb, const std::vector<SrcEntry> &src, c
             if (ch >= 'a' && ch <= 'z') ch -= 32;
         for (size_t k = 0; k < 25 && k < title.size(); k++) blk[r + 6 + k] = (u8)title[k];
     }
-    Bytes srcb = opt.locked ? locked_container() : write_entries(src);   // (locked: no editable copy)
-    u32 src_at = add(srcb);
-    put_be32(blk, 24, src_at);
-    put_be32(blk, 28, (u32)srcb.size());
     while (blk.size() % 4) blk.push_back(0);
     put_be32(blk, 20, (u32)blk.size());
     // the Mega Drive's colours per area (tools/md_areas.c), right after the
@@ -1029,142 +765,11 @@ static bool assemble(Bytes &rom, CBlock &cb, const std::vector<SrcEntry> &src, c
     return true;
 }
 
-// Rebuilds a campaign ROM with p in place of map `map`. The other maps'
-// tables are reused as read; the weapon (shared) comes from p and is put
-// into every map's JSON; unchanged container entries keep their packed
-// bytes. A drawing changed here that another map also uses is renamed
-// (<key>_<map>[n]) so the other maps keep theirs.
-static bool build_campaign(Bytes &rom, int map, const Project &p_in, const BuildOptions &opt, BuildStats &stats,
-                           std::string &err)
-{
-    CBlock cb;
-    if (!read_block(rom, cb, err)) return false;
-    int n = (int)cb.maps.size();
-    if (map < 0 || map >= n) {
-        err = "there is no map " + std::to_string(map) + " in this ROM";
-        return false;
-    }
-    // the map as a campaign map (a level from elsewhere takes over the slot's id)
-    Project p = p_in;
-    CMap &cm = cb.maps[map];
-    if (!p.campaign()) {
-        p.map_id = cm.info.id;
-        for (auto &sc : p.scenery) sc.cell = -1;
-    }
-    std::vector<std::string> names;
-    for (auto &m : cb.maps) names.push_back(m.info.name);
-    CMap nm;
-    nm.info = cm.info;
-    nm.info.title = p.name;
-    // the game's data from the map as this console builds it (its own
-    // pictures and texts); the editable copy below keeps p, with every
-    // console's versions
-    const Project game = p.for_console(opt.console);
-    if (!make_cmap(game, names, nm, opt, err)) return false;   // this map's new tables
-    // ---- the weapons (every map shares them)
-    try {
-        Weapons w = make_weapons(game);
-        cb.weapons[0] = w.frames;
-        cb.weapons[1] = w.sprites;
-        cb.weapons[2] = w.pal;
-        cb.weapons[3] = w.tiles;
-    } catch (const std::exception &e) {
-        err = e.what();
-        return false;
-    }
-    // ---- the editable copy: the other maps as they are (with these weapons)
-    opt.say("packing the editable maps...");
-    std::map<std::string, const SrcEntry *> old_entry;
-    for (auto &e : cb.source) old_entry[e.name] = &e;
-    std::vector<Project> others(n);
-    for (int i = 0; i < n; i++)
-        if (i != map && !project_from_entries(cb.source, "map/" + cb.maps[i].info.name + ".json", others[i], err))
-            return false;
-    // a drawing changed here that other maps also use gets a key of its own
-    std::map<std::string, std::string> rename;
-    for (auto &kv : p.shapes) {
-        auto it = old_entry.find("shape/" + kv.first);
-        if (it == old_entry.end() || memcmp(it->second->data.data(), kv.second.px, 4096) == 0) continue;
-        bool shared = false;
-        for (int i = 0; i < n; i++)
-            if (i != map && others[i].shapes.count(kv.first)) shared = true;
-        if (shared) {
-            std::string k2;
-            for (int t = 1;; t++) {
-                k2 = kv.first + "_" + cm.info.name + (t > 1 ? std::to_string(t) : "");
-                if (!old_entry.count("shape/" + k2) && !p.shapes.count(k2)) break;
-            }
-            rename[kv.first] = k2;
-        }
-    }
-    if (!rename.empty()) {
-        auto re = [&](ArtRef &r) {
-            auto it = rename.find(r.shape);
-            if (it != rename.end()) r.shape = it->second;
-        };
-        for (auto &kv : p.textures) re(kv.second);
-        for (auto &kv : p.sprites) re(kv.second);
-        re(p.border);
-        for (auto &w : p.weapons) re(w);
-        for (auto &kv : rename) {
-            p.shapes[kv.second] = p.shapes[kv.first];
-            p.shapes.erase(kv.first);
-        }
-    }
-    p.drop_unused_shapes();
-    std::vector<SrcEntry> src;
-    nlohmann::ordered_json cj;
-    cj["maps"] = nlohmann::ordered_json::array();
-    for (int i = 0; i < n; i++) {
-        nlohmann::ordered_json m;
-        m["name"] = cb.maps[i].info.name;
-        m["title"] = i == map ? p.name : cb.maps[i].info.title;
-        m["id"] = cb.maps[i].info.id;
-        cj["maps"].push_back(m);
-    }
-    // add a container entry, keeping the old packed bytes if unchanged
-    auto entry = [&](const std::string &name, Bytes data) {
-        SrcEntry e{name, std::move(data), {}};
-        auto it = old_entry.find(name);
-        if (it != old_entry.end() && it->second->data == e.data) e.packed = it->second->packed;
-        src.push_back(std::move(e));
-    };
-    std::string t = json_text(cj);
-    entry("campaign.json", Bytes(t.begin(), t.end()));
-    std::map<std::string, const Drawing *> shapes;   // every map's drawings by key
-    for (int i = 0; i < n; i++) {
-        Project &q = i == map ? p : others[i];
-        if (i != map) {
-            bool same = q.weapons.size() == p.weapons.size();
-            for (size_t k = 0; same && k < q.weapons.size(); k++)
-                same = q.weapons[k].shape == p.weapons[k].shape &&
-                       memcmp(q.weapons[k].pal, p.weapons[k].pal, sizeof q.weapons[k].pal) == 0;
-            if (!same) {
-                q.weapons = p.weapons;
-                for (auto &w : p.weapons) q.shapes[w.shape] = p.shapes[w.shape];
-                q.drop_unused_shapes();
-            }
-            auto it = old_entry.find("map/" + cb.maps[i].info.name + ".json");
-            if (same && it != old_entry.end()) src.push_back(*it->second);
-            else {
-                t = q.to_json();
-                entry("map/" + cb.maps[i].info.name + ".json", Bytes(t.begin(), t.end()));
-            }
-        } else {
-            t = q.to_json();
-            entry("map/" + cb.maps[i].info.name + ".json", Bytes(t.begin(), t.end()));
-        }
-        for (auto &kv : q.shapes) shapes[kv.first] = &kv.second;
-    }
-    for (auto &kv : shapes) entry("shape/" + kv.first, Bytes(kv.second->px, kv.second->px + 4096));
-    cb.maps[map] = std::move(nm);
-    return assemble(rom, cb, src, opt, stats, err);
-}
-
-// see md_build.h. The weapon comes from the first map's project; the
-// projects' unused drawings are dropped. Progress: 0..80% for the maps.
-bool new_campaign(Bytes &rom, u32 addr, u32 limit, const std::vector<MapInfo> &maps, std::vector<Project> &projects,
-                  const BuildOptions &opt, BuildStats &stats, std::string &err, bool snes, bool snes_fx)
+// see md_build.h. The weapon comes from the first map's project.
+// Progress: 0..80% for the maps.
+bool new_campaign(Bytes &rom, u32 addr, u32 limit, const std::vector<MapInfo> &maps,
+                  const std::vector<Project> &projects, const BuildOptions &opt, BuildStats &stats, std::string &err,
+                  bool snes, bool snes_fx)
 {
     if (maps.empty() || maps.size() != projects.size()) {
         err = "no maps to build";
@@ -1182,8 +787,19 @@ bool new_campaign(Bytes &rom, u32 addr, u32 limit, const std::vector<MapInfo> &m
         opt.say("map " + std::to_string(i + 1) + " of " + std::to_string(maps.size()) + ": " + maps[i].title);
         CMap nm;
         nm.info = maps[i];
-        // (the game's data as this console has the map: Project::for_console)
-        if (!make_cmap(projects[i].for_console(opt.console), names, nm, opt, err)) {
+        // the game's data as this console has the map (Project::for_console);
+        // a single level (one from an older level folder, say) takes the
+        // place's map id, its props are always there and SHOW's "none" is
+        // the campaign's $FFFF
+        Project q = projects[i].for_console(opt.console);
+        if (!q.campaign()) {
+            q.map_id = maps[i].id;
+            for (auto &sc : q.scenery) sc.cell = -1;
+            for (auto &ev : q.events)
+                for (auto &c : ev.cmds)
+                    if (c.op == 7 && c.a1 == 0xFF) c.a1 = 0xFFFF;
+        }
+        if (!make_cmap(q, names, nm, opt, err)) {
             err = maps[i].title + ": " + err;
             return false;
         }
@@ -1200,36 +816,7 @@ bool new_campaign(Bytes &rom, u32 addr, u32 limit, const std::vector<MapInfo> &m
         err = e.what();
         return false;
     }
-    opt.say("packing the editable maps...");
-    std::vector<SrcEntry> src;
-    nlohmann::ordered_json cj;
-    cj["maps"] = nlohmann::ordered_json::array();
-    for (auto &m : maps) {
-        nlohmann::ordered_json o;
-        o["name"] = m.name;
-        o["title"] = m.title;
-        o["id"] = m.id;
-        cj["maps"].push_back(o);
-    }
-    std::string t = json_text(cj);
-    src.push_back({"campaign.json", Bytes(t.begin(), t.end()), {}});
-    std::map<std::string, const Drawing *> shapes;
-    for (size_t i = 0; i < maps.size(); i++) {
-        Project &q = projects[i];
-        q.drop_unused_shapes();
-        t = q.to_json();
-        src.push_back({"map/" + maps[i].name + ".json", Bytes(t.begin(), t.end()), {}});
-        for (auto &kv : q.shapes) shapes[kv.first] = &kv.second;
-    }
-    for (auto &kv : shapes) src.push_back({"shape/" + kv.first, Bytes(kv.second->px, kv.second->px + 4096), {}});
-    return assemble(rom, cb, src, opt, stats, err);
-}
-
-// see md_build.h
-bool build(Bytes &rom, int map, const Project &p, const BuildOptions &opt, BuildStats &stats, std::string &err)
-{
-    if (is_campaign(rom)) return build_campaign(rom, map, p, opt, stats, err);
-    return build_v1(rom, p, opt, stats, err);
+    return assemble(rom, cb, opt, stats, err);
 }
 
 }  // namespace md

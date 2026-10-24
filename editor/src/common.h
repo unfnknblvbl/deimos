@@ -12,8 +12,6 @@
 // - short integer type names (u8, u16, u32, s32) and Bytes, the byte
 //   buffer every builder reads and writes (ROM images, blobs, files);
 // - RGB, an 8-bit-per-channel colour;
-// - lim::, the Master System ROM's limits and bank layout (see
-//   docs/rom_format.md);
 // - little-endian put/get helpers for Bytes;
 // - utf8_to_latin1, which turns the editor's text into the consoles' text.
 #pragma once
@@ -38,36 +36,6 @@ struct RGB {
     bool operator==(const RGB &o) const { return r == o.r && g == o.g && b == o.b; }
     bool operator!=(const RGB &o) const { return !(*this == o); }
 };
-
-// limits shared with the ROM (tools/gen_cdata.py)
-// (Today these MAX_* values are Mega Drive version 0.0.4/0.0.5's; the Master System
-// port has since raised its own, which levelblob.cpp keeps as SMS_LIMITS.)
-// The MAX_* counts are the single-level ROMs' table sizes: MAX_DEFS thing
-// types, MAX_MAP_ENTS things on the map (of which MAX_MONS monsters),
-// MAX_LINES doors and sliding walls, MAX_EVENTS scripted cells, MAX_CMDS
-// script commands, MAX_STRINGS texts. levelblob.cpp uses them as
-// MDV1_LIMITS.
-// Memory map (Master System, 16 KB banks paged into slot 2 at $8000):
-//   LEVEL_ADDR      the level blob's address in bank HOME_BANK (2), up to
-//                   LEVEL_MAX bytes ($A000-$BFFF);
-//   STRINGS_MAX     a strings blob limit (only levelblob.cpp's big-endian
-//                   case uses it; the Master System has its own 8 KB one);
-//   BANK            one bank's size; N_BANKS the most banks of a 4 MB ROM;
-//   CELLS_BANK      bank 3, the level header; MISC_BANK bank 4, strings and
-//                   sprite directories; FIRST_VIEW_BANK bank 6, the renderer;
-//   SPRITE_DIR_ADDR the large view's hardware sprite directory;
-//   ROM_DIR_ADDR    the ROM directory in bank 1.
-// Only the MAX_* counts and STRINGS_MAX are referenced today; sms_build.cpp
-// keeps its own copies of the addresses.
-namespace lim {
-const int MAX_DEFS = 64, MAX_MAP_ENTS = 152, MAX_MONS = 56, MAX_LINES = 32, MAX_EVENTS = 96,
-          MAX_CMDS = 240, MAX_STRINGS = 255;
-const int LEVEL_ADDR = 0xA000, LEVEL_MAX = 0x2000, STRINGS_MAX = 0x1800;
-const int BANK = 0x4000, N_BANKS = 256;
-const int HOME_BANK = 2, CELLS_BANK = 3, MISC_BANK = 4, FIRST_VIEW_BANK = 6;
-const int SPRITE_DIR_ADDR = 0xB800;  // in MISC_BANK
-const int ROM_DIR_ADDR = 0x7FC0;     // in bank 1
-}  // namespace lim
 
 // Little-endian helpers. put16/put32 append the low 16 or 32 bits of v to
 // b, low byte first. get16/get32 read the same back from p (which must

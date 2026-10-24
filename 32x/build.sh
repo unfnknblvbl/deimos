@@ -79,7 +79,7 @@ $S-size obj/sh2.elf | tail -1     # (print the code and data sizes)
 # and their data, from the Mega Drive game's build)
 python3 ../tools/snes_ui_res.py $MD obj/res_32x.bin ../snes/out/spc_streams.bin "$(cat VERSION)" "32X" > /dev/null
 python3 ../tools/snes_rom.py ../snes/out/deimos.bin ../snes/out/tables.bin obj/res_32x.bin \
-    $MD/build/gen/campaign_locked.bin obj/deimos32x_snes.sfc > /dev/null
+    $MD/build/gen/campaign.bin obj/deimos32x_snes.sfc > /dev/null
 python3 tools/mars_image.py obj/deimos32x_snes.sfc out/deimos32x.sfc   # (without the SNES's code and tables: more room for maps)
 # the cartridge: 68000 code, SH-2 code, data, and the test script if SCRIPT is set
 python3 tools/make_rom.py obj/m68k.bin obj/sh2.bin obj/sh2.syms out/deimos32x.sfc $OUT ${SCRIPT:-}

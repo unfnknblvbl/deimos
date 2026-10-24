@@ -1,9 +1,9 @@
-# What's where in the ROM (0.2.8, directory version 3)
+# What's where in the ROM (directory version 4)
 
 The ROM is 1 MB (64 banks of 16 KB, Sega mapper). The game code never
 changes between levels. Everything about the level is data, found at run
-time through a **level header** in bank 3, so the editor (`editor/`) can
-replace the level without a compiler. The build tools (`build.sh`, Python)
+time through a **level header** in bank 3, so the editor (`../editor/`)
+makes a ROM of any level without a compiler. The build tools (`build.sh`, Python)
 and the editor write byte-for-byte the same ROM for the same level.
 
 | Bank / address | What | Written by |
@@ -11,7 +11,7 @@ and the editor write byte-for-byte the same ROM for the same level.
 | 0 `$0000-$0FFF` | display engine (rom/main.asm) | assembler |
 | 0 `$1000-$3FFF` | game logic: ui, core, events (game/*.asm) | assembler |
 | 1 `$4000-$7FBF` | game logic: combat, actions (game/*.asm) | assembler |
-| 1 `$7FC0` | **ROM directory** (below) | pack_source.py / editor |
+| 1 `$7FC0` | **ROM directory** (below) | rom_dir.py / editor |
 | 1 `$7FF0` | SMS header (checksum and size) | rom_size.py / editor |
 | 2 `$A000-$BFFF` | **level blob**: the rules' view of the level (below) | gen_cdata.py / editor |
 | 3 `$8000` | **level header** (64 bytes, `rom/live_layout.inc`), then the renderer's small tables | live_data.py / editor |
@@ -25,7 +25,6 @@ and the editor write byte-for-byte the same ROM for the same level.
 | 7, 8 | height tables, large and small view: 1792 x (y0, y1, v0, dv, depth) | live_data.py |
 | 9.. | the level's big tables (each starts on a bank): visibility lists, texture columns, billboard sprites | live_data.py / editor |
 | then | hardware sprites, large view, then small view | build_sprites.py / editor |
-| then | the editable level (source container) | pack_source.py / editor |
 
 Banks 2 (`$A000`-), 3, 4 (strings and sprite directories) and everything
 from bank 9 up belong to the level; the rest is the engine.
@@ -78,15 +77,19 @@ addresses are slot-2 addresses. The offsets are in `rom/live_layout.inc`
 - **Border**: 14 tiles per view size, and the name table of screen rows
   2..17 (u16 entries; 0 inside the view).
 
-## ROM directory (bank 1, `$7FC0`, 20 bytes)
+## ROM directory (bank 1, `$7FC0`, 16 bytes)
 
 ```
-"DRPGDIR1"  u8 version (3)
+"DEIMDIR1"  u8 version (4)
 u8 9, u8 n            data banks 9 .. 9 + n - 1 (and bank 3)
 u8 first sprite bank, u8 number of sprite banks (both sizes)
-u8 source bank, u8 number of source banks, u8 0
-u32 source container size
+3 zero bytes
 ```
+
+The game doesn't read it; it marks the ROM as this port's and says where
+the level's banks are. The ROM carries no copy of the level for the
+editor: the editor keeps the level in its own project files (`.deimos`)
+and makes the ROM from them.
 
 ## Level blob (bank 2, `$A000`, max 8 KB)
 
@@ -124,24 +127,3 @@ u16 offset per string, then NUL-terminated text; `|` is a line break.
 64 types x 4 distances x {u8 bank, u16 address, u8 0}; after the large
 view's directory, 64 x 16 CRAM bytes. Records: u8 columns, rows, x, y, 4
 bytes pad, then the 8x16 sprite patterns column by column.
-
-## Source container (the editable level)
-
-The same for the Master System and the Mega Drive (`tools/source_container.py`):
-
-```
-"DRPGSRC2"  u32 total size  u16 entry count
-entries: u8 name length, name, u32 raw size, u32 stored size, u8 method (0 raw, 1 ZX0), data
-```
-
-Entries: `project.json` (the level: grid, walls, props, doors, things,
-types, scripts, strings, start, colours, and each picture as a drawing name
-+ 16 RGB colours) and `shape/<name>`: the drawings, 64 x 64 colour
-indices (255 = transparent). Several pictures may share one drawing.
-
-## Colours
-
-The level's palette and each thing's 15 sprite colours are chosen greedily
-in CIELAB (`tools/colour_lab.py`). It is computed in plain IEEE double steps with
-integer errors, so the editor (C++) makes exactly the same choices on any
-machine.

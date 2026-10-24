@@ -13,7 +13,7 @@ them as it loads them (snes/src/gfx.s md_tiles, ui.c). The editor makes
 the same bytes from the user's jar.
 
 res.bin (from a bank boundary; the header's $FFB7 says which bank):
-  "DRPGRES1", u16 number of entries, u16 0
+  "DEIMRES1", u16 number of entries, u16 0
   per entry: u32 offset (from the start), u32 size   (little-endian)
   then the entries, in NAMES order (Mega Drive formats: tiles 4 bits a
   pixel, two pixels a byte; colours and name tables big-endian words)
@@ -37,7 +37,7 @@ NAMES = ["ui_font", "ui_faces", "ui_icons", "ui_hud_pal", "ui_dlg_pal", "title_t
 def build(arrays):
     """res.bin from {name: bytes}: the header, the offset / size table, the
     entries (each on an even offset)"""
-    head = bytearray(b"DRPGRES1" + struct.pack("<HH", len(NAMES), 0))
+    head = bytearray(b"DEIMRES1" + struct.pack("<HH", len(NAMES), 0))
     head += bytes(8 * len(NAMES))
     body = bytearray()
     for i, n in enumerate(NAMES):

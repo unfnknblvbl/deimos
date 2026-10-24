@@ -91,7 +91,6 @@ package() {
     cp third_party/imgui/LICENSE.txt "$out/docs/Dear-ImGui licence.txt"
     cp third_party/json/LICENSE.MIT "$out/docs/nlohmann-json licence.txt"
     cp third_party/stb/LICENSE "$out/docs/stb licence.txt"
-    cp third_party/zx0/LICENSE "$out/docs/ZX0 licence.txt"
     cp third_party/fonts/LICENSE "$out/docs/DejaVu fonts licence.txt"
     # the libraries inside the consoles' game code the editor carries (its
     # engines): the 3DS game's libctru, citro3d and newlib, the Game Boy

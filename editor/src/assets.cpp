@@ -1518,13 +1518,13 @@ bool snes_res(const Jar &jar, const std::string &version, Blocks &out, std::stri
         err = "the music and sounds don't fit the SNES's sound memory";
         return false;
     }
-    // the resources (tools/snes_ui_res.py): "DRPGRES1", u16 count, u16 0,
+    // the resources (tools/snes_ui_res.py): "DEIMRES1", u16 count, u16 0,
     // per entry u32 offset, u32 size (little-endian), the entries 2-aligned
     static const char *NAMES[] = {"ui_font", "ui_faces", "ui_icons", "ui_hud_pal", "ui_dlg_pal", "title_tiles",
                                   "title_map", "title_pal", "spc_streams"};
     const int NN = 9;
     b["spc_streams"] = spc;
-    Bytes res = {'D', 'R', 'P', 'G', 'R', 'E', 'S', '1', (u8)NN, 0, 0, 0};
+    Bytes res = {'D', 'E', 'I', 'M', 'R', 'E', 'S', '1', (u8)NN, 0, 0, 0};
     res.resize(12 + 8 * NN, 0);
     for (int i = 0; i < NN; i++) {
         const Bytes &e = b[NAMES[i]];

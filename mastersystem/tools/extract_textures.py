@@ -19,7 +19,7 @@ the documented byte layout, reading only data files.
 Usage: extract_textures.py <jar_dir> <out_dir> [id ...]   (writes wall_NNN.png;
 no ids: every wall texture). As a module, its loaders are used by the
 sprite and texture code (extract_sprites.py, sprite_art.py, view_render.py,
-live_data.py, source_container.py).
+live_data.py).
 
 File layouts (all little-endian):
   palettes.bin  u32 byte count, then 16-bit colours: red bits 0-4, green
