@@ -45,13 +45,19 @@ DEPS_CC65_COMMIT=8d86ca7            # cc65 2.19 (git)
 DEPS_ZX0_REPO=https://github.com/einar-saukas/ZX0.git
 DEPS_ZX0_COMMIT=ecde3a2             # ZX0 2.2
 DEPS_GBDK_URL=https://github.com/gbdk-2020/gbdk-2020/releases/download/4.5.0/gbdk-linux64.tar.gz
+# the Virtual Boy's compiler: GNU binutils 2.27 and GCC 4.9.4 with VUEngine's
+# V810 patches (the V810 left mainline GCC long ago)
+DEPS_V810_BINUTILS=binutils-2.27
+DEPS_V810_GCC=gcc-4.9.4
+DEPS_V810_REPO=https://github.com/VUEngine/v810-gcc.git
+DEPS_V810_COMMIT=7d37f0e
 
 # deps_path: puts the tools already built in $DEIMOS_TOOLS on PATH (and GBDK
 # in $GBDK), so the checks and the builds find them. Runs when this file is
 # sourced.
 deps_path() {
     local d
-    for d in wla-dx cc65 zx0 m68k-elf sh-elf arm-none-eabi; do
+    for d in wla-dx cc65 zx0 m68k-elf sh-elf arm-none-eabi v810; do
         if [ -d "$DEIMOS_TOOLS/$d/bin" ]; then
             case ":$PATH:" in
                 *":$DEIMOS_TOOLS/$d/bin:"*) ;;                 # already there
@@ -93,6 +99,7 @@ deps_family() {
 #   zx0                    the ZX0 compressor
 #   m68k-elf sh-elf        the 68000 and SH-2 cross compilers (Mega Drive, 32X)
 #   arm-none-eabi          the ARM cross compiler (Game Boy Advance)
+#   v810-gcc               the V810 cross compiler (Virtual Boy)
 #   gbdk                   GBDK-2020 (Game Boy Color)
 #   devkitpro-3ds          devkitPro's 3DS libraries and tools
 deps_check() {
@@ -102,7 +109,7 @@ deps_check() {
         numpy) python3 -c "import numpy" 2>/dev/null ;;
         cc) command -v cc >/dev/null || command -v gcc >/dev/null ;;
         cxx) command -v c++ >/dev/null || command -v g++ >/dev/null ;;
-        make | unzip | curl | git | cmake) command -v "$1" >/dev/null ;;
+        make | unzip | curl | git | cmake | flex | bison) command -v "$1" >/dev/null ;;
         pkgconf) command -v pkg-config >/dev/null ;;
         mingw) command -v x86_64-w64-mingw32-g++ >/dev/null ;;
         sdl-deps) command -v pkg-config >/dev/null && pkg-config --exists x11 2>/dev/null ;;   # (X11 is the minimum SDL2 needs; the rest are extras)
@@ -113,6 +120,7 @@ deps_check() {
         m68k-elf) command -v "${CROSS:-m68k-elf-}gcc" >/dev/null || command -v "${M68K:-m68k-elf}-gcc" >/dev/null ;;
         sh-elf) command -v "${SH2:-sh-elf}-gcc" >/dev/null ;;
         arm-none-eabi) command -v "${ARM:-arm-none-eabi}-gcc" >/dev/null ;;
+        v810-gcc) command -v "${V810:-v810}-gcc" >/dev/null ;;
         gbdk) [ -x "${GBDK:-/opt/gbdk}/bin/lcc" ] ;;
         devkitpro-3ds) local d=${DKP:-${DEVKITPRO:-/opt/devkitpro}}
                        [ -x "$d/tools/bin/3dsxtool" ] && [ -d "$d/libctru" ] ;;
@@ -135,7 +143,7 @@ deps_packages() {
         cc:*) echo gcc make ;;
         cxx:arch) echo gcc ;;                   cxx:debian) echo g++ ;;
         cxx:*) echo gcc-c++ ;;
-        make:* | unzip:* | curl:* | git:* | cmake:*) echo "$item" ;;
+        make:* | unzip:* | curl:* | git:* | cmake:* | flex:* | bison:*) echo "$item" ;;
         pkgconf:arch) echo pkgconf ;;           pkgconf:debian) echo pkg-config ;;
         pkgconf:fedora) echo pkgconf-pkg-config ;; pkgconf:suse) echo pkg-config ;;
         mingw:arch) echo mingw-w64-gcc ;;       mingw:debian) echo g++-mingw-w64-x86-64-posix ;;
@@ -153,7 +161,7 @@ deps_packages() {
         arm-none-eabi:arch) echo arm-none-eabi-gcc arm-none-eabi-binutils ;;
         arm-none-eabi:debian) echo gcc-arm-none-eabi binutils-arm-none-eabi ;;
         arm-none-eabi:fedora) echo arm-none-eabi-gcc-cs arm-none-eabi-binutils-cs ;;
-        cc65:* | wla-*:* | zx0:* | m68k-elf:* | sh-elf:* | arm-none-eabi:* | gbdk:*) echo @source ;;
+        cc65:* | wla-*:* | zx0:* | m68k-elf:* | sh-elf:* | arm-none-eabi:* | gbdk:* | v810-gcc:*) echo @source ;;
         devkitpro-3ds:arch | devkitpro-3ds:debian) echo @devkitpro ;;
     esac
 }
@@ -166,6 +174,7 @@ deps_source_needs() {
         cc65 | zx0) echo cc make git ;;
         gbdk) echo curl ;;
         m68k-elf | sh-elf | arm-none-eabi) echo cc cxx make curl gcc-libs ;;
+        v810-gcc) echo cc cxx make curl git gcc-libs flex bison ;;
     esac
 }
 
@@ -265,6 +274,7 @@ deps_require() {
             m68k-elf) deps_build_cross m68k-elf --with-cpu=68000 --disable-multilib ;;
             sh-elf) deps_build_cross sh-elf --with-cpu=m2 --with-multilib-list=m2 ;;
             arm-none-eabi) deps_build_cross arm-none-eabi --with-cpu=arm7tdmi --with-float=soft --disable-multilib ;;
+            v810-gcc) deps_build_v810 ;;
         esac || { echo "Building $it failed." >&2; return 1; }
     done
 
@@ -347,6 +357,59 @@ deps_build_cross() {
             "$@" MAKEINFO=true >/dev/null
         make -j"$(nproc)" all-gcc all-target-libgcc MAKEINFO=true >/dev/null
         make install-gcc install-target-libgcc MAKEINFO=true >/dev/null
+    )
+}
+
+# deps_build_v810: the Virtual Boy's compiler into $DEIMOS_TOOLS/v810 (C only,
+# no C library: the game brings its own), VUEngine/v810-gcc's way: GNU
+# binutils 2.27 and GCC 4.9.4 from the GNU mirrors, patched with that
+# repository's V810 patches (and its fixes for building with today's host
+# compilers), then built for the target "v810". The old sources need an
+# older C dialect from the host compiler (-std=gnu99 / gnu++98, -fcommon).
+# DEPS_V810_GCC_OPTS: more options for GCC's configure (say, --with-gmp=DIR
+# --with-mpfr=DIR --with-mpc=DIR where those libraries are not the system's).
+deps_build_v810() {
+    local s=$DEIMOS_TOOLS/src p=$DEIMOS_TOOLS/v810 b=$DEIMOS_TOOLS/src/build-v810
+    mkdir -p "$s" "$p" "$b"
+    (
+        set -e
+        cd "$s"
+        deps_git_at $DEPS_V810_REPO $DEPS_V810_COMMIT "$s/v810-gcc"
+        [ -f $DEPS_V810_BINUTILS.tar.bz2 ] || curl -fLO "$DEPS_GNU_MIRROR/binutils/$DEPS_V810_BINUTILS.tar.bz2"
+        [ -f $DEPS_V810_GCC.tar.bz2 ] || curl -fLO "$DEPS_GNU_MIRROR/gcc/$DEPS_V810_GCC/$DEPS_V810_GCC.tar.bz2"
+        local pt="$s/v810-gcc/patch"
+        if [ ! -d v810-$DEPS_V810_BINUTILS ]; then         # (unpacked and patched once)
+            rm -rf $DEPS_V810_BINUTILS && tar xf $DEPS_V810_BINUTILS.tar.bz2
+            for f in gcc-8.0 gcc-10.0 rmv-warnings v810; do                  # (v810-gcc's order)
+                patch -d $DEPS_V810_BINUTILS -p1 -s < "$pt/$DEPS_V810_BINUTILS-$f.patch"
+            done
+            mv $DEPS_V810_BINUTILS v810-$DEPS_V810_BINUTILS
+        fi
+        if [ ! -d v810-$DEPS_V810_GCC ]; then
+            rm -rf $DEPS_V810_GCC && tar xf $DEPS_V810_GCC.tar.bz2
+            for f in aarch64-darwin no-iconv texi cpp17 fix-warnings rmv-warnings v810 relocatable-pch; do
+                # (-f, and a failure let pass: some hunks are for cloog / isl
+                # unpacked inside gcc, which this build does without)
+                patch -d $DEPS_V810_GCC -p1 -s -f --no-backup-if-mismatch < "$pt/$DEPS_V810_GCC-$f.patch" >/dev/null || true
+            done
+            grep -q v810 $DEPS_V810_GCC/config.sub          # (the V810 patch itself went in)
+            mv $DEPS_V810_GCC v810-$DEPS_V810_GCC
+        fi
+        export CFLAGS='-std=gnu99 -O2 -fcommon -w' CXXFLAGS='-std=gnu++98 -O2 -w -fpermissive' MAKEINFO=true
+        mkdir -p "$b/binutils" && cd "$b/binutils"
+        "$s/v810-$DEPS_V810_BINUTILS/configure" --target=v810 --prefix="$p" --disable-nls --disable-werror \
+            --disable-shared --disable-multilib --disable-lto --without-isl >/dev/null
+        make -j"$(nproc)" MAKEINFO=true all >/dev/null
+        make MAKEINFO=true install-strip >/dev/null
+        export PATH="$p/bin:$PATH"
+        mkdir -p "$b/gcc" && cd "$b/gcc"
+        "$s/v810-$DEPS_V810_GCC/configure" --target=v810 --prefix="$p" --enable-languages=c --disable-nls \
+            --without-headers --with-newlib --disable-shared --enable-static --disable-multilib \
+            --disable-decimal-float --disable-libgomp --disable-libitm --disable-libssp --disable-libquadmath \
+            --disable-lto --without-isl --without-cloog --enable-frame-pointer --disable-werror \
+            ${DEPS_V810_GCC_OPTS:-} >/dev/null
+        make -j"$(nproc)" MAKEINFO=true all-gcc all-target-libgcc >/dev/null
+        make MAKEINFO=true install-strip-gcc install-target-libgcc >/dev/null
     )
 }
 
