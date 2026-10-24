@@ -1,0 +1,7 @@
+Put your copy of Doom RPG (the phone game, DoomRPG.jar) in this folder.
+
+When the Deimos Editor starts, it looks here for it. If it isn't here, the
+editor asks where it is, and puts a copy here so it finds it next time.
+
+The editor contains nothing of the original game: it makes the maps, the art,
+the texts and the sounds from your DoomRPG.jar.

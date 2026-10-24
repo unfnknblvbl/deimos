@@ -1,0 +1,1 @@
+Put your copy of DoomRPG.jar (the original J2ME game) in this folder.

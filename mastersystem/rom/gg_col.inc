@@ -1,0 +1,71 @@
+; Deimos - Doom RPG on retro consoles
+; Copyright (C) 2026 unfnknblvbl and contributors
+; SPDX-License-Identifier: GPL-2.0-or-later
+; Free software under the GNU General Public License, version 2 or (at your
+; option) any later version, with NO WARRANTY: see the LICENSE file.
+
+; generated table: Master System colour --BBGGRR -> Game Gear CRAM word (low, high)
+.db $00, $00
+.db $05, $00
+.db $0A, $00
+.db $0F, $00
+.db $50, $00
+.db $55, $00
+.db $5A, $00
+.db $5F, $00
+.db $A0, $00
+.db $A5, $00
+.db $AA, $00
+.db $AF, $00
+.db $F0, $00
+.db $F5, $00
+.db $FA, $00
+.db $FF, $00
+.db $00, $05
+.db $05, $05
+.db $0A, $05
+.db $0F, $05
+.db $50, $05
+.db $55, $05
+.db $5A, $05
+.db $5F, $05
+.db $A0, $05
+.db $A5, $05
+.db $AA, $05
+.db $AF, $05
+.db $F0, $05
+.db $F5, $05
+.db $FA, $05
+.db $FF, $05
+.db $00, $0A
+.db $05, $0A
+.db $0A, $0A
+.db $0F, $0A
+.db $50, $0A
+.db $55, $0A
+.db $5A, $0A
+.db $5F, $0A
+.db $A0, $0A
+.db $A5, $0A
+.db $AA, $0A
+.db $AF, $0A
+.db $F0, $0A
+.db $F5, $0A
+.db $FA, $0A
+.db $FF, $0A
+.db $00, $0F
+.db $05, $0F
+.db $0A, $0F
+.db $0F, $0F
+.db $50, $0F
+.db $55, $0F
+.db $5A, $0F
+.db $5F, $0F
+.db $A0, $0F
+.db $A5, $0F
+.db $AA, $0F
+.db $AF, $0F
+.db $F0, $0F
+.db $F5, $0F
+.db $FA, $0F
+.db $FF, $0F
