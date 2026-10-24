@@ -338,6 +338,29 @@ void master_system(const Project &p, std::vector<RGB> &px, const std::vector<u8>
     }
 }
 
+// ---- the Virtual Boy: the SNES family's picture (shaded backdrop), each
+// pixel's brightness turned into one of 13 levels and shown as a 2 x 2
+// pattern of two neighbouring shades of red (vb/src/gfx.c's LUMA_LEVEL and
+// shade_at); one eye's picture (the game shifts each column by its depth)
+void virtual_boy(std::vector<RGB> &px, int w, int h)
+{
+    // vb/src/gfx.c: brightness (luma 0..63 of 5-bit r, g, b) -> level 0..12
+    static const unsigned char LUMA_LEVEL[64] = {
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3,
+        4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 11, 11, 11, 11, 12, 12, 12};
+    static const int BAYER2[2][2] = {{0, 2}, {3, 1}};
+    static const u8 RED[4] = {0, 137, 188, 255};   // the four shades (0, 1/4, 1/2, all the light) as a screen shows them
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++) {
+            RGB &c = px[(size_t)y * w + x];
+            int r, g, b;
+            rgb15(c, r, g, b);                                        // (5 bits a channel)
+            int l = LUMA_LEVEL[(77 * r + 150 * g + 29 * b) >> 7];
+            int s = (l >> 2) + ((l & 3) > BAYER2[y & 1][x & 1]);      // the shade at this pixel
+            c = {RED[s], 0, 0};
+        }
+}
+
 void console_view(Console c, const Project &p, const Geometry &geo, int gx, int gz, int f,
                   const std::vector<u8> &open, ConsoleView &out)
 {
@@ -379,6 +402,15 @@ void console_view(Console c, const Project &p, const Geometry &geo, int gx, int 
         out.w = 160;
         out.h = 110;
         out.note = "128 x 88 at 1.25 times (160 x 110), 15-bit colours, the floor and ceiling shaded line by line.";
+        break;
+    case Console::VB:
+        render(p, geo, gx, gz, f, open, 128, 88, 64, px, cov);
+        scale(px, cov, 128, 88, 256, 176);   // shown doubled
+        shaded(p, px, cov, 256, 176, 176);
+        virtual_boy(px, 256, 176);
+        out.w = 256;
+        out.h = 176;
+        out.note = "128 x 88 at twice the size, in four shades of red; in 3D, each column set back by its depth.";
         break;
     case Console::GBC:
         render(p, geo, gx, gz, f, open, 128, 88, 64, px, cov);

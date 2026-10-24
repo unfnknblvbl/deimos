@@ -9,7 +9,7 @@
 #
 #   ./build.sh               asks what to build
 #   ./build.sh <what> ...    without asking; <what> is one or more of
-#                            sms md snes snesfx 32x 3ds gbc gba editor engines all
+#                            sms md snes snesfx 32x 3ds gbc gba vb editor engines all
 #
 #   editor   the Deimos Editor, from the engines kept in editor/engines/ (the
 #            consoles' game code with nothing of the original game in it).
@@ -45,7 +45,7 @@ export MEGADRIVE_DIR=$ROOT/megadrive
 JOBS=$(nproc 2>/dev/null || echo 4)
 
 # Every console target, in build order (sms builds the Master System and Game Gear ROMs).
-ALL_ROMS="sms md snes snesfx 32x 3ds gbc gba"
+ALL_ROMS="sms md snes snesfx 32x 3ds gbc gba vb"
 # name_of TARGET: prints the target's name for people (for the menu and the log).
 name_of() {
     case $1 in
@@ -53,6 +53,7 @@ name_of() {
         snes) echo "SNES" ;;                        snesfx) echo "SNES with the Super FX chip" ;;
         32x) echo "32X" ;;                          3ds) echo "Nintendo 3DS" ;;
         gbc) echo "Game Boy Color" ;;               gba) echo "Game Boy Advance" ;;
+        vb) echo "Virtual Boy" ;;
         editor) echo "the Deimos Editor (needs no DoomRPG.jar)" ;;
         engines) echo "the editor's engines, remade from this source" ;;
     esac
@@ -69,8 +70,8 @@ if [ ${#what[@]} -eq 0 ]; then
     for a in $answer; do
         case $a in
             1) what+=(sms) ;; 2) what+=(md) ;; 3) what+=(snes) ;; 4) what+=(snesfx) ;;
-            5) what+=(32x) ;; 6) what+=(3ds) ;; 7) what+=(gbc) ;; 8) what+=(gba) ;;
-            9) what+=(editor) ;; 10) what+=(engines) ;; 11) what+=(all) ;;
+            5) what+=(32x) ;; 6) what+=(3ds) ;; 7) what+=(gbc) ;; 8) what+=(gba) ;; 9) what+=(vb) ;;
+            10) what+=(editor) ;; 11) what+=(engines) ;; 12) what+=(all) ;;
             *) echo "\"$a\" is not one of the choices" >&2; exit 2 ;;
         esac
     done
@@ -84,9 +85,9 @@ for w in "${what[@]}"; do
     case $w in
         all) targets+=($ALL_ROMS editor); keep+=($ALL_ROMS); engines=1 ;;
         engines) targets+=($ALL_ROMS); engines=1 ;;
-        sms | md | snes | snesfx | 32x | 3ds | gbc | gba) targets+=("$w"); keep+=("$w") ;;
+        sms | md | snes | snesfx | 32x | 3ds | gbc | gba | vb) targets+=("$w"); keep+=("$w") ;;
         editor) targets+=(editor) ;;
-        *) echo "Unknown target \"$w\" (sms md snes snesfx 32x 3ds gbc gba editor engines all)" >&2; exit 2 ;;
+        *) echo "Unknown target \"$w\" (sms md snes snesfx 32x 3ds gbc gba vb editor engines all)" >&2; exit 2 ;;
     esac
 done
 # wants TARGET: succeeds when TARGET is one of the chosen targets.
@@ -98,7 +99,7 @@ rom() { if keeps "$1"; then cp "$2" "roms/$3"; built+=("$1"); fi; }
 # roms=1: at least one console ROM is wanted (so the jar and Python are needed);
 # ports=1: one of the consoles built from the Mega Drive and SNES builds' parts.
 roms=0; for t in $ALL_ROMS; do wants $t && roms=1; done
-ports=0; for t in snes snesfx 32x 3ds gbc gba; do wants $t && ports=1; done
+ports=0; for t in snes snesfx 32x 3ds gbc gba vb; do wants $t && ports=1; done
 
 # ---- tools ---------------------------------------------------------------
 # Everything the chosen targets need, checked in one go by tools/deps.sh
@@ -116,6 +117,7 @@ if [ $ports = 1 ]; then items+=(cc65 wla-spc700); fi              # (and the SNE
 if wants snesfx; then items+=(wla-superfx); fi
 if wants 32x; then items+=(sh-elf); fi
 if wants gba; then items+=(arm-none-eabi); fi
+if wants vb; then items+=(v810-gcc); fi
 if wants gbc; then items+=(gbdk); fi
 if wants 3ds; then items+=(devkitpro-3ds); fi
 if wants editor; then items+=(cmake cxx make git pkgconf sdl-deps); fi
@@ -197,6 +199,10 @@ if wants gba; then
     step "$(name_of gba)"; gba/build.sh
     rom gba gba/out/deimos_gba.gba "deimos_gba_$(ver gba).gba"
 fi
+if wants vb; then
+    step "$(name_of vb)"; vb/build.sh
+    rom vb vb/out/deimos_vb.vb "deimos_vb_$(ver vb).vb"
+fi
 
 # ---- the editor's engines ("engines", "all"): the ROMs just built, blanked
 # (tools/snes_make_engine.py and the Master System's and Mega Drive's
@@ -205,7 +211,7 @@ fi
 if [ $engines = 1 ]; then
     step "The editor's engines"
     E=$ROOT/editor/engines
-    # (the nine are independent: made side by side, each one's failure reported)
+    # (the ten are independent: made side by side, each one's failure reported)
     T=tools/snes_make_engine.py
     jobs_=()
     (cd mastersystem && python3 tools/make_engine.py rom/deimos.sms rom/deimos.sym build/gfx $E/sg8.eng) & jobs_+=($!)
@@ -217,6 +223,7 @@ if [ $engines = 1 ]; then
     python3 $T 32x/out/deimos32x.sfc 32x/obj/res_32x.bin "$(ver 32x)" $E/sg32.eng 6 32x/out/deimos32x.32x & jobs_+=($!)
     python3 $T gbc/obj/deimos_snes.sfc snes/out/res.bin "$(ver gbc)" $E/ntnd8hh.eng 7 gbc/out/deimos_gbc.gbc & jobs_+=($!)
     python3 $T gba/out/deimos_gba.sfc gba/obj/res_gba.bin "$(ver gba)" $E/ntnd32hh.eng 8 gba/out/deimos_gba.gba & jobs_+=($!)
+    python3 $T vb/obj/deimos_vb.sfc vb/obj/res_vb.bin "$(ver vb)" $E/ntnd32vr.eng 9 vb/out/deimos_vb.vb & jobs_+=($!)
     failed=0
     for j in "${jobs_[@]}"; do wait "$j" || failed=1; done
     [ $failed = 0 ] || { echo "Making an engine failed (above)." >&2; exit 1; }

@@ -1,7 +1,7 @@
 # Deimos — Doom RPG on retro consoles
 
 **Deimos** ports *Doom RPG* (id Software / Fountainhead, 2005, J2ME) to
-nine retro consoles. It includes the **Deimos Editor**, which makes the ROMs
+ten retro consoles. It includes the **Deimos Editor**, which makes the ROMs
 for all of them from the original game and lets you edit its maps.
 
 The editor keeps the maps you edit in a project (a `.deimos` file: the whole
@@ -20,8 +20,9 @@ Made by AI. Directed by unfnknblvbl.
 | `3ds/` | Nintendo 3DS homebrew (`.3dsx`) |
 | `gbc/` | Game Boy Color (`.gbc`) |
 | `gba/` | Game Boy Advance (`.gba`) |
+| `vb/` | Virtual Boy (`.vb`), in 3D |
 | `editor/` | The Deimos Editor for Linux and Windows |
-| `core/`, `view/`, `tools/` | Shared by the SNES, Super FX, 32X, 3DS, GBC and GBA games: the game rules, the 3D view, the build tools |
+| `core/`, `view/`, `tools/` | Shared by the SNES, Super FX, 32X, 3DS, GBC, GBA and Virtual Boy games: the game rules, the 3D view, the build tools |
 
 ## You need your own DoomRPG.jar
 
@@ -94,6 +95,7 @@ Pillow and numpy, `unzip`, a host C compiler and the `zx0` compressor.
 | 3DS | clang/devkitARM, libctru, citro3d, 3dstools, picasso | — | see `3ds/TOOLCHAIN.md`; set `DKP=` |
 | Game Boy Color | GBDK-2020 | 4.5.0 | github.com/gbdk-2020/gbdk-2020; set `GBDK=` |
 | Game Boy Advance | `arm-none-eabi-gcc` | GCC 13.3 | Arm GNU toolchain, or devkitARM; set `ARM=` to its prefix |
+| Virtual Boy | `v810-gcc` (GCC 4.9.4, binutils 2.27, newlib 2.2.0 with VUEngine's V810 patches) | 4.9.4 | `tools/deps.sh` builds it (about 10 minutes); github.com/VUEngine/v810-gcc |
 | The editor | CMake 3.16+, a C++17 compiler, git; MinGW-w64 for Windows | | the editor downloads and builds SDL2 itself |
 
 Each folder's own `build.sh` can also be run on its own; their READMEs say

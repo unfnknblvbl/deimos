@@ -30,7 +30,7 @@ SIZE = 0x800000                     # 8 MB (a power of two: the console mirrors 
 DATA_AT = 0x80000                   # the SNES image
 SCRIPT_AT = 0x480000                # a script or a view list
 HEADER_AT = SIZE - 0x220
-TITLE = b"DEIMOS DOOM RPG VB"       # (20 bytes, padded with spaces)
+TITLE = b"DEIMOS"                   # (20 bytes, padded with spaces)
 MAKER, CODE = b"DM", b"VDRE"        # (the maker's and the game's codes: Deimos's own)
 
 

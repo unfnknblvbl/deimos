@@ -24,7 +24,9 @@
 #include <string>
 
 // the consoles the editor makes ROMs for (MARS = the 32X, SNESFX = the SNES with the SuperFX)
-enum class Console { SMS, GG, MD, SNES, SNESFX, N3DS, MARS, GBC, GBA };
+enum class Console { SMS, GG, MD, SNES, SNESFX, N3DS, MARS, GBC, GBA, VB };
+// (N_CONSOLES, in project.h, is how many there are: the Console order is
+// also CONSOLE_KEYS' and engine::file_name's)
 // the Master System and the Game Gear share the engine's code and ROM layout
 inline bool sms_family(Console c) { return c == Console::SMS || c == Console::GG; }
 // the Mega Drive and the SNES share the campaign's block of maps (the Mega Drive game's format)
@@ -32,18 +34,18 @@ inline bool sms_family(Console c) { return c == Console::SMS || c == Console::GG
 inline bool md_family(Console c)
 {
     return c == Console::MD || c == Console::SNES || c == Console::SNESFX || c == Console::N3DS || c == Console::MARS ||
-           c == Console::GBC || c == Console::GBA;
+           c == Console::GBC || c == Console::GBA || c == Console::VB;
 }
 // the console's name for the user ("Master System", "SNES (SuperFX)"...)
 inline const char *console_name(Console c)
 {
     return c == Console::SMS ? "Master System" : c == Console::GG ? "Game Gear" : c == Console::MD ? "Mega Drive"
-                               : c == Console::SNES ? "SNES" : c == Console::SNESFX ? "SNES (SuperFX)" : c == Console::N3DS ? "3DS" : c == Console::MARS ? "32X" : c == Console::GBA ? "Game Boy Advance" : "Game Boy Color";
+                               : c == Console::SNES ? "SNES" : c == Console::SNESFX ? "SNES (SuperFX)" : c == Console::N3DS ? "3DS" : c == Console::MARS ? "32X" : c == Console::GBA ? "Game Boy Advance" : c == Console::VB ? "Virtual Boy" : "Game Boy Color";
 }
 // the usual file extension of the console's ROMs (both SNES kinds: .sfc)
 inline const char *console_ext(Console c)
 {
-    return c == Console::SMS ? ".sms" : c == Console::GG ? ".gg" : c == Console::MD ? ".md" : c == Console::N3DS ? ".3dsx" : c == Console::MARS ? ".32x" : c == Console::GBC ? ".gbc" : c == Console::GBA ? ".gba" : ".sfc";
+    return c == Console::SMS ? ".sms" : c == Console::GG ? ".gg" : c == Console::MD ? ".md" : c == Console::N3DS ? ".3dsx" : c == Console::MARS ? ".32x" : c == Console::GBC ? ".gbc" : c == Console::GBA ? ".gba" : c == Console::VB ? ".vb" : ".sfc";
 }
 
 // a ROM made by the editor: its bytes and what console it is for

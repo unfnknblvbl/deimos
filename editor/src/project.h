@@ -137,8 +137,10 @@ struct ConsoleOwn {
     bool empty() const { return textures.empty() && sprites.empty() && strings.empty() && !has_palette; }
 };
 // the key a console's own versions are kept under ("sms", "gg", "md", "snes",
-// "snesfx", "3ds", "32x", "gbc", "gba")
-extern const char *const CONSOLE_KEYS[9];
+// "snesfx", "3ds", "32x", "gbc", "gba", "vb")
+// how many consoles there are (rom.h's Console enum, in the same order)
+const int N_CONSOLES = 10;
+extern const char *const CONSOLE_KEYS[N_CONSOLES];
 
 struct Project {
     std::string name = "Sector 1";   // the map's title as the game shows it

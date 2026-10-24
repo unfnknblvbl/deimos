@@ -12,24 +12,26 @@ tools/snes_ui_res.py writes: graphics, music and sound effects) blanked,
 so the editor can make them again from the user's own jar (its C++ gives
 the same bytes) and put the maps after it.
 
-  snes_make_engine.py out/deimos.sfc out/res.bin <version> OUT.eng [console [game.3dsx|game.32x|game.gbc|game.gba]]
+  snes_make_engine.py out/deimos.sfc out/res.bin <version> OUT.eng [console [game.3dsx|game.32x|game.gbc|game.gba|game.vb]]
 
 Engine file: the format shared with the other consoles' (the Mega Drive game's
 tools/make_engine.py): "DEIMENG1", u8 console (3 = SNES, 4 = SNES with the
-SuperFX, 5 = the 3DS, 6 = the 32X, 7 = the Game Boy Color, 8 = the Game Boy Advance), regions ("snes_res"), the version, the maps' block
+SuperFX, 5 = the 3DS, 6 = the 32X, 7 = the Game Boy Color, 8 = the Game Boy Advance, 9 = the Virtual Boy), regions ("snes_res"), the version, the maps' block
 address and the end of its space, the template (ZX0); the 3DS's then has
 the .3dsx before its romfs's cartridge image (u32 size, u32 packed size,
 ZX0): the 3DS game reads the SNES layout (3ds/build.sh); the 32X's, the
 cartridge's first 512 KB, its code (32x/build.sh); the Game Boy Color's, its
 cartridge's first 1 MB (gbc/build.sh); the Game Boy Advance's, its
-cartridge's first 512 KB, its code (gba/build.sh).
+cartridge's first 512 KB, its code (gba/build.sh); the Virtual Boy's, its
+cartridge's last $220 bytes (header and vectors) and its code (vb/build.sh).
 
 The engine file in order: "DEIMENG1", u8 console, 3 zero bytes; u32 the
 template's size, u32 1 (the number of regions); the region: u8 name
 length, "snes_res", u32 its offset, u32 its size; u8 version length, the
 version; u32 the block's address, u32 the end of its space; u32 the packed
 template's size, the template (ZX0); then the console's extra part (u32
-size, u32 packed size, ZX0 data) for the 32X, the GBA, the GBC and the 3DS.
+size, u32 packed size, ZX0 data) for the 32X, the GBA, the GBC, the 3DS and
+the Virtual Boy.
 All little-endian. ZX0 compression is the external zx0 tool (ZX0=).
 Licence: GPL-2.0-or-later.
 """
@@ -96,6 +98,13 @@ def main():
         wrap = x[:0x100000].rstrip(b"\xff")     # (the editor pads it back to 1 MB)
         if x[0x100000:0x100000 + len(res)] != res:
             raise SystemExit("the Game Boy Color cartridge does not hold the SNES data at $100000")
+        wp = zx0(wrap)
+        e += struct.pack("<II", len(wrap), len(wp)) + wp
+    if console == 9:            # the Virtual Boy: its last $220 bytes (header, vectors), then its code
+        x = Path(sys.argv[6]).read_bytes()      # (vb/tools/vb_rom.py's layout: code at 0, the image at $80000)
+        if len(x) != 0x800000 or x[0x80000:0x80000 + 0x10000] != Path(sys.argv[1]).read_bytes()[:0x10000]:
+            raise SystemExit("the Virtual Boy cartridge does not hold the image at $80000")
+        wrap = x[-0x220:] + x[:0x80000].rstrip(b"\xff")    # (the editor puts $FF back: vb.h)
         wp = zx0(wrap)
         e += struct.pack("<II", len(wrap), len(wp)) + wp
     if console == 5:            # the 3DS: the .3dsx without the cartridge image at its end

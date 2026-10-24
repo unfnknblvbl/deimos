@@ -278,7 +278,8 @@ public:
         {Console::N3DS, "3DS (in 3D)", "deimos.3dsx", true},
         {Console::MARS, "32X", "deimos32x.32x", true},
         {Console::GBC, "Game Boy Color", "deimos.gbc", true},
-        {Console::GBA, "Game Boy Advance", "deimos.gba", true}};
+        {Console::GBA, "Game Boy Advance", "deimos.gba", true},
+        {Console::VB, "Virtual Boy (in 3D)", "deimos.vb", true}};
     std::vector<char> newrom_cons;                    // the consoles ticked (NEWROM_CONSOLES' order)
     std::vector<std::string> newrom_maps;             // the game's maps in the order they are played
     std::vector<char> newrom_sel;                     // the maps ticked
