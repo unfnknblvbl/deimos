@@ -38,7 +38,8 @@ about 20-40 ms for the view, 36 ms for the two eyes).
 
 The game is the SNES port's code (`snes/src/glue.c`, `campaign.c`,
 `save.c` and the C rules in `core/`) with the Game Boy Color's menus and
-boxes (`gbc/src/ui.c`, the button names changed by `build.sh`), compiled
+boxes (`gbc/src/ui.c`; `tools/vb_ui.py` makes a copy with the Virtual
+Boy's button names and the SNES's wider status bar), compiled
 for the NEC V810 with GCC 4.9.4 (VUEngine's `v810-gcc`), on a Virtual Boy
 machine layer (`src/`) - the GBA port's way:
 
@@ -49,6 +50,9 @@ machine layer (`src/`) - the GBA port's way:
   the GBA: a step or a turn shown in four pictures), drawn by
   `src/view_draw.c` and shown at twice the size; each colour becomes one
   of 13 levels, shown as a 2 x 2 pattern of two neighbouring shades.
+  The weapon is the Mega Drive's frames at 1.5 times the SNES's size
+  (nearest pixel), read from the SNES image as it is shown; the status bar
+  under the view has the SNES's 25-column layout.
 - Stereo: the view is drawn once, and each eye shifts each column by an
   amount from its depth (the nearest of its wall and the things drawn in
   it): 1 pixel between the eyes for what is near, up to 8 for the far
