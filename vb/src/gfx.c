@@ -206,6 +206,7 @@ static void frame_wait(void)
 {
     u16 f = frame_count;
     while (frame_count == f) __asm__ volatile("halt");
+    DIAG(6);
 }
 
 static void compose(u8 d);
