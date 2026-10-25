@@ -338,26 +338,49 @@ deps_build_cross() {
     (
         set -e
         cd "$s"
-        [ -f $DEPS_BINUTILS.tar.xz ] || curl -fLO "$DEPS_GNU_MIRROR/binutils/$DEPS_BINUTILS.tar.xz"
-        [ -f $DEPS_GCC.tar.xz ] || curl -fLO "$DEPS_GNU_MIRROR/gcc/$DEPS_GCC/$DEPS_GCC.tar.xz"
-        [ -d $DEPS_BINUTILS ] || tar xf $DEPS_BINUTILS.tar.xz
-        [ -d $DEPS_GCC ] || tar xf $DEPS_GCC.tar.xz
+        [ -f $DEPS_BINUTILS.tar.xz ] || curl -fLO "$DEPS_GNU_MIRROR/binutils/$DEPS_BINUTILS.tar.xz" || exit 1
+        [ -f $DEPS_GCC.tar.xz ] || curl -fLO "$DEPS_GNU_MIRROR/gcc/$DEPS_GCC/$DEPS_GCC.tar.xz" || exit 1
+        [ -d $DEPS_BINUTILS ] || tar xf $DEPS_BINUTILS.tar.xz || exit 1
+        [ -d $DEPS_GCC ] || tar xf $DEPS_GCC.tar.xz || exit 1
+        # (the host compiler in an older C dialect: GCC 15 and later default to
+        # C23, which these releases' sources predate)
+        export CFLAGS="-O2 -std=gnu17" CXXFLAGS="-O2"
         # binutils: the assembler and linker (MAKEINFO=true: no manuals, so no texinfo needed)
         mkdir -p "$b/binutils" && cd "$b/binutils"
-        "$s/$DEPS_BINUTILS/configure" --target=$t --prefix="$p" --disable-nls --disable-werror \
-            --disable-gdb --disable-gdbserver --disable-sim --disable-gprofng --without-zstd MAKEINFO=true >/dev/null
-        make -j"$(nproc)" MAKEINFO=true >/dev/null
-        make install MAKEINFO=true >/dev/null
+        deps_logged "$b/binutils.log" "$s/$DEPS_BINUTILS/configure" --target=$t --prefix="$p" --disable-nls \
+            --disable-werror --disable-gdb --disable-gdbserver --disable-sim --disable-gprofng --without-zstd MAKEINFO=true || exit 1
+        deps_logged "$b/binutils.log" make -j"$(nproc)" MAKEINFO=true || exit 1
+        deps_logged "$b/binutils.log" make install MAKEINFO=true || exit 1
         # gcc: the compiler and libgcc only, for a bare machine
         export PATH="$p/bin:$PATH"
-        mkdir -p "$b/gcc" && cd "$b/gcc"
-        "$s/$DEPS_GCC/configure" --target=$t --prefix="$p" --enable-languages=c --disable-nls \
-            --disable-libssp --disable-threads --disable-shared --without-headers --with-newlib \
+        rm -rf "$b/gcc"; mkdir -p "$b/gcc" && cd "$b/gcc"     # (a fresh build folder each time)
+        deps_logged "$b/gcc.log" "$s/$DEPS_GCC/configure" --target=$t --prefix="$p" --enable-languages=c \
+            --disable-nls --disable-libssp --disable-threads --disable-shared --without-headers --with-newlib \
             --disable-libquadmath --disable-libgomp --disable-libatomic --disable-lto --without-zstd \
-            "$@" MAKEINFO=true >/dev/null
-        make -j"$(nproc)" all-gcc all-target-libgcc MAKEINFO=true >/dev/null
-        make install-gcc install-target-libgcc MAKEINFO=true >/dev/null
+            "$@" MAKEINFO=true || exit 1
+        # (the host's libiberty and fixincludes first: install-gcc needs them,
+        # and a parallel all-gcc does not always build them)
+        deps_logged "$b/gcc.log" make -j"$(nproc)" all-libiberty MAKEINFO=true || exit 1
+        deps_logged "$b/gcc.log" make -j"$(nproc)" all-gcc MAKEINFO=true || exit 1
+        deps_logged "$b/gcc.log" make all-fixincludes MAKEINFO=true || exit 1
+        deps_logged "$b/gcc.log" make -j"$(nproc)" all-target-libgcc MAKEINFO=true || exit 1
+        deps_logged "$b/gcc.log" make install-gcc install-target-libgcc MAKEINFO=true || exit 1
     )
+}
+
+# deps_logged LOG COMMAND...: runs COMMAND with its output added to LOG;
+# when it fails, shows the log's last lines and where the whole log is.
+# (Callers add "|| exit 1": set -e does not stop a subshell whose caller
+# tests its result, as deps_require does.)
+deps_logged() {
+    local log=$1; shift
+    echo "\$ $*" >> "$log"
+    if ! "$@" >> "$log" 2>&1; then
+        echo "---- the last lines of $log:" >&2
+        tail -n 25 "$log" >&2
+        echo "---- (the whole log: $log)" >&2
+        return 1
+    fi
 }
 
 # deps_build_v810: the Virtual Boy's compiler into $DEIMOS_TOOLS/v810 (C only,
@@ -374,14 +397,14 @@ deps_build_v810() {
     (
         set -e
         cd "$s"
-        deps_git_at $DEPS_V810_REPO $DEPS_V810_COMMIT "$s/v810-gcc"
-        [ -f $DEPS_V810_BINUTILS.tar.bz2 ] || curl -fLO "$DEPS_GNU_MIRROR/binutils/$DEPS_V810_BINUTILS.tar.bz2"
-        [ -f $DEPS_V810_GCC.tar.bz2 ] || curl -fLO "$DEPS_GNU_MIRROR/gcc/$DEPS_V810_GCC/$DEPS_V810_GCC.tar.bz2"
+        deps_git_at $DEPS_V810_REPO $DEPS_V810_COMMIT "$s/v810-gcc" || exit 1
+        [ -f $DEPS_V810_BINUTILS.tar.bz2 ] || curl -fLO "$DEPS_GNU_MIRROR/binutils/$DEPS_V810_BINUTILS.tar.bz2" || exit 1
+        [ -f $DEPS_V810_GCC.tar.bz2 ] || curl -fLO "$DEPS_GNU_MIRROR/gcc/$DEPS_V810_GCC/$DEPS_V810_GCC.tar.bz2" || exit 1
         local pt="$s/v810-gcc/patch"
         if [ ! -d v810-$DEPS_V810_BINUTILS ]; then         # (unpacked and patched once)
             rm -rf $DEPS_V810_BINUTILS && tar xf $DEPS_V810_BINUTILS.tar.bz2
             for f in gcc-8.0 gcc-10.0 rmv-warnings v810; do                  # (v810-gcc's order)
-                patch -d $DEPS_V810_BINUTILS -p1 -s < "$pt/$DEPS_V810_BINUTILS-$f.patch"
+                patch -d $DEPS_V810_BINUTILS -p1 -s < "$pt/$DEPS_V810_BINUTILS-$f.patch" || exit 1
             done
             mv $DEPS_V810_BINUTILS v810-$DEPS_V810_BINUTILS
         fi
@@ -392,24 +415,24 @@ deps_build_v810() {
                 # unpacked inside gcc, which this build does without)
                 patch -d $DEPS_V810_GCC -p1 -s -f --no-backup-if-mismatch < "$pt/$DEPS_V810_GCC-$f.patch" >/dev/null || true
             done
-            grep -q v810 $DEPS_V810_GCC/config.sub          # (the V810 patch itself went in)
+            grep -q v810 $DEPS_V810_GCC/config.sub || exit 1   # (the V810 patch itself went in)
             mv $DEPS_V810_GCC v810-$DEPS_V810_GCC
         fi
         export CFLAGS='-std=gnu99 -O2 -fcommon -w' CXXFLAGS='-std=gnu++98 -O2 -w -fpermissive' MAKEINFO=true
         mkdir -p "$b/binutils" && cd "$b/binutils"
-        "$s/v810-$DEPS_V810_BINUTILS/configure" --target=v810 --prefix="$p" --disable-nls --disable-werror \
-            --disable-shared --disable-multilib --disable-lto --without-isl >/dev/null
-        make -j"$(nproc)" MAKEINFO=true all >/dev/null
-        make MAKEINFO=true install-strip >/dev/null
+        deps_logged "$b/binutils.log" "$s/v810-$DEPS_V810_BINUTILS/configure" --target=v810 --prefix="$p" \
+            --disable-nls --disable-werror --disable-shared --disable-multilib --disable-lto --without-isl || exit 1
+        deps_logged "$b/binutils.log" make -j"$(nproc)" MAKEINFO=true all || exit 1
+        deps_logged "$b/binutils.log" make MAKEINFO=true install-strip || exit 1
         export PATH="$p/bin:$PATH"
-        mkdir -p "$b/gcc" && cd "$b/gcc"
-        "$s/v810-$DEPS_V810_GCC/configure" --target=v810 --prefix="$p" --enable-languages=c --disable-nls \
-            --without-headers --with-newlib --disable-shared --enable-static --disable-multilib \
+        rm -rf "$b/gcc"; mkdir -p "$b/gcc" && cd "$b/gcc"     # (a fresh build folder each time)
+        deps_logged "$b/gcc.log" "$s/v810-$DEPS_V810_GCC/configure" --target=v810 --prefix="$p" --enable-languages=c \
+            --disable-nls --without-headers --with-newlib --disable-shared --enable-static --disable-multilib \
             --disable-decimal-float --disable-libgomp --disable-libitm --disable-libssp --disable-libquadmath \
             --disable-lto --without-isl --without-cloog --enable-frame-pointer --disable-werror \
-            ${DEPS_V810_GCC_OPTS:-} >/dev/null
-        make -j"$(nproc)" MAKEINFO=true all-gcc all-target-libgcc >/dev/null
-        make MAKEINFO=true install-strip-gcc install-target-libgcc >/dev/null
+            ${DEPS_V810_GCC_OPTS:-} || exit 1
+        deps_logged "$b/gcc.log" make -j"$(nproc)" MAKEINFO=true all-gcc all-target-libgcc || exit 1
+        deps_logged "$b/gcc.log" make MAKEINFO=true install-strip-gcc install-target-libgcc || exit 1
     )
 }
 
