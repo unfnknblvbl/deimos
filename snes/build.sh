@@ -37,6 +37,10 @@ cd "$(dirname "$0")"
 # what is missing (with your package manager, or built from source)
 source ../tools/deps.sh
 deps_require python3 pillow numpy cc65 wla-spc700
+# without DoomRPG.jar (DEIMOS_NOJAR=1, for the editor's engine): the resources as
+# zeros of the size the engine's region has (../tools/snes_ui_res.py --no-jar)
+NOJAR_RES=()
+[ -z "${DEIMOS_NOJAR:-}" ] || NOJAR_RES=(--no-jar ../editor/engines/ntnd16.eng)
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}      # (megadrive/: its build makes the maps' block)
 # cc65's install: its library (none.lib) and ca65's macro packages
 # (longbranch.mac: newer cc65 keeps them as files in asminc/, and finds
@@ -98,6 +102,6 @@ python3 ../tools/snes_sound.py $MD out > /dev/null
 python3 ../tools/snes_tables.py out/tables_game.bin out/spc_engine.bin --view $VIEW_W $VIEW_H > /dev/null
 python3 ../tools/snes_tables.py out/tables.bin out/spc_engine.bin > /dev/null
 # the resources made from the jar (with the sound streams and the version)
-python3 ../tools/snes_ui_res.py $MD out/res.bin out/spc_streams.bin "$(cat VERSION)" > /dev/null
+python3 ../tools/snes_ui_res.py $MD out/res.bin out/spc_streams.bin "$(cat VERSION)" ${NOJAR_RES[@]+"${NOJAR_RES[@]}"} > /dev/null
 # the cartridge: code, tables, resources, campaign block; size and checksum
 python3 ../tools/snes_rom.py out/deimos_game.bin out/tables_game.bin out/res.bin $MD/build/gen/campaign.bin out/deimos.sfc

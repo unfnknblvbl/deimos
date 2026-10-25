@@ -27,6 +27,10 @@ cd "$(dirname "$0")"
 # install what is missing (devkitPro's 3DS packages, Python's modules)
 source ../tools/deps.sh
 deps_require python3 pillow numpy devkitpro-3ds
+# without DoomRPG.jar (DEIMOS_NOJAR=1, for the editor's engine): the resources as
+# zeros of the size the engine's region has (../tools/snes_ui_res.py --no-jar)
+NOJAR_RES=()
+[ -z "${DEIMOS_NOJAR:-}" ] || NOJAR_RES=(--no-jar ../editor/engines/ntnd3Dhh.eng)
 
 DKP=${DKP:-${DEVKITPRO:-/opt/devkitpro}}
 mkdir -p obj out romfs
@@ -78,7 +82,7 @@ fi
 # with the resources made for the 3DS (the title's word: 3D)
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}      # (megadrive/: its build makes the maps' block)
 if [ -z "${GAME_DATA:-}" ]; then
-    python3 ../tools/snes_ui_res.py $MD out/res_3ds.bin ../snes/out/spc_streams.bin "$(cat VERSION)" "3D" > /dev/null
+    python3 ../tools/snes_ui_res.py $MD out/res_3ds.bin ../snes/out/spc_streams.bin "$(cat VERSION)" "3D" ${NOJAR_RES[@]+"${NOJAR_RES[@]}"} > /dev/null
     python3 ../tools/snes_rom.py ../snes/out/deimos.bin ../snes/out/tables.bin out/res_3ds.bin \
         $MD/build/gen/campaign.bin out/deimos3ds.sfc > /dev/null
     GAME_DATA=out/deimos3ds.sfc

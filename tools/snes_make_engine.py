@@ -10,7 +10,12 @@ The engine the Doom RPG editor carries for the SNES: the ROM up to the
 campaign's block, with the resources made from DoomRPG.jar (the bank
 tools/snes_ui_res.py writes: graphics, music and sound effects) blanked,
 so the editor can make them again from the user's own jar (its C++ gives
-the same bytes) and put the maps after it.
+the same bytes) and put the maps after it. The bytes the editor works out
+for each ROM are zeroed too (the SNES header's size code and checksum; in
+the 32X's wrap its header's ROM end and checksum, in the Game Boy Color's
+its global checksum, in the 3DS's the size of the romfs's image file),
+so the engine is the same from a build with the jar and from one without it
+(the builds' DEIMOS_NOJAR=1 mode).
 
   snes_make_engine.py out/deimos.sfc out/res.bin <version> OUT.eng [console [game.3dsx|game.32x|game.gbc|game.gba|game.vb]]
 
@@ -70,6 +75,11 @@ def main():
     if rom[res_at:res_at + len(res)] != res or rom[camp:camp + 4] != b"MDCP":
         raise SystemExit("the ROM is not laid out as tools/snes_rom.py makes it")
     rom[res_at:res_at + len(res)] = bytes(len(res))     # (the jar's resources blanked: not distributed)
+    # (and what the editor works out for each ROM it makes, from the maps:
+    # the header's size code and checksum - so the engine is the same
+    # whatever maps and jar it was built with)
+    rom[hdr + 0x27] = 0
+    rom[hdr + 0x2C:hdr + 0x30] = bytes(4)
     template = bytes(rom[:camp])            # (the ROM up to the maps)
     packed = zx0(template)
     e = bytearray(b"DEIMENG1" + bytes([console, 0, 0, 0]))
@@ -80,40 +90,48 @@ def main():
     e += struct.pack("<I", len(packed)) + packed
     if console == 6:            # the 32X: its first 512 KB (the code); the SNES image from $80000
         x = Path(sys.argv[6]).read_bytes()
-        wrap = x[:0x80000].rstrip(b"\xff")      # (the editor pads it back to 512 KB; long $FF runs
-                                                # are also very slow for zx0 to pack)
+        wrap = bytearray(x[:0x80000].rstrip(b"\xff"))   # (the editor pads it back to 512 KB; long $FF
+                                                # runs are also very slow for zx0 to pack)
+        wrap[0x18E:0x190] = bytes(2)            # (the header's checksum and the ROM's end: the
+        wrap[0x1A4:0x1A8] = bytes(4)            # editor works them out for the whole cartridge)
         if x[0x80000:0x80000 + 0x10000] != Path(sys.argv[1]).read_bytes()[:0x10000]:
             raise SystemExit("the 32X cartridge does not hold the image at $80000")
-        wp = zx0(wrap)
+        wp = zx0(bytes(wrap))
         e += struct.pack("<II", len(wrap), len(wp)) + wp
     if console == 8:            # the Game Boy Advance: its first 512 KB (the code); the SNES image from $80000
         x = Path(sys.argv[6]).read_bytes()
         wrap = x[:0x80000].rstrip(b"\xff")      # (the editor pads it back to 512 KB)
         if x[0x80000:0x80000 + 0x10000] != Path(sys.argv[1]).read_bytes()[:0x10000]:
             raise SystemExit("the GBA cartridge does not hold the image at $80000")
-        wp = zx0(wrap)
+        wp = zx0(bytes(wrap))
         e += struct.pack("<II", len(wrap), len(wp)) + wp
     if console == 7:            # the Game Boy Color: its first 1 MB (the code); the SNES data from $100000
         x = Path(sys.argv[6]).read_bytes()
-        wrap = x[:0x100000].rstrip(b"\xff")     # (the editor pads it back to 1 MB)
+        wrap = bytearray(x[:0x100000].rstrip(b"\xff"))  # (the editor pads it back to 1 MB)
+        wrap[0x14E:0x150] = bytes(2)            # (the global checksum: the editor works it out for the cartridge)
         if x[0x100000:0x100000 + len(res)] != res:
             raise SystemExit("the Game Boy Color cartridge does not hold the SNES data at $100000")
-        wp = zx0(wrap)
+        wp = zx0(bytes(wrap))
         e += struct.pack("<II", len(wrap), len(wp)) + wp
     if console == 9:            # the Virtual Boy: its last $220 bytes (header, vectors), then its code
         x = Path(sys.argv[6]).read_bytes()      # (vb/tools/vb_rom.py's layout: code at 0, the image at $80000)
         if len(x) != 0x800000 or x[0x80000:0x80000 + 0x10000] != Path(sys.argv[1]).read_bytes()[:0x10000]:
             raise SystemExit("the Virtual Boy cartridge does not hold the image at $80000")
         wrap = x[-0x220:] + x[:0x80000].rstrip(b"\xff")    # (the editor puts $FF back: vb.h)
-        wp = zx0(wrap)
+        wp = zx0(bytes(wrap))
         e += struct.pack("<II", len(wrap), len(wp)) + wp
     if console == 5:            # the 3DS: the .3dsx without the cartridge image at its end
         x = Path(sys.argv[6]).read_bytes()
         whole = Path(sys.argv[1]).read_bytes()
         if not x.endswith(whole):
             raise SystemExit("the .3dsx does not end with the cartridge image")
-        wrap = x[:len(x) - len(whole)]
-        wp = zx0(wrap)
+        wrap = bytearray(x[:len(x) - len(whole)])
+        # (the romfs's file entry for the image: its size, which the editor
+        # writes for the image it adds - editor/src/n3ds.cpp)
+        fs = struct.unpack_from("<I", wrap, 40)[0]
+        ft = fs + struct.unpack_from("<I", wrap, fs + 28)[0]
+        wrap[ft + 16:ft + 24] = bytes(8)
+        wp = zx0(bytes(wrap))
         e += struct.pack("<II", len(wrap), len(wp)) + wp
     out.write_bytes(e)
     print(f"{out}: engine {len(template) // 1024} KB ({len(packed) // 1024} KB packed), resources "

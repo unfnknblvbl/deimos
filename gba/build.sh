@@ -29,6 +29,10 @@ cd "$(dirname "$0")"
 # install what is missing (with your package manager, or built from source)
 source ../tools/deps.sh
 deps_require python3 pillow numpy arm-none-eabi
+# without DoomRPG.jar (DEIMOS_NOJAR=1, for the editor's engine): the resources as
+# zeros of the size the engine's region has (../tools/snes_ui_res.py --no-jar)
+NOJAR_RES=()
+[ -z "${DEIMOS_NOJAR:-}" ] || NOJAR_RES=(--no-jar ../editor/engines/ntnd32hh.eng)
 A=${ARM:-arm-none-eabi}
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}      # (megadrive/: its build makes the maps' block)
 VERSION=$(cat VERSION)
@@ -66,7 +70,7 @@ $A-objcopy -O binary obj/gba.elf obj/code.bin
 $A-nm obj/gba.elf > obj/gba.syms
 $A-size obj/gba.elf | tail -1     # (print the sizes)
 # the game's data: the SNES game's (snes/build.sh's parts), the title's word ADVANCE
-python3 ../tools/snes_ui_res.py $MD obj/res_gba.bin ../snes/out/spc_streams.bin "$VERSION" "ADVANCE" > /dev/null
+python3 ../tools/snes_ui_res.py $MD obj/res_gba.bin ../snes/out/spc_streams.bin "$VERSION" "ADVANCE" ${NOJAR_RES[@]+"${NOJAR_RES[@]}"} > /dev/null
 python3 ../tools/snes_rom.py ../snes/out/deimos.bin ../snes/out/tables.bin obj/res_gba.bin \
     $MD/build/gen/campaign.bin out/deimos_gba.sfc > /dev/null
 python3 tools/gba_rom.py obj/code.bin out/deimos_gba.sfc $OUT ${SCRIPT:-}

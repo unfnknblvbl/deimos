@@ -37,6 +37,10 @@ cd "$(dirname "$0")"
 # install what is missing (with your package manager, or built from source)
 source ../tools/deps.sh
 deps_require python3 pillow numpy m68k-elf sh-elf
+# without DoomRPG.jar (DEIMOS_NOJAR=1, for the editor's engine): the resources as
+# zeros of the size the engine's region has (../tools/snes_ui_res.py --no-jar)
+NOJAR_RES=()
+[ -z "${DEIMOS_NOJAR:-}" ] || NOJAR_RES=(--no-jar ../editor/engines/sg32.eng)
 M=${M68K:-m68k-elf}               # (the compilers' prefixes: on PATH, or set these)
 S=${SH2:-sh-elf}
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}      # (megadrive/: its build makes the maps' block)
@@ -77,7 +81,7 @@ $S-size obj/sh2.elf | tail -1     # (print the code and data sizes)
 # snes_ui_res.py makes the UI resources (title word "32X"), snes_rom.py lays
 # out the SNES cartridge image around them and the campaign block (the maps
 # and their data, from the Mega Drive game's build)
-python3 ../tools/snes_ui_res.py $MD obj/res_32x.bin ../snes/out/spc_streams.bin "$(cat VERSION)" "32X" > /dev/null
+python3 ../tools/snes_ui_res.py $MD obj/res_32x.bin ../snes/out/spc_streams.bin "$(cat VERSION)" "32X" ${NOJAR_RES[@]+"${NOJAR_RES[@]}"} > /dev/null
 python3 ../tools/snes_rom.py ../snes/out/deimos.bin ../snes/out/tables.bin obj/res_32x.bin \
     $MD/build/gen/campaign.bin obj/deimos32x_snes.sfc > /dev/null
 python3 tools/mars_image.py obj/deimos32x_snes.sfc out/deimos32x.sfc   # (without the SNES's code and tables: more room for maps)

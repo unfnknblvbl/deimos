@@ -11,6 +11,8 @@
 #
 #   ./build.sh               build out/deimos.md
 #   TEST_STEPS=300 ./build.sh   also run the lockstep test (needs the emulator core)
+#   DEIMOS_NOJAR=1 ./build.sh   no jar: a ROM with the engine's code and nothing
+#                               from the jar, for tools/make_engine.py (tools/nojar.py)
 #
 # The steps: (1) read the original game's maps into analysis/ and turn each
 # into a level blob (the rules' data) under build/gen/maps; (2) generate
@@ -35,28 +37,43 @@ GEN=build/gen                       # generated sources and data
 CROSS=${CROSS:-m68k-elf-}
 mkdir -p analysis "$GEN" build/obj out
 
-echo "== 1. The campaign's maps =="
-# the maps (BSP, entities, events) as JSON in analysis/, then each map's
-# level blob and strings, and the C headers for the game state (state.h)
-python3 tools/build_campaign.py "$ASSETS" analysis | tail -1
-python3 tools/gen_cdata.py analysis/campaign.json "$GEN" "$GEN/maps"
+if [ -n "${DEIMOS_NOJAR:-}" ]; then
+    # without DoomRPG.jar (../build.sh engines, with no jar): the rules'
+    # sources from an empty campaign, and the parts made from the jar as
+    # zeros of the sizes they take (tools/nojar.py) - for the editor's
+    # engine (and the SNES family's builds), not a game
+    echo "== 1-2. No DoomRPG.jar: stand-ins for the parts made from it =="
+    mkdir -p analysis/nojar
+    echo '{"maps": []}' > analysis/nojar/campaign.json
+    python3 tools/gen_cdata.py analysis/nojar/campaign.json "$GEN" "$GEN/maps"
+    [ "$GEN/scalers.s" -nt tools/gen_scalers.py ] || python3 tools/gen_scalers.py "$GEN/scalers.s"
+    rm -f "$GEN/pack.s" "$GEN/pack.bin"
+    python3 tools/nojar.py "$GEN" ../editor/engines "$VERSION"
+    TEST_STEPS=0
+else
+    echo "== 1. The campaign's maps =="
+    # the maps (BSP, entities, events) as JSON in analysis/, then each map's
+    # level blob and strings, and the C headers for the game state (state.h)
+    python3 tools/build_campaign.py "$ASSETS" analysis | tail -1
+    python3 tools/gen_cdata.py analysis/campaign.json "$GEN" "$GEN/maps"
 
-echo "== 2. Renderer data, graphics, sound =="
-# the compiled scalers: remade only when the generator is newer than its output
-[ "$GEN/scalers.s" -nt tools/gen_scalers.py ] || python3 tools/gen_scalers.py "$GEN/scalers.s"
-python3 tools/build_md_ui.py "$ASSETS" "$GEN" "$VERSION"   # font, faces, icons, title
-python3 tools/build_sfx.py "$ASSETS" "$GEN"                 # sound effects
-python3 tools/build_music.py "$ASSETS" "$GEN"               # the tunes
-python3 tools/build_weapons.py "$ASSETS" "$GEN"             # the weapon sprites
-# (a single-map pack, left by a much older build, would be linked too:
-# remove it)
-rm -f "$GEN/pack.s" "$GEN/pack.bin"
-# the campaign block (campaign.bin) and campaign.s, which puts it and
-# areas.bin in the ROM's .pack section
-python3 tools/md_campaign.py analysis "$ASSETS" "$GEN"
-# the areas table: a host program, built and run here
-${HOSTCC:-cc} -O2 -std=c99 -DMD_AREAS_MAIN tools/md_areas.c -o build/md_areas
-build/md_areas "$GEN/campaign.bin" "$GEN/areas.bin"
+    echo "== 2. Renderer data, graphics, sound =="
+    # the compiled scalers: remade only when the generator is newer than its output
+    [ "$GEN/scalers.s" -nt tools/gen_scalers.py ] || python3 tools/gen_scalers.py "$GEN/scalers.s"
+    python3 tools/build_md_ui.py "$ASSETS" "$GEN" "$VERSION"   # font, faces, icons, title
+    python3 tools/build_sfx.py "$ASSETS" "$GEN"                 # sound effects
+    python3 tools/build_music.py "$ASSETS" "$GEN"               # the tunes
+    python3 tools/build_weapons.py "$ASSETS" "$GEN"             # the weapon sprites
+    # (a single-map pack, left by a much older build, would be linked too:
+    # remove it)
+    rm -f "$GEN/pack.s" "$GEN/pack.bin"
+    # the campaign block (campaign.bin) and campaign.s, which puts it and
+    # areas.bin in the ROM's .pack section
+    python3 tools/md_campaign.py analysis "$ASSETS" "$GEN"
+    # the areas table: a host program, built and run here
+    ${HOSTCC:-cc} -O2 -std=c99 -DMD_AREAS_MAIN tools/md_areas.c -o build/md_areas
+    build/md_areas "$GEN/campaign.bin" "$GEN/areas.bin"
+fi
 
 echo "== 3. Compile =="
 # plain 68000 code, no C library (-ffreestanding: libc.s has the few

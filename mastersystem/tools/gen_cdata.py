@@ -260,6 +260,16 @@ def main():
         if len(tx) > TEXTS_MAX:
             raise ValueError(f"the game's texts are too long: {len(tx)} bytes (max {TEXTS_MAX})")
         (gfx_dir / name).write_bytes(tx)
+    off = write_includes(out_dir)
+    print(f"gen_cdata: level blob {len(blob)} B, strings {len(strs)} B; game state {off} B")
+
+
+def write_includes(out_dir):
+    """The level-independent part, for the assembler: texts.inc, defs.inc,
+    tables.inc and layout.json in out_dir (nothing in them comes from the
+    jar or the map, so the no-jar build, tools/nojar.py, writes the same).
+    Returns the game state's size."""
+    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "texts.inc").write_text(game_text.wla_include())
 
     # ---- for the assembler (game/*.asm)
@@ -315,7 +325,7 @@ def main():
         off += size
     (out_dir / "layout.json").write_text(json.dumps({"fields": layout, "max_ents": MAX_ENTS,
                                                      "max_mons": MAX_MONS, "n_drops": N_DROPS}, indent=1))
-    print(f"gen_cdata: level blob {len(blob)} B, strings {len(strs)} B; game state {off} B")
+    return off
 
 
 if __name__ == "__main__":
