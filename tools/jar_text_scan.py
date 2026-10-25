@@ -194,7 +194,8 @@ def main():
                            text=True, check=True).stdout.split('\n')
     for rel in files:
         p = ROOT / rel
-        if not rel or not p.is_file() or rel.startswith('editor/third_party/'):
+        # (this script itself names the allowed words, so it is left out)
+        if not rel or not p.is_file() or rel.startswith('editor/third_party/') or rel == 'tools/jar_text_scan.py':
             continue                            # (others' code, under their licences)
         if p.suffix == '.eng':
             for i, part in enumerate(engine_parts(p)):
