@@ -51,7 +51,7 @@ _boot:
     .byte   0xF8, 0x20          | battery-backed RAM on odd bytes only
     .long   0x00200001, 0x00203FFF  | $1B4 its range: 8 KB, one byte per word
     .ascii  "            "      | $1BC modem field (unused)
-    .ascii  "Made by AI, with the direction of unfunk"  | $1C8 notes (40 bytes)
+    .ascii  "Made by AI. Directed by unfnknblvbl.    "  | $1C8 notes (40 bytes)
     .ascii  "JUE             "  | $1F0 regions: Japan, USA, Europe
 | $200: the 32X's vectors jump here (6 bytes each): all to a do-nothing
 | handler (the 68000 runs with its interrupts off). Each JMP uses the
