@@ -348,15 +348,20 @@ deps_build_cross() {
         # GCC 15 and later default to C23, GCC 16 and later to C++20, which
         # GCC 13's sources predate; DEPS_HOST_CC / DEPS_HOST_CXX can name
         # another host compiler, such as gcc-13 / g++-13)
-        export CFLAGS="-O2 -std=gnu17" CXXFLAGS="-O2 -std=gnu++17"
-        [ -z "${DEPS_HOST_CC:-}" ] || export CC=$DEPS_HOST_CC
-        [ -z "${DEPS_HOST_CXX:-}" ] || export CXX=$DEPS_HOST_CXX
-        # binutils: the assembler and linker (MAKEINFO=true: no manuals, so no texinfo needed)
-        mkdir -p "$b/binutils" && cd "$b/binutils"
-        deps_logged "$b/binutils.log" "$s/$DEPS_BINUTILS/configure" --target=$t --prefix="$p" --disable-nls \
-            --disable-werror --disable-gdb --disable-gdbserver --disable-sim --disable-gprofng --without-zstd MAKEINFO=true || exit 1
-        deps_logged "$b/binutils.log" make -j"$(nproc)" MAKEINFO=true || exit 1
-        deps_logged "$b/binutils.log" make install MAKEINFO=true || exit 1
+        # (in CC / CXX, not CFLAGS / CXXFLAGS: GCC's libcody adds its own
+        # -std=c++11 after CXX, which must win for it)
+        export CC="${DEPS_HOST_CC:-gcc} -std=gnu17" CXX="${DEPS_HOST_CXX:-g++} -std=gnu++17"
+        unset CFLAGS CXXFLAGS
+        # binutils: the assembler and linker (MAKEINFO=true: no manuals, so no
+        # texinfo needed); kept when an earlier run installed them, else built
+        # in a fresh folder (configure's cache refuses changed settings)
+        if [ ! -x "$p/bin/$t-as" ] || [ ! -x "$p/bin/$t-ld" ]; then
+            rm -rf "$b/binutils"; mkdir -p "$b/binutils" && cd "$b/binutils"
+            deps_logged "$b/binutils.log" "$s/$DEPS_BINUTILS/configure" --target=$t --prefix="$p" --disable-nls \
+                --disable-werror --disable-gdb --disable-gdbserver --disable-sim --disable-gprofng --without-zstd MAKEINFO=true || exit 1
+            deps_logged "$b/binutils.log" make -j"$(nproc)" MAKEINFO=true || exit 1
+            deps_logged "$b/binutils.log" make install MAKEINFO=true || exit 1
+        fi
         # gcc: the compiler and libgcc only, for a bare machine
         export PATH="$p/bin:$PATH"
         rm -rf "$b/gcc"; mkdir -p "$b/gcc" && cd "$b/gcc"     # (a fresh build folder each time)
@@ -425,11 +430,13 @@ deps_build_v810() {
             mv $DEPS_V810_GCC v810-$DEPS_V810_GCC
         fi
         export CFLAGS='-std=gnu99 -O2 -fcommon -w' CXXFLAGS='-std=gnu++98 -O2 -w -fpermissive' MAKEINFO=true
-        mkdir -p "$b/binutils" && cd "$b/binutils"
-        deps_logged "$b/binutils.log" "$s/v810-$DEPS_V810_BINUTILS/configure" --target=v810 --prefix="$p" \
-            --disable-nls --disable-werror --disable-shared --disable-multilib --disable-lto --without-isl || exit 1
-        deps_logged "$b/binutils.log" make -j"$(nproc)" MAKEINFO=true all || exit 1
-        deps_logged "$b/binutils.log" make MAKEINFO=true install-strip || exit 1
+        if [ ! -x "$p/bin/v810-as" ] || [ ! -x "$p/bin/v810-ld" ]; then   # (kept from an earlier run)
+            rm -rf "$b/binutils"; mkdir -p "$b/binutils" && cd "$b/binutils"
+            deps_logged "$b/binutils.log" "$s/v810-$DEPS_V810_BINUTILS/configure" --target=v810 --prefix="$p" \
+                --disable-nls --disable-werror --disable-shared --disable-multilib --disable-lto --without-isl || exit 1
+            deps_logged "$b/binutils.log" make -j"$(nproc)" MAKEINFO=true all || exit 1
+            deps_logged "$b/binutils.log" make MAKEINFO=true install-strip || exit 1
+        fi
         export PATH="$p/bin:$PATH"
         rm -rf "$b/gcc"; mkdir -p "$b/gcc" && cd "$b/gcc"     # (a fresh build folder each time)
         deps_logged "$b/gcc.log" "$s/v810-$DEPS_V810_GCC/configure" --target=v810 --prefix="$p" --enable-languages=c \
