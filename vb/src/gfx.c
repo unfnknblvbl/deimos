@@ -8,15 +8,20 @@
 /*
  * Doom RPG for the Virtual Boy: the screen.
  *
- * The VIP's own drawing (its worlds, characters and sprites) is off: the
- * CPU draws every pixel into the frame buffers itself. There are two
- * frame buffer pairs (left and right eye each); one pair is shown while
- * the other is drawn, and at the next frame start (gfx_frame) the pairs
- * swap (writing XPCTRL's XPRST bit with the drawing off flips the shown
- * pair). A frame buffer is 384 columns of 64 bytes, 2 bits a pixel
- * (shades 0 black .. 3 the brightest red; the brightness registers set
- * how bright each is), the top pixel of each byte in its low bits; this
- * file writes them a halfword (8 pixels down) at a time.
+ * The VIP's own drawing (its worlds, characters and sprites) is off
+ * (XPCTRL's XPEN never set): the CPU draws every pixel itself. With the
+ * drawing off, which of the two frame buffer pairs (left and right eye
+ * each) the display shows is not something to rely on (the emulators and
+ * the hardware differ), so both pairs always hold the same picture: the
+ * screen's middle 256 columns (the view, the status bar, the boxes, the
+ * title) are made in a back buffer in the VIP's spare memory (bb), and
+ * once made copied into both pairs at the start of a display frame
+ * (publish), before the display reaches the left eye's columns; the
+ * message line is drawn into both pairs directly. A frame buffer is 384
+ * columns of 64 bytes, 2 bits a pixel (shades 0 black .. 3 the brightest
+ * red; the brightness registers set how bright each is), the top pixel
+ * of each byte in its low bits; this file writes them a halfword (8
+ * pixels down) at a time.
  *
  * The game's screen (384 x 224, the same in both eyes but for the view):
  *   y 0..7      the message line (8 x 8 characters, centred)
@@ -139,27 +144,37 @@ static void nib_init(void)
 /* the halfword of a shade's 8 pixels */
 static const u16 SHADE_HW[4] = {0x0000, 0x5555, 0xAAAA, 0xFFFF};
 
-/* fb_hw: the halfword of buffer b, eye e, column x, rows 8 r .. 8 r + 7 */
+/* the back buffer: the screen's columns VIEW_X .. VIEW_X + 255 of each
+   eye, all 28 halfwords (224 rows) of each (28 KB, in the VIP's spare
+   memory) */
+#define BB_ROWS (SCR_H / 8)
+static u16 bb[2][VW][BB_ROWS] VBSS;
+#define TO_BB 2                         /* (the "pair" that is the back buffer, for fb_hw) */
+
+/* fb_hw: the halfword of pair b (0, 1; TO_BB: the back buffer, x from
+   VIEW_X to VIEW_X + 255), eye e, column x, rows 8 r .. 8 r + 7 */
 static inline volatile u16 *fb_hw(u32 b, u32 e, u32 x, u32 r)
 {
+    if (b == TO_BB) return (volatile u16 *)&bb[e][x - VIEW_X][r];
     return (volatile u16 *)(FB_ADDR(b, e) + x * 64) + r;
 }
 
+/* on_target: column x can be drawn in pair b (the back buffer has only the middle 256) */
+static inline int on_target(u32 b, int x)
+{
+    return b == TO_BB ? x >= VIEW_X && x < VIEW_X + VW : x >= 0 && x < SCR_W;
+}
+
 /* ------------------------------------------------------------ the frames */
-static volatile u8 shown;               /* the frame buffer pair on the screen (0, 1) */
-static volatile u8 flip_pending;        /* the other pair is ready: shown from the next frame */
 static volatile u8 flash_n, flash_on;   /* the damage flash's frames left; it is on */
-static u8 dirty[2], scr_mode;           /* each pair's parts to draw again; 0 none, 1 the title, 2 the game */
+static u8 dirty, scr_mode;              /* the parts to draw again; 0 none, 1 the title, 2 the game */
+static u8 need_clear;                   /* the screen changed: both pairs cleared first */
 #define D_MSG 1
 #define D_VIEW 2
 #define D_HUD 4
 #define D_ALL 0xFF
-/* mark: parts d to be drawn again in both pairs */
-static void mark(u8 d)
-{
-    dirty[0] |= d;
-    dirty[1] |= d;
-}
+/* mark: parts d to be drawn again */
+static void mark(u8 d) { dirty |= d; }
 
 /* brightness: the brightness registers: normal, or the damage flash's
    (every shade brighter) */
@@ -171,16 +186,10 @@ static void brightness(u8 flash)
 }
 
 /* gfx_frame: a display frame starts (plat.c's VIP interrupt): count it;
-   a waiting picture's pair shown (XPRST flips the shown pair while the
-   VIP's drawing is off); the flash counted down */
+   the flash counted down */
 void gfx_frame(void)
 {
     frame_count++;
-    if (flip_pending) {
-        VIP_XPCTRL = 0x0001;            /* (XPRST: the other pair shown; XPEN stays off) */
-        shown ^= 1;
-        flip_pending = 0;
-    }
     if (flash_n) {
         if (!flash_on) brightness(1);
         flash_on = 1;
@@ -199,25 +208,21 @@ static void frame_wait(void)
     while (frame_count == f) __asm__ volatile("halt");
 }
 
-static void compose(u32 b, u8 d);
+static void compose(u8 d);
 
-/* present: the changed parts drawn into the pair not shown, shown from
-   the next frame */
+/* present: the changed parts drawn (compose) and shown */
 static void present(void)
 {
-    u32 b;
-    while (flip_pending) frame_wait();  /* (the last picture shown first) */
-    b = shown ^ 1;
-    compose(b, dirty[b]);
-    dirty[b] = 0;
-    flip_pending = 1;
+    u8 d = dirty;
+    dirty = 0;
+    compose(d);
 }
 
 /* wait_vblank: the game's once-a-frame call (ui.c): show any change, wait
    for the next frame, read the pad, the sound's part */
 void wait_vblank(void)
 {
-    if (dirty[shown ^ 1]) present();
+    if (dirty) present();
     frame_wait();
     pad = pad_read();                   /* (plat.c: the buttons, or the script's) */
     sound_tick();
@@ -245,7 +250,7 @@ static void font_init(void)
 }
 
 /* put_char: character ch at column x, rows 8 r .. 8 r + 7, in shade s, in
-   both eyes of pair b (clipped to the screen's width) */
+   both eyes of pair b or the back buffer (clipped to its width) */
 static void put_char(u32 b, int x, u32 r, char ch, u8 s)
 {
     u8 c = (u8)ch;
@@ -253,7 +258,7 @@ static void put_char(u32 b, int x, u32 r, char ch, u8 s)
     if (c < 32 || c > 127) c = 32;
     for (k = 0; k < 8; k++) {
         u16 m = font_hw[c - 32][k];
-        if (!m || x + (int)k < 0 || x + (int)k >= SCR_W) continue;
+        if (!m || !on_target(b, x + (int)k)) continue;
         for (e = 0; e < 2; e++) {
             volatile u16 *h = fb_hw(b, e, (u32)x + k, r);
             *h = (u16)((*h & ~m) | (m & SHADE_HW[s]));
@@ -400,40 +405,78 @@ static void compose_box(u32 b)
         }
 }
 
-/* compose: remake in pair b the parts d names (everything on the title,
-   or when D_ALL), then the box over them. Called by present. */
-static void compose(u32 b, u8 d)
+/* publish: rows r0..r1-1 (halfwords) of the back buffer's columns into
+   both eyes of both pairs, from the start of a display frame (the copy,
+   about 5 ms for the view, ends before the display reaches the left
+   eye's columns, so no frame shows half of it) */
+static void publish(u32 r0, u32 r1)
 {
-    u32 l, x, e, r;
-    if (scr_mode != 2) d = D_ALL;
-    if (d == D_ALL) clear_pair(b);
+    u32 e, x, r;
+    if (r0 >= r1) return;
+    frame_wait();
+    for (e = 0; e < 2; e++)
+        for (x = 0; x < VW; x++) {
+            const volatile u16 *src = bb[e][x];
+            volatile u16 *d0 = fb_hw(0, e, VIEW_X + x, 0), *d1 = fb_hw(1, e, VIEW_X + x, 0);
+            for (r = r0; r < r1; r++) {
+                u16 h = src[r];
+                d0[r] = h;
+                d1[r] = h;
+            }
+        }
+}
+
+/* compose: remake the parts d names (everything on the title, or when
+   the screen changed): the middle columns in the back buffer (the view,
+   the status bar, the box over them), then into both pairs; the message
+   line into both pairs directly. Called by present. */
+static void compose(u8 d)
+{
+    u32 l, x, e, r, r0 = BB_ROWS, r1 = 0;
+    if (need_clear) {                   /* (a new screen: both pairs black, then all of it) */
+        need_clear = 0;
+        clear_pair(0);
+        clear_pair(1);
+        d = D_ALL;
+    }
     if (scr_mode == 1) {
         if (!title_done) title_picture();
         for (e = 0; e < 2; e++)
             for (x = 0; x < VW; x++)
-                for (r = 0; r < SCR_H / 8; r++) *fb_hw(b, e, VIEW_X + x, r) = title_hw[x][r];
+                for (r = 0; r < BB_ROWS; r++) bb[e][x][r] = title_hw[x][r];
+        if (box_up) compose_box(TO_BB);
+        r0 = 0;
+        r1 = BB_ROWS;
     } else if (scr_mode == 2) {
-        if (d & D_MSG) {
-            if (d != D_ALL) fill(b, 0, 0, SCR_W, 8, 0);
-            put_text(b, (SCR_W - text_len(msg) * 8) / 2, 0, msg, 3);
+        if (d & D_VIEW) {
+            compose_view(TO_BB);
+            if (box_up) compose_box(TO_BB);
+            r0 = VIEW_Y / 8;
+            r1 = HUD_Y / 8;
         }
-        if (d & D_VIEW) compose_view(b);
         if (d & D_HUD) {
-            if (d != D_ALL) fill(b, VIEW_X, HUD_Y, VW, SCR_H - HUD_Y, 0);
+            fill(TO_BB, VIEW_X, HUD_Y, VW, SCR_H - HUD_Y, 0);
             for (e = 0; e < 2; e++)
                 for (x = 0; x < 40; x++)
-                    for (r = 0; r < 5; r++) *fb_hw(b, e, FACE_X + x, HUD_Y / 8 + r) = face_hw[x][r];
-            for (l = 0; l < 5; l++) put_text(b, HUD_TX, HUD_Y / 8 + l, hud[l], 3);
+                    for (r = 0; r < 5; r++) *fb_hw(TO_BB, e, FACE_X + x, HUD_Y / 8 + r) = face_hw[x][r];
+            for (l = 0; l < 5; l++) put_text(TO_BB, HUD_TX, HUD_Y / 8 + l, hud[l], 3);
+            if (r0 > HUD_Y / 8) r0 = HUD_Y / 8;
+            r1 = BB_ROWS;
         }
     }
-    if (box_up) compose_box(b);
+    publish(r0, r1);
+    if (scr_mode == 2 && (d & D_MSG))   /* the message line, in both pairs */
+        for (x = 0; x < 2; x++) {
+            fill(x, 0, 0, SCR_W, 8, 0);
+            put_text(x, (SCR_W - text_len(msg) * 8) / 2, 0, msg, 3);
+        }
 }
 
 /* ------------------------------------------------------------ the API (ui.c's) */
-/* screen_reset: no box, no weapon (after the last picture has been shown) */
+/* screen_reset: no box, no weapon, both pairs to be cleared */
 static void screen_reset(void)
 {
-    while (flip_pending) frame_wait();
+    need_clear = 1;
     box_up = 0;
     wp_frame = -1;
     wp_x0 = wp_x1 = 0;
@@ -460,7 +503,6 @@ void gfx_init(void)
     VIP_FRMCYC = 0;                     /* (a game frame every display frame) */
     clear_pair(0);
     clear_pair(1);
-    shown = 0;
     VIP_DPCTRL = 0x0302;                /* the display on (DISP), with refresh (RE) and sync (SYNCE) */
     VIP_INTENB = VIP_INT_FRAMESTART;    /* the frame start's interrupt (gfx_frame) */
 }
@@ -536,15 +578,15 @@ void gfx_box(char box[16][24], u8 y, u8 h)
     memcpy(box_txt, box, sizeof box_txt);
     box_h = h > 16 ? 16 : h;
     box_up = 1;
-    mark(D_ALL);
+    mark(D_VIEW);                       /* (the view with the box over it) */
 }
 
-/* gfx_box_off: hide the box (the whole screen is redrawn) */
+/* gfx_box_off: hide the box (the view is redrawn) */
 void gfx_box_off(void)
 {
     if (!box_up) return;
     box_up = 0;
-    mark(D_ALL);
+    mark(D_VIEW);                       /* (the view again, without it) */
 }
 
 /* ------------------------------------------------------------ the weapon:
@@ -772,7 +814,7 @@ static void stereo_map(u32 e)
 
 /* gfx_picture: the picture view.c has just drawn in fb onto the screen:
    the slots' shading from the map's colours, each column's depth, the two
-   eyes' column maps, then the view drawn into the pair not shown */
+   eyes' column maps, then the view drawn and shown */
 void gfx_picture(void)
 {
     u32 i, t0 = time_100us();

@@ -11,7 +11,8 @@ Made by AI. Directed by unfnknblvbl.
 ## Playing
 
 `out/deimos_vb.vb` (8 MB, 8 KB battery RAM) is tested in Mednafen
-(RetroArch's Beetle VB core); it should run in other Virtual Boy emulators,
+(RetroArch's Beetle VB core) and written to the hardware's rules as Red
+Viper (3DS) emulates them; it should run in other Virtual Boy emulators,
 and on a Virtual Boy with a flash cartridge that has battery RAM for the
 saves (not yet tried on the hardware).
 
@@ -30,9 +31,10 @@ saves (not yet tried on the hardware).
 The pause menu's options put any action on A, B, L, R, Right D-pad Up or
 Down, or Select; the game's texts name the buttons as they are set.
 
-A step or a turn (four pictures) takes about a quarter of a second
-(0.24-0.29 s in Mednafen with its accurate CPU emulation: each picture
-about 20-40 ms for the view, 36 ms for the two eyes).
+A step or a turn (four pictures) takes about a third of a second
+(0.31-0.41 s in Mednafen with its accurate CPU emulation: each picture
+15-40 ms for the view, 46-78 ms to make the two eyes and show them, which
+waits for the next display frame).
 
 ## How it is made
 
@@ -43,9 +45,12 @@ Boy's button names and the SNES's wider status bar), compiled
 for the NEC V810 with GCC 4.9.4 (VUEngine's `v810-gcc`), on a Virtual Boy
 machine layer (`src/`) - the GBA port's way:
 
-- `src/gfx.c`: the VIP's own drawing is off, and the CPU draws every pixel
-  into the frame buffers (2 bits a pixel, a column at a time); one pair of
-  frame buffers (left and right eye) is shown while the other is drawn.
+- `src/gfx.c`: the VIP's own drawing is off (XPEN never set), and the CPU
+  draws every pixel (2 bits a pixel, a column at a time). Which frame
+  buffer pair the display shows with the drawing off is not relied on:
+  the screen's middle 256 columns are made in a back buffer in the VIP's
+  spare memory and copied into both pairs at the start of a display frame
+  (about 5 ms for the view, before the display reaches the left eye).
   The 3D view is `view/view.c`'s 128 x 88 picture (its free camera, as on
   the GBA: a step or a turn shown in four pictures), drawn by
   `src/view_draw.c` and shown at twice the size; each colour becomes one
@@ -59,7 +64,9 @@ machine layer (`src/`) - the GBA port's way:
   distance, so the view is behind the screen and things stand out from the
   walls behind them. The status bar, the messages, the boxes and the
   weapon are at the screen, in front.
-- `src/sound.c`: the Game Boy Color's sound driver on the VSU, in the
+- `src/sound.c`: the Game Boy Color's sound driver on the VSU (its five
+  waves written once at the start, with every channel stopped, as the
+  hardware requires; never again), in the
   timer's interrupt (60 times a second): the songs' five voices on the
   five wave channels (each Mega Drive instrument's FM tone as a wave,
   `tools/vb_sound.py`), the drums on the noise channel.
