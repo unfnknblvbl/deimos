@@ -312,7 +312,7 @@ deps_build_cc65() {
     local c=$DEIMOS_TOOLS/src/cc65
     mkdir -p "$DEIMOS_TOOLS/src"
     deps_git_at $DEPS_CC65_REPO $DEPS_CC65_COMMIT "$c" &&
-    make -C "$c" -j"$(nproc)" >/dev/null &&
+    make -C "$c" -j"$(nproc)" PREFIX="$DEIMOS_TOOLS/cc65" >/dev/null &&     # (PREFIX: where it looks for its files)
     make -C "$c" PREFIX="$DEIMOS_TOOLS/cc65" install >/dev/null
 }
 
