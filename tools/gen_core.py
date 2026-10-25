@@ -42,9 +42,13 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(md / "tools"))
     import gen_cdata
-    camp = md / "analysis" / "campaign.json"
     tmp = out / "_tmp"
-    # gen_cdata's own output (data.h, data.c, the maps) into a scratch folder
+    tmp.mkdir(parents=True, exist_ok=True)
+    # gen_cdata's own output (data.h, data.c, texts.h) into a scratch folder,
+    # from an empty campaign: none of what is kept depends on the maps, so
+    # this needs neither the jar nor the Mega Drive build's analysis
+    camp = tmp / "campaign.json"
+    camp.write_text('{"maps": []}\n')
     subprocess.run([sys.executable, str(md / "tools" / "gen_cdata.py"), str(camp), str(tmp), str(tmp / "maps")],
                    check=True, capture_output=True)
     # data.h without the Mega Drive game's blob pointers (the ports load levels through map_level)
