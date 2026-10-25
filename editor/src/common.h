@@ -13,7 +13,8 @@
 //   buffer every builder reads and writes (ROM images, blobs, files);
 // - RGB, an 8-bit-per-channel colour;
 // - little-endian put/get helpers for Bytes;
-// - utf8_to_latin1, which turns the editor's text into the consoles' text.
+// - utf8_to_latin1, which turns the editor's text into the consoles' text
+//   (and latin1_to_utf8, the other way, for the original game's texts).
 #pragma once
 #include <cstdint>
 #include <cstring>
@@ -64,6 +65,20 @@ inline std::string utf8_to_latin1(const std::string &s)
         } else {
             out.push_back('?');
             while (i + 1 < s.size() && ((unsigned char)s[i + 1] & 0xC0) == 0x80) i++;
+        }
+    }
+    return out;
+}
+
+// Latin-1 (the original game's texts) -> UTF-8 (the editor's text)
+inline std::string latin1_to_utf8(const std::string &s)
+{
+    std::string out;
+    for (unsigned char c : s) {
+        if (c < 0x80) out.push_back((char)c);
+        else {
+            out.push_back((char)(0xC0 | (c >> 6)));
+            out.push_back((char)(0x80 | (c & 63)));
         }
     }
     return out;

@@ -48,6 +48,9 @@ import struct
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))   # (the repository's tools)
+import game_text  # noqa: E402  (the maps' titles, from the jar)
+
 # entity types (eType) of entities.db, as the original numbers them (same values as game_model.ET_*)
 ET_LINE, ET_ENEMY, ET_HUMAN, ET_PICKUP, ET_INV, ET_WEAPON, ET_AMMO = 0, 1, 2, 3, 4, 5, 6
 ET_SPECIAL, ET_FIRE, ET_FIRE2, ET_DESTRUCT, ET_DECOR, ET_BLOCK14, ET_BLOCK15, ET_AMMO2 = 7, 10, 11, 12, 13, 14, 15, 16
@@ -136,10 +139,6 @@ def line_cell(w):
     return x >> 6, y >> 6
 
 
-# the maps' names in the game (the .bsp file -> title)
-MAP_TITLES = {"intro": "UAC Base", "junction": "Junction", "junction_destroyed": "Junction",
-              "reactor": "Reactor", "endgame": "Ending", "items": "Items",
-              **{f"level0{i}": f"Sector {i}" for i in range(1, 8)}}
 
 
 def build(level_json, db, db_names, level_str, out_dir: Path, out_json=Path("analysis/gamedata.json"), sms=False):
@@ -266,7 +265,7 @@ def build(level_json, db, db_names, level_str, out_dir: Path, out_json=Path("ana
         w = W[li]
         cx, cz = line_cell(w)
         line_slot[li] = len(lines)
-        ld = by_tile.get(305 + w["tex"])  # the line's own definition (door, jammed door...) by its texture
+        ld = by_tile.get(305 + w["tex"])  # the line's own definition (door, jammed-shut door...) by its texture
         if ld is not None:
             etype, esub, name = defs_all[ld]["eType"], defs_all[ld]["eSub"], defs_all[ld]["name"]
         elif w["flags"] & 24:  # (both branches give a plain wall)
@@ -309,9 +308,12 @@ def build(level_json, db, db_names, level_str, out_dir: Path, out_json=Path("ana
            "defs": defs, "entities": entities, "scenery": scenery,
            "lines": lines, "events": events, "strings": strings}
     if sms:
-        if out["map_id"] == 1:            # the UAC Base: the game starts here (a new game's kit)
+        if out["map_id"] == 1:            # the UAC Base: the game starts here (the starting kit)
             out["new_game"] = True
-        out["title"] = MAP_TITLES.get(Path(level_json).stem, Path(level_json).stem)
+        # the map's title, as the game names it (tools/game_text.py: from the
+        # jar's texts, the folder entities.str is in); else its file name
+        out["title"] = (game_text.map_title(game_text.load(Path(db_names).parent), Path(level_json).stem)
+                        or Path(level_json).stem)
         del out["map_id"], out["thin"]
         for e in entities:
             e.pop("spawns", None)

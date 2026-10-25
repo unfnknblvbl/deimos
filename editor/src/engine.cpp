@@ -12,6 +12,7 @@
 // windows and the command-line tool's --new-rom and --make-rom.
 #include "engine.h"
 #include "assets.h"
+#include "gametext.h"
 #include "levelblob.h"
 #include "md_build.h"
 #include "sms_build.h"
@@ -230,10 +231,10 @@ static bool rom_from_projects(Console c, const Jar &jar, const std::vector<MapIn
     Bytes rom;
     if (!filled_engine(c, jar, e, rom, opt, err)) return false;
     if (sms_family(c)) {   // one map, in the Master System's form
-        if (!sms::build(rom, projects[0], opt, stats, err)) return false;
+        if (!sms::build(rom, projects[0], gametext::sms_blob(jar, c == Console::GG), opt, stats, err)) return false;
     } else {   // every map, in the campaign's form, as one block
         // (snes: every SNES-image console but the SuperFX; snes_fx: the SuperFX)
-        if (!md::new_campaign(rom, e.maps_addr, e.maps_limit, infos, projects, opt, stats, err,
+        if (!md::new_campaign(rom, e.maps_addr, e.maps_limit, infos, projects, gametext::md_blob(jar), opt, stats, err,
                               c == Console::SNES || c == Console::N3DS || c == Console::MARS || c == Console::GBC ||
                                   c == Console::GBA || c == Console::VB,
                               c == Console::SNESFX))
@@ -259,9 +260,9 @@ bool new_rom(Console c, const Jar &jar, const std::vector<std::string> &maps, Ro
     std::vector<Project> projects;
     for (auto &m : maps) {
         Project p;
-        opt.say("reading " + Jar::short_title(m) + " from the game...");
+        opt.say("reading " + jar.short_title(m) + " from the game...");
         if (!import_map(jar, m, p, err, notes, !sms_family(c))) return false;
-        infos.push_back({m, Jar::short_title(m), p.map_id});
+        infos.push_back({m, jar.short_title(m), p.map_id});
         projects.push_back(std::move(p));
         if (sms_family(c)) break;   // (one map)
     }
@@ -279,9 +280,9 @@ bool new_project(const Jar &jar, const std::vector<std::string> &maps, ProjectFi
     ProjectFile pf;
     for (auto &m : maps) {
         ProjectMap pm;
-        opt.say("reading " + Jar::short_title(m) + " from the game...");
+        opt.say("reading " + jar.short_title(m) + " from the game...");
         if (!import_map(jar, m, pm.level, err, notes, true)) return false;   // (the whole game's form)
-        pm.info = {m, Jar::short_title(m), pm.level.map_id};
+        pm.info = {m, jar.short_title(m), pm.level.map_id};
         pf.maps.push_back(std::move(pm));
     }
     out = std::move(pf);

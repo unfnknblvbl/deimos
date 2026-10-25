@@ -6,7 +6,7 @@
 # option) any later version, with NO WARRANTY: see the LICENSE file.
 
 """
-Hardware-sprite art for every entity type of Sector 1 (monsters, people,
+Hardware-sprite art for every entity type of level01 (monsters, people,
 pickups, barrels, crates, fire), at 1..4 cells straight ahead.
 
 Placement follows the original billboard projection (Render_renderSprite:

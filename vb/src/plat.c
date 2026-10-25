@@ -95,7 +95,7 @@ void vd_words(u32 a, s16 *dst, u8 n)
 u8 sram_rd(u16 i) { return REG8(SRAM_AT + 2u * (i & 0x1FFF)); }
 void sram_wr(u16 i, u8 v) { REG8(SRAM_AT + 2u * (i & 0x1FFF)) = v; }
 #ifdef PLAT_SCRIPT
-/* sram_blank: no saved game (the SNES run the script was made from had none) */
+/* sram_blank: nothing saved (the SNES run the script was made from had none) */
 static void sram_blank(void)
 {
     u16 i;
@@ -276,7 +276,7 @@ u32 time_100us(void)
 void ui_main(void);                     /* the Game Boy Color's ui.c */
 void viewtest_main(void);               /* viewtest.c (the view test build) */
 
-/* plat_init: the campaign block; in the script mode, no saved game */
+/* plat_init: the campaign block; in the script mode, nothing saved */
 void plat_init(void)
 {
     campaign_init();

@@ -698,7 +698,7 @@ int main(void)
         snprintf(m, sizeof m, "script %p log %p", (void *)scr, (void *)slog);
         svcOutputDebugString(m, strlen(m));
     }
-    if (scr) {                                  /* (no saved game: the SNES run had none) */
+    if (scr) {                                  /* (nothing saved: the SNES run had none) */
         if (f) fclose(f);
         f = 0;
     }

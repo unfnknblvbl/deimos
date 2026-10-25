@@ -32,7 +32,7 @@ static const char *TABLES[] = {"def_etype", "def_esub", "def_parm", "def_name", 
                                "drop_def"};
 static const int N_TABLES = sizeof(TABLES) / sizeof(TABLES[0]);
 // (eType, eSub) of the 16 things a monster or crate can drop, in the
-// games' DD_* order: health, armour, 1 and 5 credits, small and large
+// games' DD_* order: health, armour, the 1- and 5-credit pick-ups, small and large
 // medkit, then ammo types 0..4 twice (types 6 and 16). drop_def holds each
 // one's index in defs (255 = not in this map).
 static const int DROP_TYPES[16][2] = {{3, 20}, {3, 21}, {3, 22}, {3, 23}, {4, 25}, {4, 26}, {6, 0}, {6, 1},
@@ -200,7 +200,7 @@ Bytes make_level_blob(const Project &p)
     }
     int n_tables = N_TABLES + 2;
     t.resize(n_tables);
-    t[N_TABLES].push_back(p.new_game ? 1 : 0);          // "start": a new game's kit
+    t[N_TABLES].push_back(p.new_game ? 1 : 0);          // "start": the starting kit
     std::string title;                                     // "title": shown at the start and the end
     for (unsigned char ch : utf8_to_latin1(p.name)) title.push_back((char)(ch >= 'a' && ch <= 'z' ? ch - 32 : ch));
     if (title.size() > 16) title.resize(16);   // at most 16 characters, then a 0
@@ -325,7 +325,7 @@ Bytes make_level_blob_md(const Project &p, const std::vector<std::string> &maps,
         t[10].push_back(l.z);
         t[11].push_back(l.eType);
         t[12].push_back(l.locked ? 1 : 0);
-        // line_kind: bit 0 = an exit door (its wall has texture 7), bit 1
+        // line_kind: bit 0 = an exit (its wall has texture 7), bit 1
         // = secret (its wall lacks flag 4); no wall: neither
         int tex = 0, flags = 4;
         if (l.wall >= 0 && l.wall < (int)p.walls.size()) {
@@ -377,7 +377,7 @@ Bytes make_level_blob_md(const Project &p, const std::vector<std::string> &maps,
             }
         t[28].push_back(found);
     }
-    // spawns: u16 count, then per Pain Elemental its thing index and the
+    // spawns: u16 count, then per class-7 monster its thing index and the
     // two things it lets out ($FFFF = none)
     int n_sp = 0;
     Bytes sp;

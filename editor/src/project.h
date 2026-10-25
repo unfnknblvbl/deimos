@@ -61,7 +61,7 @@ struct Entity {        // a thing on the map
     int def = 0;       // index into Project::defs
     int x = 0, z = 0;  // cell
     bool hidden = false;  // appears only when an event SHOWs it
-    std::vector<int> spawns;  // (campaign maps) the two things a dying Pain Elemental lets out ($FFFF: none)
+    std::vector<int> spawns;  // (campaign maps) the two things a dying class-7 monster lets out ($FFFF: none)
 };
 
 struct Thin {          // (campaign maps) an invisible blocker: a thin wall on one edge of a cell
@@ -143,8 +143,8 @@ const int N_CONSOLES = 10;
 extern const char *const CONSOLE_KEYS[N_CONSOLES];
 
 struct Project {
-    std::string name = "Sector 1";   // the map's title as the game shows it
-    bool new_game = false;  // (Master System) the game starts on this map: a new game's kit
+    std::string name = "Map";   // the map's title as the game shows it (from the jar: Jar::short_title)
+    bool new_game = false;  // (Master System) the game starts on this map: the player's starting kit
     RGB floor, ceiling;     // the original map's floor and ceiling colours
     // the Master System's own ceiling and floor (its floor fades into the
     // ceiling colour towards the horizon); without them its usual ones: a
@@ -190,7 +190,7 @@ struct Project {
     // jar.cpp's import_map gives a single level): a campaign map's thin
     // invisible blockers block their whole cells, the props lose their
     // cells and the Pain Elementals their spawns, SHOW's "none" is 255,
-    // and the UAC Base (map id 1) gives a new game's kit. A level already
+    // and the UAC Base (map id 1) gives the starting kit. A level already
     // in that form comes back as it is.
     Project single_level() const;
 
@@ -219,7 +219,7 @@ struct Project {
 
 // One map of a project, as the consoles' games know it: name is the map's
 // file name in the original game ("level01": a script's CHANGEMAP to
-// "/level01.bsp" leads there), title what the game shows ("Sector 1"), id
+// "/level01.bsp" leads there), title what the game shows (its name for the map, from the jar), id
 // the original game's map id.
 struct MapInfo {
     std::string name;

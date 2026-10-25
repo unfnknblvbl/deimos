@@ -17,7 +17,7 @@
 #include "md.h"
 extern u8 n_maps;                  /* how many maps the block holds (set by pack_init) */
 void pack_init(u8 map);            /* point every table at map `map` */
-const char *map_title(u8 map);     /* "SECTOR 1", ... */
+const char *map_title(u8 map);     /* the map's title, in capitals (from the jar) */
 u8 map_orig_id(u8 map);            /* the original game's id (2 = the Junction) */
 extern const unsigned char *r_tex_addr[];  /* each texture slot's 4096 texels (in the texture bank) */
 extern u8 r_tex_map[];                     /* texture slot -> the slot drawn (the portal's swaps) */

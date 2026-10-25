@@ -59,6 +59,9 @@
  *  - "active": the list of monsters awake and taking turns (S.active).
  *  - "trace": a straight line walked cell by cell along a row or column
  *    to see what it hits (the original game's Game_trace).
+ *  - "text": the messages the rules show are the game's own words, not
+ *    written here: gtext(TX_...) (rules.h) gives each one, from the texts
+ *    table the build makes from DoomRPG.jar (tools/game_text.py).
  * Licence: GPL-2.0-or-later.
  */
 #include "rules.h"
@@ -789,7 +792,7 @@ static void add_health(s16 n)
     if (v > (s16)S.maxhp) v = S.maxhp;
     if (v < 0) v = 0;
     S.hp = (u8)v;
-    if (v - before > 0) say_num("GAINED ", (u16)(v - before), " HEALTH");
+    if (v - before > 0) say_num(gtext(TX_GAINED), (u16)(v - before), gtext(TX_HEALTH_GAINED));
 }
 
 /* add_armor: adds n to S.armor, held to maxarmor (no lower bound: a
@@ -801,7 +804,7 @@ static void add_armor(s16 n)
     if (v > (s16)S.maxarmor) v = S.maxarmor;
     S.armor = (u8)v;
     v &= 0xFF;                      /* compare what was stored */
-    if (v - before > 0) say_num("GAINED ", (u16)(v - before), " ARMOR");
+    if (v - before > 0) say_num(gtext(TX_GAINED), (u16)(v - before), gtext(TX_ARMOR_GAINED));
 }
 
 /* add_ammo: adds n of ammo type t (0..5), held to 99.
@@ -843,14 +846,14 @@ static void level_up(void)
     S.agility = stat_up(S.agility, (u8)((rnd() & 1) + 1));
     S.accuracy = stat_up(S.accuracy, (u8)((rnd() & 1) + 1));
     sfx(SFX_LEVEL_UP);
-    say_num("LEVEL UP! LEVEL ", S.level, "");
+    say_num(gtext(TX_LEVEL_UP), S.level, "");
 }
 
 /* add_xp: gives the player n experience points (with a message), and a
  * level for each S.nextxp reached (the rest carries over). */
 static void add_xp(u16 n)
 {
-    say_num("GAINED ", n, " XP!");
+    say_num(gtext(TX_GAINED), n, gtext(TX_XP_GAINED));
     SP16(xp, SG16(xp) + n);
     while (SG16(xp) >= SG16(nextxp)) {
         SP16(xp, SG16(xp) - SG16(nextxp));
@@ -916,17 +919,17 @@ static void player_pain(u8 dmg8, u8 arm)
     if (S.weapon >= 9 && S.weapon <= 11 && S.ammo[5]) {     /* a dog fighting for you takes it all */
         v = (s16)S.ammo[5] - (dmg + arm);
         S.ammo[5] = v > 0 ? (u8)v : 0;
-        say_num("DOG TOOK ", (u16)(dmg + arm), " DAMAGE!");
+        say_num(gtext(TX_DOG_TOOK), (u16)(dmg + arm), gtext(TX_DAMAGE));
         player_hurt = 1;
         sfx(SFX_HURT);
         if (!S.ammo[5]) {
             SP16(weapons, SG16(weapons) & ~0xE00u);         /* the dog weapons gone */
             select_next_weapon();
-            say("DOG DIED!");
+            say(gtext(TX_DOG_DIED));
         }
         return;
     }
-    say_num("", (u16)(dmg + arm), " DAMAGE!");
+    say_num("", (u16)(dmg + arm), gtext(TX_DAMAGE));
     if (!(dmg + arm)) return;
     player_hurt = 1;
     a = S.armor;
@@ -940,9 +943,9 @@ static void player_pain(u8 dmg8, u8 arm)
     h2 = 0;
     if ((s16)S.hp > dmg) h2 = (s16)((((u16)S.hp - (u16)dmg) << 8) / S.maxhp);
     if (h2) {
-        if (h1 > 26 && h2 <= 26) say("NEAR DEATH!");
-        else if (h1 > 78 && h2 <= 78) say("LOW HEALTH!");
-        else if (a && !S.armor) say("ARMOR GONE!");
+        if (h1 > 26 && h2 <= 26) say(gtext(TX_NEAR_DEATH));
+        else if (h1 > 78 && h2 <= 78) say(gtext(TX_LOW_HEALTH));
+        else if (a && !S.armor) say(gtext(TX_ARMOR_GONE));
     }
     v = (s16)S.hp - dmg;
     if (v <= 0) {
@@ -1040,7 +1043,7 @@ static void activate_visible(void)
  * One rnd32(), always (unless already dropped or a subtype that never
  * drops: 1 the hell hounds, 12 the Cyberdemon, 13 Kronos). Its low byte < 51 (about 20%):
  * nothing. Bit 8 picks the kind: set, health (n5 < 115), armour
- * (< 230) or credits (5 credits more likely for the stronger variants,
+ * (< 230) or credits (5-credit pick-up more likely for the stronger variants,
  * by the def's parameter 294 / 467 / 640); clear, an item that depends
  * on the monster's subtype (ammo, medkits, credits). The item goes into
  * the next of the N_DROPS drop slots (S.drop_index, round robin; an older
@@ -1163,7 +1166,7 @@ static void release_souls(u16 i)
  * it off the active list and out of the map. It leaves a corpse
  * (F_CORPSE, which an Archvile can raise) unless it was an overkill or is
  * subtype 8. Then a possible drop, and the special deaths: the
- * Cyberdemon (12), Kronos (13) and the Pain Elemental class (7).
+ * Cyberdemon (12), Kronos (13) and class 7 (Beholder, Rahovart, the souls' spawner).
  * Subtype 8 (Ghoul / Fiend / Revenant) explodes: no corpse. */
 static void monster_died(u16 i, u8 overkill)
 {
@@ -1475,10 +1478,10 @@ static void push_explosion(u8 x, u8 z)
     n_pend_expl++;
 }
 
-/* a barrel, crate, fire or power coupling j is destroyed
+/* a barrel, crate, fire or coupling j is destroyed
  * Nothing if j is not F_ALIVE. It loses F_ALIVE and leaves the map. By
  * kind: a fire gives 2 XP; a barrel (destructible subtype 1) explodes; a
- * power coupling (subtype 4) counts toward closing the Reactor's portal
+ * coupling (subtype 4) counts toward closing the Reactor's portal
  * (2 needed); a crate (subtype 2) rolls rnd() for its contents: a trap
  * (2/256, explodes), credits, a small medkit, armour or ammo (rnd again
  * for the type), or nothing (r >= 213); an item reuses the crate's entity.
@@ -1492,7 +1495,7 @@ static void destroy(u16 j)
     S.e_flags[j] &= ~F_ALIVE;
     ent_unlink(j);                          /* out of the map */
     if (et == ET_FIRE) {
-        say("FIRE CLEARED!");
+        say(gtext(TX_FIRE_CLEARED));
         add_xp(2);
     } else if (et == ET_DESTRUCT) {
         if (es == 1) {
@@ -1500,7 +1503,7 @@ static void destroy(u16 j)
             sfx(SFX_EXPLODE);
             push_explosion(S.e_x[j], S.e_z[j]);
         } else if (es == 4) {
-            sfx(SFX_EXPLODE);        /* a power coupling */
+            sfx(SFX_EXPLODE);        /* a coupling */
             S.couplings++;
             if (S.couplings == 2) {   /* both: the portal closes (its line's event) */
                 S.portal = 0;
@@ -1510,7 +1513,7 @@ static void destroy(u16 j)
             r = rnd();               /* a crate: what was inside */
             sfx(SFX_BREAK);
             if (r < 2) {
-                say("TRAPPED!");
+                say(gtext(TX_TRAPPED));
                 sfx(SFX_EXPLODE);
                 push_explosion(S.e_x[j], S.e_z[j]);
             } else if (r < 4) dt = DD_CREDIT5;
@@ -1564,7 +1567,7 @@ static void hurt_at(s16 x, s16 z, u8 dmg, u8 arm)
     if (et == ET_ENEMY) {
         monster_pain(j, dmg, arm);
         if (!S.m_hp[mon_slot(j)]) {
-            say2(ent_name(j), " DIED!");
+            say2(ent_name(j), gtext(TX_DIED));
             monster_died(j, 0);
         } else
             sfx(SFX_MON_HURT);
@@ -1583,7 +1586,7 @@ static void hurt_at(s16 x, s16 z, u8 dmg, u8 arm)
  * (mon_shots): against the player each shot rolls calc_hit with the
  * player's agility and calc_damage with the player's defence (a critical
  * on the first shot doubles that shot and every later one); the damage
- * is summed and dealt at once (player_pain), or "DODGED!". Against an
+ * is summed and dealt at once (player_pain), or TX_DODGED. Against an
  * entity (a barrel or crate in the way) it is simply destroyed. */
 static void monster_attack(u16 i, u8 kind, u16 tgt)
 {
@@ -1591,7 +1594,7 @@ static void monster_attack(u16 i, u8 kind, u16 tgt)
     u16 tot = 0, tarm = 0;
     if (!(S.e_flags[i] & F_ALIVE)) return;
     if (kind == T_RAISE) {           /* an Archvile raises a corpse */
-        say2(ent_name(i), " CASTS RAISE");
+        say2(ent_name(i), gtext(TX_CASTS_RAISE));
         sfx(SFX_RAISE);
         if (!trace(S.e_x[tgt], S.e_z[tgt], S.e_x[tgt], S.e_z[tgt], MASK_RAISE_FREE, NONE)) {   /* cell still free */
             S.e_flags[tgt] = (S.e_flags[tgt] & ~(F_CORPSE | F_RAISING)) | F_ALIVE;
@@ -1600,14 +1603,14 @@ static void monster_attack(u16 i, u8 kind, u16 tgt)
             S.m_hp[m] = S.m_maxhp[m];
             S.m_armor[m] = S.m_maxarmor[m];
             activate(tgt);                          /* and fighting */
-            say2(ent_name(tgt), " IS REVIVED!");
+            say2(ent_name(tgt), gtext(TX_REVIVED));
         } else {
             S.e_flags[tgt] &= ~F_RAISING;
-            say("RAISE FAILED!");
+            say(gtext(TX_RAISE_FAILED));
         }
         return;
     }
-    say2(ent_name(i), " ATTACKS");
+    say2(ent_name(i), gtext(TX_ATTACKS));
     w = attack_weapon(i);
     sfx(wpn_sfx[w]);
     shots = mon_shots[esub(i)];
@@ -1626,7 +1629,7 @@ static void monster_attack(u16 i, u8 kind, u16 tgt)
     }
     if (kind == T_PLAYER) {
         if (!(tot + tarm)) {
-            say("DODGED!");
+            say(gtext(TX_DODGED));
             sfx(SFX_DODGE);
         } else
             player_pain((u8)tot, (u8)tarm);
@@ -1685,7 +1688,7 @@ static void update_portal(void)
         if (x == S.px && S.pz == PORTAL_SPAWN_Z) continue;
         ent_move_to(i, x, PORTAL_SPAWN_Z);
         SP16(portal_mon, i);
-        say3("PORTAL SPAWNS ", ent_name(i), "!");
+        say3(gtext(TX_PORTAL_SPAWNS), ent_name(i), gtext(TX_PORTAL_END));
         break;
     }
     S.portal_cnt = (u8)((rnd() & 3) + 1);
@@ -1729,11 +1732,9 @@ static void monster_turn(void)
 }
 
 /* ------------------------------------------------------------ scripted events */
-/* messages for a locked door (by key 0..3) and for a cost the player
-   cannot pay (by what it costs: health, armour, credits, XP) */
-static const char *const NEED_KEY[4] = {"NEED GREEN KEY", "NEED YELLOW KEY", "NEED BLUE KEY", "NEED RED KEY"};
-static const char *const INSUFF[4] = {"INSUFFICIENT HEALTH!", "INSUFFICIENT ARMOR!", "INSUFFICIENT FUNDS!",
-                                      "INSUFFICIENT XP!"};
+/* (the messages for a door that is locked, by key 0..3, are the texts from
+   TX_NEED_GREEN on; those for a cost the player cannot pay, by what it
+   costs - health, armour, credits, XP - the texts from TX_LOW_HP on) */
 
 /* find_event: the event on cell (x, z), or NONE_B (also off the map). */
 static u8 find_event(u8 x, u8 z)
@@ -1813,9 +1814,9 @@ static u8 exec_cmd(u16 c)
                 break;
             }
         return 1;
-    case 2:                            /* CHANGEMAP: once the exit door opens */
+    case 2:                            /* CHANGEMAP: once the exit opens */
         /* (a1's low byte: the target map's index in the campaign, 255 the
-           end; kept in S.chg until the exit door copies it to S.exit) */
+           end; kept in S.chg until the exit copies it to S.exit) */
         P32(S.chg, a1);
         S.chg_set = 1;
         return 1;
@@ -1828,7 +1829,7 @@ static u8 exec_cmd(u16 c)
         say(level_string(lo));
         return 1;
     case 5:                            /* PAIN: lo damage to the player */
-        say("PAIN!");
+        say(gtext(TX_PAIN));
         player_pain(lo, 0);
         return 1;
     case 6: case 15: case 16: case 17: /* doors: 6 / 17 toggle, 15 open, 16 close */
@@ -1841,11 +1842,11 @@ static u8 exec_cmd(u16 c)
         k = t_line_kind[lo];
         if ((k & 2) && !S.secret_turn) {   /* a sliding wall: a secret, +5 XP once an action */
             S.secret_turn = 1;
-            say("FOUND SECRET!");
+            say(gtext(TX_SECRET));
             sfx(SFX_SECRET);
             add_xp(5);
         }
-        if ((k & 1) && (S.l_flags[lo] & L_OPEN) && S.chg_set) {   /* the exit door: the map changes */
+        if ((k & 1) && (S.l_flags[lo] & L_OPEN) && S.chg_set) {   /* the exit: the map changes */
             S.exit[0] = S.chg[0];
             S.exit[1] = S.chg[1];
             S.exit[2] = S.chg[2];
@@ -1915,7 +1916,7 @@ static u8 exec_cmd(u16 c)
            text is not empty */
         w = lo == 0 ? S.hp : lo == 1 ? S.armor : lo == 2 ? SG16(credits) : SG16(xp);
         if (w >= hi) return 1;
-        say(INSUFF[lo & 3]);
+        say(gtext(TX_LOW_HP + (lo & 3)));
         sfx(SFX_DENIED);
         suspend = SUSP_STOP;
         k = (u8)(a1 >> 16);
@@ -1986,7 +1987,7 @@ static u8 exec_cmd(u16 c)
         /* key lo (bit lo of S.keys: 0 green, 1 yellow, 2 blue, 3 red);
            without it the event stops */
         if ((S.keys >> (lo & 3)) & 1) return 0;
-        say(NEED_KEY[lo & 3]);
+        say(gtext(TX_NEED_GREEN + (lo & 3)));
         sfx(SFX_DENIED);
         suspend = SUSP_STOP;
         return 1;
@@ -2068,7 +2069,7 @@ static void run_tile(u8 x, u8 z, u32 flags) { run_tile_r(x, z, flags); }
 static void berserk_tick(void)
 {
     if (!S.berserk) return;
-    if (!--S.berserk) say("BERSERKER EXPIRED!");
+    if (!--S.berserk) say(gtext(TX_BERSERK_OFF));
 }
 
 /* settle: if the monsters are owed a turn (monsters_pending) and no
@@ -2104,7 +2105,7 @@ static void end_player_turn(void)
 /* resume: the port closed a dialog or a code entry. password: what the
  * player typed (0: cancelled). An event stopped by a dialog carries on
  * after the command that stopped it; one stopped by a code carries on
- * only if the code matches the wanted text exactly ("INVALID CODE!"
+ * only if the code matches the wanted text exactly (TX_CODE_BAD
  * unless nothing was typed). Then the monsters' turn, if owed (settle). */
 void resume(const char *password)
 {
@@ -2129,13 +2130,13 @@ void resume(const char *password)
                 }
                 if (*a || *b) {
                     if (*password) {
-                        say("INVALID CODE!");
+                        say(gtext(TX_CODE_BAD));
                         sfx(SFX_DENIED);
                     }
                     return;
                 }
             }
-            say("CORRECT CODE!");
+            say(gtext(TX_CODE_GOOD));
             sfx(SFX_SELECT);
             run_event(ev, k, flags);
         }
@@ -2145,7 +2146,7 @@ void resume(const char *password)
 
 /* ------------------------------------------------------------ the player's actions */
 /* select_target's result: the target's kind (T_ENT or T_LINE) and index;
-   sel_locked: 1 if a locked door was in the way */
+   sel_locked: 1 if a door that is locked was in the way */
 static u8 sel_kind, sel_locked;
 static u16 sel_idx;
 
@@ -2223,7 +2224,7 @@ static u8 calc_hit_object(u8 tiles)
 static void line_destroyed(u8 li)
 {
     S.l_flags[li] = (S.l_flags[li] & ~L_ALIVE) | L_OPEN;
-    say("DOOR CLEARED!");
+    say(gtext(TX_DOOR_CLEARED));
     sfx(SFX_BREAK);
     add_xp(1);
     run_tile(t_line_x[li], t_line_z[li], EVF_USE);
@@ -2245,7 +2246,7 @@ static u8 player_attack(void)
     s16 left, thr;
     if (SG16(disabled_weapons) && !((SG16(weapons) >> w) & 1)) return 0;
     if (wpn_use[w] && S.ammo[wpn_ammo[w]] < wpn_use[w]) {
-        say("NOT ENOUGH AMMO!");
+        say(gtext(TX_NO_AMMO));
         sfx(SFX_DENIED);
         return 0;
     }
@@ -2280,18 +2281,18 @@ static u8 player_attack(void)
     }
     if (enemy) {
         if (!(tot + tarm)) {
-            say(w == 1 ? "NO EFFECT!" : "MISSED!");
+            say(gtext(w == 1 ? TX_NO_EFFECT : TX_MISSED));
             return 1;
         }
         m = mon_slot(j);
         left = (s16)((u16)S.m_hp[m] + S.m_armor[m] - tot - tarm);   /* what it would have left */
-        say_num(crit ? "CRITICAL! " : "", (u16)(tot + tarm), " DAMAGE!");
+        say_num(crit ? "CRITICAL! " : "", (u16)(tot + tarm), gtext(TX_DAMAGE));
         monster_pain(j, (u8)tot, (u8)tarm);
         if (S.m_hp[m]) {
             sfx(SFX_MON_HURT);
             return 1;
         }
-        say2(ent_name(j), " DIED!");
+        say2(ent_name(j), gtext(TX_DIED));
         thr = (s16)(((((u32)S.m_maxhp[m] << 16) / 637) & 0xFFFF) >> 8);   /* maxhp * 256 / 637 */
         monster_died(j, (u8)(tiles == 1 && left <= -thr));
         return 1;
@@ -2300,7 +2301,7 @@ static u8 player_attack(void)
         if (sel_kind == T_LINE) line_destroyed((u8)j);
         else destroy(j);
     } else
-        say(w == 1 ? "NO EFFECT!" : "MISSED!");
+        say(gtext(w == 1 ? TX_NO_EFFECT : TX_MISSED));
     return 1;
 }
 
@@ -2324,13 +2325,13 @@ static void touch(u16 j)
             snd = SFX_CREDITS;
         } else if (es == 21) {
             if (S.armor >= S.maxarmor) {
-                say("ARMOR AT MAXIMUM");
+                say(gtext(TX_ARMOR_MAX));
                 return;
             }
             add_armor((s16)parm);
         } else if (es == 20) {
             if (S.hp >= S.maxhp) {
-                say("HEALTH AT MAXIMUM");
+                say(gtext(TX_HEALTH_MAX));
                 return;
             }
             add_health((s16)parm);
@@ -2349,7 +2350,7 @@ static void touch(u16 j)
         break;
     case ET_AMMO: case ET_AMMO2:
         if (!add_ammo(es, (u8)parm)) {
-            say("AMMO AT MAXIMUM");
+            say(gtext(TX_AMMO_MAX));
             return;
         }
         break;
@@ -2361,17 +2362,17 @@ static void touch(u16 j)
         break;
     case ET_FIRE:
         player_pain(1, 2);
-        say("IT BURNS!");
+        say(gtext(TX_BURNS));
         return;
     case ET_FIRE2:
         player_pain(10, 10);
-        say("IT REALLY BURNS!!");
+        say(gtext(TX_BURNS_MORE));
         return;
     default:
         return;
     }
     sfx(snd);
-    say2("GOT ", name);
+    say2(gtext(TX_GOT), name);
     ent_unlink(j);                      /* taken: out of the map */
 }
 
@@ -2451,7 +2452,7 @@ void act_use(void)
             say("THE DOOR IS LOCKED");
             sfx(SFX_DENIED);
         } else {
-            say("NOTHING TO USE");
+            say(gtext(TX_NOTHING));
             sfx(SFX_BLIP);
         }
         return;
@@ -2466,7 +2467,7 @@ void act_use(void)
 void act_pass(void)
 {
     S.secret_turn = 0;
-    say("TURN PASSED.");
+    say(gtext(TX_TURN_PASSED));
     touch_tile(0);
     end_player_turn();
 }
@@ -2493,7 +2494,7 @@ void act_cycle_weapon(s8 step)
 
 /* act_health_item: uses the first health item held: inventory 0 a small
  * medkit, 1 a large one (the health of the matching drop def's
- * parameter), 2 a Soul Sphere (+200 health and armour, held to the
+ * parameter), 2 a soulsphere (+200 health and armour, held to the
  * maxima). Takes a turn. Out: 1 used, 0 none held. */
 u8 act_health_item(void)
 {
@@ -2518,7 +2519,7 @@ u8 act_health_item(void)
 }
 
 /* use_item: uses inventory item k: 3 the Berserker (3x damage for 31
- * more turns; takes a turn), 4 the Dog Collar (captures a hell hound
+ * more turns; takes a turn), 4 the collar (captures a hell hound
  * class monster, subtype 1, right in front: it leaves the map and
  * becomes weapon 9, 10 or 11 by its def's parameter, with 5x its health
  * as the dog's health in S.ammo[5], held to 99; a "captured" dialog
@@ -2536,28 +2537,28 @@ u8 use_item(u8 k)
         return 0;
     }
     if (k == 3) {                      /* the Berserker: x3 damage for 31 turns */
-        say("BERSERKER ACTIVATED!");
+        say(gtext(TX_BERSERK_ON));
         S.berserk += 31;
         S.inventory[3]--;
         end_player_turn();
         return 1;
     }
     if (k != 4) return 0;
-    /* the Dog Collar: the first thing ahead */
+    /* the collar: the first thing ahead */
     n = trace(S.px, S.pz, (u8)(S.px + DX[S.facing]), (u8)(S.pz + DZ[S.facing]), MASK_SHOT, NONE);   /* this cell and the next */
     for (i = 0; i < n; i++)
         if (hit_kind[i] == H_ENT || hit_kind[i] == H_LINE) break;
     if (i == n) {
-        say("NO DOG WITHIN RANGE");
+        say(gtext(TX_NO_DOG));
         return 0;
     }
     if (hit_kind[i] == H_LINE || ent_etype(hit_val[i]) != ET_ENEMY) {
-        say("BAD TARGET FOR DOG COLLAR");
+        say(gtext(TX_BAD_TARGET));
         return 0;
     }
     j = hit_val[i];
     if (esub(j) != 1) {
-        say2("DOG COLLAR WON'T FIT ", ent_name(j));
+        say2(gtext(TX_WONT_FIT), ent_name(j));
         return 0;
     }
     S.inventory[4]--;                  /* the dog leaves the map and fights for you */
@@ -2565,7 +2566,7 @@ u8 use_item(u8 k)
     ent_unlink(j);
     captured_def = S.e_def[j];         /* (named by the dialog) */
     parm = def_parm(S.e_def[j]);
-    w = parm == 294 ? 9 : parm == 467 ? 10 : 11;   /* Hell Hound, Cerberus, Demon Wolf */
+    w = parm == 294 ? 9 : parm == 467 ? 10 : 11;   /* the three dogs */
     S.weapon = w;
     SP16(weapons, SG16(weapons) | (1u << w));
     v = (u16)((S.m_hp[mon_slot(j)] * 5) & 0xFF);   /* (kept to 8 bits before the 99 limit) */
@@ -2595,7 +2596,7 @@ const u8 STORE_ITEMS[34] = {0, 0, 0, 0, 1, 25, 1, 26, 1, 27, 1, 28, 0, 0, 2, 0, 
 
 /* store_buy: buys line `line` (0..15) of the open vendor (S.store):
  * pays the price in credits and adds one item, one stat point, or ammo
- * (3 rockets, else 10). Out: 0 bought, 1 not enough credits, 2 already
+ * (3 rockets, else 10). Out: 0 bought, 1 too few credits, 2 already
  * at 99. The port's store screen calls it; it takes no turn. */
 u8 store_buy(u8 line)
 {
@@ -2730,7 +2731,7 @@ static void map_start(u8 map, u32 spawn)
     activate_visible();
 }
 
-/* game_init: a new game: S cleared, the random seed 0x1234, the player's
+/* game_init: a fresh game: S cleared, the random seed 0x1234, the player's
  * starting stats (30 health, 0 of 20 armour, level 1, 80 XP to the
  * next), the pistol (weapon 2, bit 2 of S.weapons) with 8 bullets, and
  * map 0. */
@@ -2754,7 +2755,7 @@ void game_init(void)
     map_start(0, 0);
 }
 
-/* through the exit door (S.exit) to map `map`: Game_changeMap (the sector
+/* through the exit (S.exit) to map `map`: Game_changeMap (the sector
    completed, Player_addLevelStats) then the map's start
  * S.exit holds the CHANGEMAP command's argument: bit 31 set marks the
  * map in play as completed (bit map_id - 1 of S.completed; not for map

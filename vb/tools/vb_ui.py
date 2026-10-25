@@ -43,7 +43,7 @@ VB_HUD = '''    hud_text(0, 0, "HEALTH");
     hud_text(0, c, "/");
     hud_num(0, c + 1, S.maxarmor);
 
-    hud_text(1, 0, wpn_name[S.weapon]);
+    hud_text(1, 0, gtext(TX_WPN_0 + S.weapon));   /* (the game's texts: the weapon's name) */
     if (wpn_use[S.weapon]) {            /* (a weapon that uses ammunition) */
         hud_text(1, 14, "AMMO");
         hud_num(1, 19, S.ammo[wpn_ammo[S.weapon]]);
@@ -55,7 +55,7 @@ VB_HUD = '''    hud_text(0, 0, "HEALTH");
     hud_text(2, c, "/");
     hud_num(2, c + 1, G16(S.nextxp));
 
-    hud_text(3, 0, "CREDITS");
+    hud_text(3, 0, gtext(TX_CREDITS_WORD));
     hud_num(3, 8, G16(S.credits));
     hud_text(3, 13, "KEYS");
     if (S.keys & 1) hud_text(3, 18, "G");  /* (key bits: green, yellow, blue, red) */

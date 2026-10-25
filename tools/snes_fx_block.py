@@ -28,8 +28,8 @@ DROP = {"pvs_index", "pvs", "vis_index", "vis"}   # (the entries emptied)
 def trim(src):
     """the block src (a path or bytes) rebuilt without the DROP tables: the
     header and map records first, then the weapons, the texture and sprite
-    banks, each map's pack and entries; every offset in the header and
-    records rewritten (the header's reserved zeros at 24 kept)"""
+    banks, each map's pack and entries, the texts table; every offset in
+    the header and records rewritten"""
     b = Block(src)
     raw = b.b
     n = b.n_maps
@@ -62,6 +62,8 @@ def trim(src):
             data = b"" if name in DROP else m.raw[name]
             struct.pack_into(">II", out, po + 32 + 8 * k, add(data), len(data))
         struct.pack_into(">I", out, 32 + 32 * i, po)
+    # the texts table (the game's texts), last as in the Mega Drive's block
+    struct.pack_into(">II", out, 24, add(raw[b.texts:b.texts + b.texts_size]), b.texts_size)
     while len(out) % 4:
         out.append(0)
     struct.pack_into(">I", out, 20, len(out))            # (header: the block's size)

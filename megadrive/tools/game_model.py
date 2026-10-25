@@ -6,8 +6,8 @@
 # option) any later version, with NO WARRANTY: see the LICENSE file.
 
 """
-Reference model of Doom RPG's game rules for Sector 1, in plain Python.
-(It began with Sector 1; `Campaign` at the end now plays every map.)
+Reference model of Doom RPG's game rules for level01, in plain Python.
+(It began with level01; `Campaign` at the end now plays every map.)
 
 This is the spec the game rules in the ROM implement (here, the 68000
 assembler of src/rules.s; the file is shared with the Master System
@@ -42,8 +42,11 @@ a translation of their code. Port decisions (things the SMS version does
 differently on purpose) are marked "PORT:".
 """
 import json
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))   # (the repository's tools)
+import game_text  # noqa: E402  (the game's texts, read from the jar)
 from game_rules import (WEAPONS, MONSTERS, weapon_damage_mult, PLAYER_START, CAMPAIGN_START, EVF_USE, EVF_MODIFY,
                         EVF_MOVE, FACING_FLAG, LEAVE_FLAG, ARRIVE_FLAG, MASK_PLAYER_MOVE,
                         MASK_MONSTER_MOVE, MASK_SHOT, MASK_SHOW_KILL, MASK_RAISE_FREE, W_RAISE)
@@ -54,6 +57,20 @@ from game_rules import (WEAPONS, MONSTERS, weapon_damage_mult, PLAYER_START, CAM
 PORTAL_CELL = (16, 14)
 PORTAL_SPAWN_X, PORTAL_SPAWN_Z = (16, 15, 17), 15
 DIRS = [(0, -1), (1, 0), (0, 1), (-1, 0)]          # facing 0=N 1=E 2=S 3=W
+
+# the game's texts the model says (its messages), read from the jar's files
+# that the build unpacked (assets/jar) when first needed
+JAR = Path(__file__).resolve().parent.parent / "assets" / "jar"
+_texts = None
+
+
+def T(name):
+    """The game's text `name` (tools/game_text.py's TEXTS or MODEL_ONLY), as
+    the phone game writes it."""
+    global _texts
+    if _texts is None:
+        _texts = game_text.model_texts(game_text.load(JAR))
+    return _texts[name]
 ET_LINE, ET_ENEMY, ET_HUMAN, ET_PICKUP, ET_INV, ET_WEAPON, ET_AMMO = 0, 1, 2, 3, 4, 5, 6
 ET_PLAYERMARK, ET_WALLMARK, ET_FIRE, ET_FIRE2, ET_DESTRUCT, ET_AMMO2 = 8, 9, 10, 11, 12, 16
 
@@ -260,7 +277,7 @@ CARRY = ("level", "xp", "nextxp", "credits", "weapons", "weapon", "ammo", "inven
 class World:
     """One map in play. `carry` is the World of the map before (the player and
     the random numbers go on), `spawn` an (x, z, facing) other than the map's
-    own; `start` the player a new game starts with.
+    own; `start` the player a fresh game starts with.
 
     The map is a 32 x 32 grid of cells (x east, z south; index z*32 + x).
     State the ROM must match byte for byte (see md_lockstep.py):
@@ -331,10 +348,10 @@ class World:
         self.ceil_rgb = tuple(g["ceiling_rgb"])
         self.berserk = 0              # berserker turns left
         self.store = None             # the vendor (0..3) while its menu is open
-        self.change = None            # CHANGEMAP's argument, until the exit door opens
+        self.change = None            # CHANGEMAP's argument, until the exit opens
         self.exit = None              # ... then: where to go (the Campaign moves on)
         self.secret_turn = False      # a secret wall found this action (+5 XP once)
-        self.single_map = single_map  # Sector 1 on its own (the exit ends the game)
+        self.single_map = single_map  # level01 on its own (the exit ends the game)
 
         # entities: list of dicts; ents beyond the map's are 8 drop slots
         self.ents = []
@@ -494,17 +511,17 @@ class World:
         before = self.p.hp
         self.p.hp = max(0, min(self.p.hp + n, self.p.maxhp))
         if self.p.hp > before:
-            self.say(f"Gained {self.p.hp - before} health")
+            self.say(f"{T('GAINED')}{self.p.hp - before}{T('HEALTH_GAINED')}")
 
     def add_armor(self, n):
         """Adds n armour, up to maxarmor; reports a gain."""
         before = self.p.armor
         self.p.armor = min(self.p.armor + n, self.p.maxarmor)
         if self.p.armor > before:
-            self.say(f"Gained {self.p.armor - before} armor")
+            self.say(f"{T('GAINED')}{self.p.armor - before}{T('ARMOR_GAINED')}")
 
     def add_ammo(self, t, n):
-        """Adds n of ammo type t (AMMO_NAMES index), up to 99.
+        """Adds n of ammo type t (0..5: halon, bullets, shells, rockets, cells, the dog), up to 99.
         Returns False (and adds nothing) if that ammo was already at 99.
         """
         if self.ammo[t] == 99:
@@ -514,7 +531,7 @@ class World:
 
     def add_xp(self, n):
         """Gives n XP; every time xp reaches nextxp the player levels up (xp carries over)."""
-        self.say(f"Gained {n} XP!")
+        self.say(f"{T('GAINED')}{n}{T('XP_GAINED')}")
         self.xp += n
         while self.xp >= self.nextxp:
             self.xp -= self.nextxp
@@ -541,7 +558,7 @@ class World:
             if v + n > 99:
                 n = 99 - v
             setattr(c, attr, v + n)
-        self.say(f"Level up! Level {self.level}")
+        self.say(f"{T('LEVEL_UP')}{self.level}")
 
     def player_pain(self, dmg, arm):
         """Player_pain: the player takes `dmg` health and `arm` armour damage.
@@ -555,13 +572,13 @@ class World:
             return
         if self.weapon in (9, 10, 11) and self.ammo[5] > 0:      # the dog takes it all
             self.ammo[5] = max(0, self.ammo[5] - (dmg + arm))
-            self.say(f"Dog took {dmg + arm} damage!")
+            self.say(f"{T('DOG_TOOK')}{dmg + arm}{T('DAMAGE')}")
             if self.ammo[5] == 0:
                 self.weapons &= ~0xE00
                 self.select_next_weapon()
-                self.say("Dog died!")
+                self.say(T("DOG_DIED"))
             return
-        self.say(f"{dmg + arm} damage!")
+        self.say(f"{dmg + arm}{T('DAMAGE')}")
         if dmg + arm:
             a = self.p.armor
             if a < arm:
@@ -574,11 +591,11 @@ class World:
             h2 = ((self.p.hp - dmg) << 16) // (self.p.maxhp << 8)
             if h2 > 0:
                 if h1 > 26 >= h2:
-                    self.say("Near Death!")
+                    self.say(T("NEAR_DEATH"))
                 elif h1 > 78 >= h2:
-                    self.say("Low Health!")
+                    self.say(T("LOW_HEALTH"))
                 elif a > 0 and self.p.armor == 0:
-                    self.say("Armor Gone!")
+                    self.say(T("ARMOR_GONE"))
             self.p.hp = max(0, self.p.hp - dmg)
             if self.p.hp <= 0:
                 self.dead = True
@@ -637,7 +654,7 @@ class World:
         grid, leaves a corpse (unless `overkill` or it explodes), may drop an
         item (spawn_drop), and runs the special deaths: the Cyberdemon opens
         the Reactor's exit and turns on god mode, Kronos runs a fixed event,
-        a Pain Elemental class (eSub 7) releases its two lost souls.
+        a monster of class 7 (eSub 7) releases its two lost souls.
         """
         e = self.ents[i]
         if not e["flags"] & F_ALIVE:
@@ -658,7 +675,7 @@ class World:
         elif es == 13:                        # Kronos (Game_executeTile(1984, 0): no event
             self.run_tile(31, 0, EVF_USE)      # there in the maps we have)
         if es == 7 and not e["flags"] & F_HIDDEN and "spawns" in self.g["entities"][i]:
-            # Beholder / Rahovart / Pain Elemental: the next two map things (lost
+            # Beholder / Rahovart class: the next two map things (lost
             # souls) appear, on its cell and beside it (once: F_HIDDEN marks it)
             e["flags"] |= F_HIDDEN
             s1, s2 = self.g["entities"][i]["spawns"]
@@ -675,8 +692,8 @@ class World:
 
     def cell_taken(self, x, z):
         """Game_findMapEntityXYFlag(x, z, 0xFF87) != NULL; PORT: walls and
-        cells off the map count as taken too (the original could put a lost
-        soul inside a wall).
+        cells off the map count as taken too (the original could put one of the lost
+        souls inside a wall).
         """
         if not (0 <= x < 32 and 0 <= z < 32) or self.wall[z * 32 + x]:
             return True
@@ -946,7 +963,7 @@ class World:
                 e = self.ents[j]
                 e["x"], e["z"] = cx, PORTAL_SPAWN_Z
                 self.portal_mon = j
-                self.say(f"Portal spawns {self.edef(e)['name']}!")
+                self.say(T("PORTAL_SPAWNS") + self.edef(e)["name"] + T("PORTAL_END"))
                 break
         self.portal_cnt = 1 + (self.rng.byte() & 3)
 
@@ -982,19 +999,19 @@ class World:
             return
         d = self.edef(e)
         if target and target[0] == "raise":
-            self.say(f"{d['name']} casts raise")
+            self.say(d["name"] + T("CASTS_RAISE"))
             j = target[1]
             c = self.ents[j]
             if not self.blocked(c["x"], c["z"], c["x"], c["z"], MASK_RAISE_FREE):
                 c["flags"] = (c["flags"] & ~(F_CORPSE | F_RAISING)) | F_ALIVE | F_LINKED
                 c["c"].hp, c["c"].armor = c["c"].maxhp, c["c"].maxarmor
                 self.activate(j)
-                self.say(f"{self.edef(c)['name']} is revived!")
+                self.say(self.edef(c)["name"] + T("REVIVED"))
             else:
                 c["flags"] &= ~F_RAISING
-                self.say("Raise failed!")
+                self.say(T("RAISE_FAILED"))
             return
-        self.say(f"{d['name']} attacks")
+        self.say(d["name"] + T("ATTACKS"))
         w = self.attack_weapon(e)
         shots = MONSTERS[d["eSub"]][2]
         tot = tarm = 0
@@ -1012,7 +1029,7 @@ class World:
                 tot += 1
         if target is None:
             if tot + tarm == 0:
-                self.say("Dodged!")
+                self.say(T("DODGED"))
             else:
                 self.player_pain(tot, tarm)
         else:
@@ -1020,11 +1037,11 @@ class World:
 
     # -------------------------------------------------- destruction
     def destroy(self, j):
-        """Destroys object entity j (a fire, a barrel, a crate, a power coupling).
+        """Destroys object entity j (a fire, a barrel, a crate, a coupling).
 
         eSub 1 (barrel) explodes; eSub 2 (crate) rolls one rng byte for its
         contents (a trap explosion, credits, armour, health or ammo: the crate
-        becomes that pickup); eSub 4 (power coupling): the second one closes
+        becomes that pickup); eSub 4 (coupling): the second one closes
         the Reactor's portal. Pending explosions then run.
         """
         e = self.ents[j]
@@ -1033,7 +1050,7 @@ class World:
             return
         e["flags"] &= ~(F_ALIVE | F_LINKED)
         if d["eType"] == ET_FIRE:
-            self.say("Fire cleared!")
+            self.say(T("FIRE_CLEARED"))
             self.add_xp(2)
         elif d["eType"] == ET_DESTRUCT and d["eSub"] == 1:
             self.pending_explosions.append((e["x"], e["z"]))
@@ -1041,7 +1058,7 @@ class World:
             r = self.rng.byte()
             dt = None
             if r < 2:
-                self.say("Trapped!")
+                self.say(T("TRAPPED"))
                 self.pending_explosions.append((e["x"], e["z"]))
             elif r < 4:
                 dt = (3, 23)
@@ -1058,7 +1075,7 @@ class World:
                 if di is not None:
                     e["def"] = di
                     e["flags"] = F_LINKED
-        elif d["eType"] == ET_DESTRUCT and d["eSub"] == 4:     # a power coupling
+        elif d["eType"] == ET_DESTRUCT and d["eSub"] == 4:     # a coupling
             self.couplings += 1
             if self.couplings == 2:           # the portal closes (its line's event)
                 self.portal = False
@@ -1107,7 +1124,7 @@ class World:
             if d["eType"] == ET_ENEMY:
                 self.monster_pain(j, dmg, arm)
                 if e["c"].hp <= 0:
-                    self.say(f"{d['name']} died!")
+                    self.say(d["name"] + T("DIED"))
                     self.monster_died(j)
             elif d["eType"] != ET_FIRE and not (d["eType"] == ET_DESTRUCT and d["eSub"] in (3, 4)):
                 self.destroy(j)
@@ -1129,7 +1146,7 @@ class World:
 
         Traces up to 8 cells ahead with MASK_SHOT. Returns ("ent", i) or
         ("line", i) for the first thing the current weapon can hit, or None:
-        a jammed door (destructible line) only with the axe, a destructible
+        a jammed-shut door (destructible line) only with the axe, a destructible
         whose parm bit for the weapon is set, a fire only with the
         extinguisher (weapon 1), any monster; a monster standing in an open
         doorway line is also found. Walls, props and people stop the search.
@@ -1185,7 +1202,7 @@ class World:
         if self.disabled_weapons and not self.weapons & (1 << w):
             return False                        # Player_fireWeapon: weapons put away
         if wi[6] > 0 and self.ammo[wi[5]] < wi[6]:
-            self.say("Not enough ammo!")
+            self.say(T("NO_AMMO"))
             return False
         self.ammo[wi[5]] -= wi[6]
         kind, j = target
@@ -1216,14 +1233,14 @@ class World:
             e = self.ents[j]
             d = self.edef(e)
             if tot + tarm == 0:
-                self.say("Missed!" if w != 1 else "No effect!")
+                self.say(T("MISSED") if w != 1 else T("NO_EFFECT"))
             else:
                 c = e["c"]
                 over = tiles == 1 and (c.hp + c.armor - tot - tarm) <= -(((c.maxhp << 16) // 637) >> 8)  # overkill: below -maxhp*256/637 (about 40%)
-                self.say(("Crit! " if crit else "") + f"{tot + tarm} damage!")
+                self.say((T("CRIT") if crit else "") + f"{tot + tarm}{T('DAMAGE')}")
                 self.monster_pain(j, tot, tarm)
                 if c.hp <= 0:
-                    self.say(f"{d['name']} died!")
+                    self.say(d["name"] + T("DIED"))
                     self.monster_died(j, overkill=over)
         else:
             if hit:
@@ -1232,16 +1249,16 @@ class World:
                 else:
                     self.destroy(j)
             elif w == 1:
-                self.say("No effect!")
+                self.say(T("NO_EFFECT"))
             else:
-                self.say("Missed!")
+                self.say(T("MISSED"))
         return True
 
     def calc_hit_object(self, target, tiles):
         """Whether a shot at an object hits (returns 1) or not (0). Rolls
         calc_hit against a dummy with agility = 80% of the player's accuracy
         (one rng byte), then the weapon must suit the object: the axe for a
-        jammed door, the extinguisher only for fires, anything else for the rest.
+        jammed-shut door, the extinguisher only for fires, anything else for the rest.
         """
         dummy = Combatant(0, 0, 1, 1, 1, 1)
         dummy.agility = (self.p.accuracy << 8) * 204 >> 16
@@ -1256,11 +1273,11 @@ class World:
         return 0 if self.weapon == 1 else 1
 
     def line_destroyed(self, li):
-        """A jammed door (line li) is chopped down: it opens for good, +1 XP, and its cell's event runs as if used."""
+        """A jammed-shut door (line li) is chopped down: it opens for good, +1 XP, and its cell's event runs as if used."""
         l = self.lines[li]
         l["alive"] = False
         l["open"] = True                    # the line entity is removed either way
-        self.say("Door cleared!")
+        self.say(T("DOOR_CLEARED"))
         self.add_xp(1)
         self.run_tile(l["x"], l["z"], EVF_USE)
 
@@ -1290,31 +1307,31 @@ class World:
                 self.credits += parm
             elif es == 21:
                 if self.p.armor >= self.p.maxarmor:
-                    self.say("Armor at maximum")
+                    self.say(T("ARMOR_MAX"))
                     return
                 self.add_armor(parm)
             elif es == 20:
                 if self.p.hp >= self.p.maxhp:
-                    self.say("Health at maximum")
+                    self.say(T("HEALTH_MAX"))
                     return
                 self.add_health(parm)
             elif es == 24:
                 self.keys |= 1 << parm  # key bits: 1 green, 2 yellow, 4 blue, 8 red
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et == ET_INV:
-            k = es - 25  # inventory slot: 0 small medkit, 1 large, 2 soul sphere, 3 berserker, 4 dog collar
+            k = es - 25  # inventory slot: 0 small medkit, 1 large, 2 soulsphere, 3 berserker, 4 collar
             if self.inventory[k] == 99:
-                self.say(f"Can't hold more {d['name']}s")
+                self.say(T("HOLD_MORE") + d["name"] + T("HOLD_MORE_END"))
                 return
             self.inventory[k] = min(99, self.inventory[k] + 1)
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et in (ET_AMMO, ET_AMMO2):
             if not self.add_ammo(es, parm):
-                self.say("Ammo at maximum")
+                self.say(T("AMMO_MAX"))
                 return
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et == ET_WEAPON:
             new = not (self.weapons | self.disabled_weapons) & (1 << es)
@@ -1323,14 +1340,14 @@ class World:
             self.weapons |= 1 << es
             if WEAPONS[es][6]:
                 self.add_ammo(WEAPONS[es][5], parm)
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et == ET_FIRE:
             self.player_pain(1, 2)
-            self.say("It burns!")
+            self.say(T("BURNS"))
         elif et == ET_FIRE2:
             self.player_pain(10, 10)
-            self.say("It really burns!!")
+            self.say(T("BURNS_MORE"))
 
     def end_player_turn(self):
         """Game_advanceTurn only flags the monsters' turn; it runs once no
@@ -1342,7 +1359,7 @@ class World:
         if self.berserk:
             self.berserk -= 1
             if not self.berserk:
-                self.say("Berserker expired!")
+                self.say(T("BERSERK_OFF"))
         self.monsters_pending = True
         self.settle()
 
@@ -1395,7 +1412,7 @@ class World:
         """Player action: "use" the cell ahead. Its event runs first (0x500 =
         EVF_USE | EVF_MOVE); if nothing ran, attacks select_target's target.
         A turn passes unless the event opened something modal (skip_turn) or
-        there was nothing to use.
+        there was nothing it could act on.
         """
         self.secret_turn = False
         fx, fz = DIRS[self.facing]
@@ -1407,7 +1424,7 @@ class World:
             return
         t = self.select_target()
         if t is None:
-            self.say("Nothing to use")
+            self.say(T("NOTHING"))
             return
         if self.player_attack(t):
             self.touch_tile(False)
@@ -1416,7 +1433,7 @@ class World:
     def pass_turn(self):
         """Player action: do nothing; the monsters take their turn."""
         self.secret_turn = False
-        self.say("Turn passed.")
+        self.say(T("TURN_PASSED"))
         self.touch_tile(False)
         self.end_player_turn()
 
@@ -1456,11 +1473,11 @@ class World:
 
     # items ----------------------------------------------------------
     def use_item(self, k):
-        """Player_useItem for the Berserker (3) and the Dog Collar (4); the
-        medkits and the soul sphere go through use_health_item.
+        """Player_useItem for the Berserker (3) and the collar (4); the
+        medkits and the soulsphere go through use_health_item.
 
         k: inventory slot. The Berserker gives 31 turns of triple damage. The
-        Dog Collar must be used on a dog (class 1) right in front: the dog
+        collar must be used on a dog (class 1) right in front: the dog
         becomes a weapon (9..11 by its variant) whose "ammo" (type 5) is its
         health x5. Returns True if the item was used.
         """
@@ -1469,7 +1486,7 @@ class World:
             self.say("You have none")
             return False
         if k == 3:
-            self.say("Berserker activated!")
+            self.say(T("BERSERK_ON"))
             self.berserk += 31
             self.inventory[k] -= 1
             self.end_player_turn()
@@ -1479,16 +1496,16 @@ class World:
             tr = [t for t in self.trace(self.x, self.z, self.x + fx, self.z + fz, MASK_SHOT)
                   if t != "wall" and t != "player" and t[0] in ("ent", "line")]
             if not tr:
-                self.say("No dog within range")
+                self.say(T("NO_DOG"))
                 return False
             if tr[0][0] != "ent" or self.etype(self.ents[tr[0][1]]) != ET_ENEMY:
-                self.say("Bad target for Dog Collar")
+                self.say(T("BAD_TARGET"))
                 return False
             j = tr[0][1]
             e = self.ents[j]
             d = self.edef(e)
             if d["eSub"] != 1:
-                self.say(f"Dog Collar won't fit {d['name']}")
+                self.say(T("WONT_FIT") + d["name"])
                 return False
             self.inventory[k] -= 1
             self.deactivate(j)                       # the dog leaves the map...
@@ -1497,14 +1514,14 @@ class World:
             self.weapons |= 1 << w                   # ... and fights for you
             self.weapon = w
             self.ammo[5] = min(99, (e["c"].hp * 5) & 0xFF)
-            self.dialog = f"You captured|the {d['name']}!|"
+            self.dialog = game_text.fmt(T("CAPTURED_FULL"), d["name"])
             self.pending = None
             self.skip_turn = True
             self.monsters_pending = True             # the turn passes when the dialog closes
             if self.berserk:
                 self.berserk -= 1
                 if not self.berserk:
-                    self.say("Berserker expired!")
+                    self.say(T("BERSERK_OFF"))
             return True
         return False
 
@@ -1550,16 +1567,16 @@ class World:
 
     def use_health_item(self):
         """PORT: no inventory menu - button 2 + Up uses the smallest medkit you
-        carry (Sm Medkit, else Lg Medkit, else Soul Sphere).
+        carry (a small medkit, else a large one, else soulsphere).
 
-        A soul sphere gives up to 200 health and 200 armour (capped at the
+        A soulsphere gives up to 200 health and 200 armour (capped at the
         maximums). Returns True and ends the turn if one was used. (The string
         after the first line of this method repeats this; it is not a
         docstring, since it is not the first statement.)
         """
         self.secret_turn = False
         """PORT: no inventory menu - button 2 + Up uses the smallest medkit you
-        carry (Sm Medkit, else Lg Medkit, else Soul Sphere)."""
+        carry (a small medkit, else a large one, else soulsphere)."""
         for k, es in ((0, 25), (1, 26), (2, 27)):
             if self.inventory[k]:
                 d = next(dd for dd in self.defs if (dd["eType"], dd["eSub"]) == (4, es))
@@ -1655,7 +1672,7 @@ class World:
         if op == 1:                       # GOTO x, z, angle
             self.x, self.z = a1 & 0xFF, (a1 >> 8) & 0xFF
             self.facing = {64: 0, 0: 1, 192: 2, 128: 3}.get((a1 >> 16) & 0xFF, self.facing)  # angle 0..255: 64 north, 0 east, 192 south, 128 west
-        elif op == 2:                     # CHANGEMAP: when the exit door opens
+        elif op == 2:                     # CHANGEMAP: when the exit opens
             if self.single_map:           # the one-sector game: the stats exit ends it
                 if c["a1"] & 0x80000000:  # bit 31: the exit that completes the sector
                     self.level_done = True
@@ -1671,7 +1688,7 @@ class World:
         elif op == 4:  # MESSAGE
             self.say(s[a1])
         elif op == 5:  # PAIN
-            self.say("Pain!")
+            self.say(T("PAIN"))
             self.player_pain(a1, 0)
         elif op == 7:                     # SHOW
             if a1 == 0xFFFF:              # (a thing that is only drawn)
@@ -1742,9 +1759,9 @@ class World:
             l["open"] = not l["open"]
             if not l["flags"] & 4 and not self.secret_turn:   # a sliding wall: a secret
                 self.secret_turn = True
-                self.say("Found Secret!")
+                self.say(T("SECRET"))
                 self.add_xp(5)
-            if l["open"] and l["tex"] == 7 and self.change is not None:   # the exit door
+            if l["open"] and l["tex"] == 7 and self.change is not None:   # the exit
                 self.exit = self.change
         elif op == 18:                    # HIDE (props too: their blocking goes)
             for j in self.entities_at(a1 & 0xFF, (a1 >> 8) & 0xFF):
@@ -1767,8 +1784,7 @@ class World:
             stat, need = a1 & 0xFF, (a1 >> 8) & 0xFF
             have = [self.p.hp, self.p.armor, self.credits, self.xp][stat]
             if have < need:
-                self.say(["Insufficient health!", "Insufficient armor!", "Insufficient funds!",
-                          "Insufficient XP!"][stat])
+                self.say(T(["LOW_HP", "LOW_ARMOR", "LOW_FUNDS", "LOW_XP"][stat]))
                 self.suspend = "stop"
                 txt = s[a1 >> 16]
                 if txt:
@@ -1793,7 +1809,7 @@ class World:
         elif op == 41:                    # CHECK_KEY
             need = {0: 1, 1: 2, 2: 4, 3: 8}[a1]  # key number -> key bit
             if not self.keys & need:
-                self.say(["Need Green Key", "Need Yellow Key", "Need Blue Key", "Need Red Key"][a1])
+                self.say(T(["NEED_GREEN", "NEED_YELLOW", "NEED_BLUE", "NEED_RED"][a1]))
                 self.suspend = "stop"
                 return True
             return False
@@ -1822,9 +1838,9 @@ class World:
             self.password = None
             if password != want:
                 if password:
-                    self.say("Invalid code!")
+                    self.say(T("CODE_BAD"))
                 return
-            self.say("Correct code!")
+            self.say(T("CODE_GOOD"))
             self.run_event(ev, k + 1, flags)
         self.settle()
 
@@ -1841,24 +1857,24 @@ STORES = [
      (10, 8), (12, -1), (13, 8), (14, 8), (15, 10), (16, 10)],
 ]
 # name tag -> (name, kind 1 item / 2 ammo / 3 stat, what)
-STORE_ITEMS = {2: ("Sm Medkit", 1, 25), 3: ("Lg Medkit", 1, 26), 4: ("Soul Sphere", 1, 27),
-               5: ("Berserker", 1, 28), 7: ("10x Hal. Cans", 2, 0), 8: ("10x Bullets", 2, 1),
-               9: ("10x Shells", 2, 2), 10: ("10x Cells", 2, 4), 11: ("3x Rockets", 2, 3),
-               13: ("+1 Accuracy", 3, 4), 14: ("+1 Agility", 3, 2), 15: ("+1 Strength", 3, 3),
-               16: ("+1 Defense", 3, 1)}
+STORE_ITEMS = {2: ("STORE_2", 1, 25), 3: ("STORE_3", 1, 26), 4: ("STORE_4", 1, 27),
+               5: ("STORE_5", 1, 28), 7: ("STORE_7", 2, 0), 8: ("STORE_8", 2, 1),
+               9: ("STORE_9", 2, 2), 10: ("STORE_10", 2, 4), 11: ("STORE_11", 2, 3),
+               13: ("STORE_13", 3, 4), 14: ("STORE_14", 3, 2), 15: ("STORE_15", 3, 3),
+               16: ("STORE_16", 3, 1)}
 
 
 class Campaign:
     """The whole game: the maps of analysis/campaign.json in turn. `world` is
     the map in play; after every player action call `advance()`, which moves
-    to the next map once an exit door has opened (Game_changeMap).
+    to the next map once an exit has opened (Game_changeMap).
 
     `info` is the campaign's map list ({"name", "id", "title", ...}),
     `data` caches each map's game data, `index` is the map in play.
     """
 
     def __init__(self, root=Path(__file__).resolve().parent.parent / "analysis", seed=0x1234, start_map=0):
-        """Loads the map list from `root` (the analysis directory) and starts a new game on map `start_map`."""
+        """Loads the map list from `root` (the analysis directory) and starts a fresh game on map `start_map`."""
         self.root = Path(root)
         self.info = json.loads((self.root / "campaign.json").read_text())["maps"]
         self.data = {}
@@ -1915,7 +1931,7 @@ class Campaign:
 
 
 def load(path=Path(__file__).resolve().parent.parent / "analysis" / "gamedata.json", seed=0x1234):
-    """The old single-map game (Sector 1) from analysis/gamedata.json, as a World."""
+    """The old single-map game (level01) from analysis/gamedata.json, as a World."""
     return World(json.loads(Path(path).read_text()), seed)
 
 

@@ -28,7 +28,7 @@ The maps share the wall textures and sprites. If you change a drawing that other
 
 **Another level from the original game.** **File > Import a level from the original game** lists every map in your `DoomRPG.jar` and says whether each fits. It converts the one you choose (map, things, scripts, texts and art) in place of the map you're editing, which keeps its place in the project. **File > Export map to folder** / **Import map from folder** write the map as plain files (below) and read them back, to change the pictures in another paint program.
 
-On the Master System the UAC Base, Sector 1, Sector 2, the Junctions and the Reactor fit by their counts (the Limits tab says what a map needs). Very big open areas can still be too much to see at once, and the build says so. The other consoles hold every map. A few script commands only the phone game had are listed and are skipped by the consoles.
+On the Master System the UAC Base, the first two sectors (level01, level02), the Junctions and the Reactor fit by their counts (the Limits tab says what a map needs). Very big open areas can still be too much to see at once, and the build says so. The other consoles hold every map. A few script commands only the phone game had are listed and are skipped by the consoles.
 
 The program is `Deimos Editor` (`Deimos Editor.exe` on Windows); given arguments starting `--`, it is the command-line tool (below). `deimos-editor-cli`, the same tool without a window, is built alongside it in `cmake-build/` for scripts and tests.
 
@@ -113,7 +113,7 @@ deimos-editor-cli --new-rom DoomRPG.jar md deimos.md       # the whole game for 
 deimos-editor-cli --new-project DoomRPG.jar game.deimos   # a project of the whole game
 deimos-editor-cli --new-project DoomRPG.jar level01 mine.deimos   # a project of one map (or several, in order)
 deimos-editor-cli --make-rom DoomRPG.jar game.deimos gba deimos.gba   # a ROM of the project's maps
-deimos-editor-cli --make-rom DoomRPG.jar game.deimos sms deimos.sms --map 2   # the Master System: one map (here Sector 1)
+deimos-editor-cli --make-rom DoomRPG.jar game.deimos sms deimos.sms --map 2   # the Master System: one map (here level01)
 deimos-editor-cli --project-maps game.deimos              # the project's maps, numbered
 deimos-editor-cli --selftest game.deimos                  # saving and opening it changes nothing
 deimos-editor-cli --export game.deimos mylevel/ --map 2   # a map as project.json + PNGs, to keep in git
@@ -129,7 +129,7 @@ For the tests there are also `--demo-map PROJECT OUT [JSON]` (a small map made w
 
 A ROM made with `--new-rom` is **byte-for-byte identical** to the one the console's own build makes, and `--make-rom` of a project of the same maps gives the same bytes again. The editor's builders and its makers of the status bar, fonts, title screens, music and sounds are exact ports of the builds' tools. They use plain integer arithmetic where it matters, which gives the same answer on every computer, Windows included.
 
-`engines/` holds the consoles' game code without anything of the original game (each port's `tools/make_engine.py` and `../tools/snes_make_engine.py` make them: the parts made from the jar are blanked and listed).
+`engines/` holds the consoles' game code without anything of the original game (each port's `tools/make_engine.py` and `../tools/snes_make_engine.py` make them: the parts made from the jar are blanked and listed). Not even the game's own words are in the code: the messages, the menus' and the vendor's words, the weapons' names and the maps' titles are made from the jar's string tables when a ROM is made (`src/gametext.cpp`, the same recipes as `../tools/game_text.py`), into the campaign block's texts table (the Master System's bank 2, `$8000`).
 
 **The project file** (`.deimos`, `src/projectfile.h`): `"DEIMPRJ1"`, its size and a list of entries, each a name and its zlib-packed data: `campaign.json` (the maps, in play order: their names, titles and the original game's map ids), `map/<name>.json` (each map's level, as in an exported `project.json`) and `shape/<key>` (every drawing the maps use, once: 64 x 64 colour numbers).
 
@@ -169,6 +169,8 @@ src/sms_build.*         Master System builder  src/sms_model.cpp  the Master Sys
 src/md_build.*          the campaign block (every other console)  src/render.*  true-colour view (previews)
 src/colour.*            colour maths (same results as tools/colour_lab.py)
 src/jar.*               reading the original game (DoomRPG.jar): maps, entity types, texts, art
+src/gametext.*          the game's own texts the consoles' code shows (messages, menus, weapons, maps' titles), from the jar
+src/keytext.*           the phone's keys in the texts, as the consoles' buttons
 src/levelblob.*         level/strings blobs    src/zx0.*  ZX0 decompression (the engines)    src/settings.*  the .ini file
 third_party/            Dear ImGui (MIT), nlohmann/json (MIT), stb_image and stb_image_write (public domain)
 ```

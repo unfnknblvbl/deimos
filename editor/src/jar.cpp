@@ -14,6 +14,7 @@
 // function names in comments, such as Game_loadMapEntities, are those of
 // the decompiled game).
 #include "jar.h"
+#include "gametext.h"
 
 #include "../third_party/stb/stb_image.h"   // its zlib decoder (implementation in projectio.cpp)
 
@@ -109,30 +110,22 @@ std::vector<std::string> Jar::maps() const
     return out;
 }
 
-std::string Jar::short_title(const std::string &m)
+// see jar.h: the game's name for the map (tools/game_text.py MAP_TITLE),
+// else its file name
+std::string Jar::short_title(const std::string &m) const
 {
-    // tools/gamedata.py MAP_TITLES: the names the games show
-    // ("level0N" -> "Sector N"; other unknown names come back as they are)
-    if (m.size() == 7 && m.rfind("level0", 0) == 0) return "Sector " + m.substr(6);
-    if (m == "intro") return "UAC Base";
-    if (m == "junction" || m == "junction_destroyed") return "Junction";
-    if (m == "reactor") return "Reactor";
-    if (m == "endgame") return "Ending";
-    if (m == "items") return "Items";
-    return m;
+    std::string t = gametext::map_title(*this, m);
+    return t.empty() ? m : t;
 }
 
-// the longer name for the editor's lists (see jar.h)
-std::string Jar::map_title(const std::string &m)
+// see jar.h: the short title, with what the editor's lists add
+std::string Jar::map_title(const std::string &m) const
 {
-    if (m.size() == 7 && m.rfind("level", 0) == 0) return "Sector " + std::to_string(std::stoi(m.substr(5)));
-    if (m == "intro") return "UAC Base (the start of the game)";
-    if (m == "junction") return "Junction";
-    if (m == "junction_destroyed") return "Junction (destroyed)";
-    if (m == "reactor") return "Reactor";
-    if (m == "endgame") return "Ending";
-    if (m == "items") return "Items (test map)";
-    return m;
+    std::string t = short_title(m);
+    if (m == "intro") return t + " (the start of the game)";
+    if (m == "junction_destroyed") return t + " (destroyed)";
+    if (m == "items") return t + " (test map)";
+    return t;
 }
 
 // ---------------------------------------------------------------- the art (JarArt)
@@ -393,7 +386,7 @@ bool import_art(const Jar &jar, Project &p, std::string &err)
             // tiles from 305 up are wall textures used as props or wall decals (flag 0x40000)
             if (t >= 305) r.shape = art.wall_slot(JarArt::resolve(art.wall_resolve, t - 305), d, r.pal);
             else if (t >= 82 && t <= 90 && t % 2 == 0) {
-                // an ammo pack (Halon Cans, Bullet Clips, ...): no picture of
+                // an ammo pack (halon, bullets, ...): no picture of
                 // its own (its sprite id is the axe's); the original draws
                 // the single item, t - 1, four times round the spot, so here:
                 // three copies side by side, 16 columns apart, the middle
@@ -534,7 +527,7 @@ bool import_map(const Jar &jar, const std::string &map, Project &p, std::string 
             by_type[{all[i].eType, all[i].eSub}] = (int)i;
         }
         Project q;
-        q.name = Jar::short_title(map);
+        q.name = jar.short_title(map);
         q.floor = {h[0], h[1], h[2]};
         q.ceiling = {h[3], h[4], h[5]};
         int map_id = h[9];   // 1 = the UAC Base

@@ -183,7 +183,7 @@ def main():
     try:
         g.run(120)                                  # the title
         g.wait_idle()
-        g.press("start")                            # -> the menu: NEW GAME (no saved game)
+        g.press("start")                            # -> the menu: its first item starts a fresh game (nothing saved)
         g.press("a")
         while g.mode() != UI_PLAY:
             g.run(1)

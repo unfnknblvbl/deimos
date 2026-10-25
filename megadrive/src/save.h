@@ -10,7 +10,7 @@
  * battery-backed RAM (8 KB at $200001, odd bytes).
  *
  * src/save.c. ui.c uses it for the options screen, the title's CONTINUE,
- * the pause menu's SAVE GAME and the save made at the start of every map;
+ * the pause menu's save and the save made at the start of every map;
  * it also maps the player's actions to joypad buttons (action_bits).
  *
  * Licence: GPL-2.0-or-later.

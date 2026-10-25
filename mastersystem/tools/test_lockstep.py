@@ -20,7 +20,7 @@ Exit code 0 = all states matched.
 More options:
   --god             keep the player's HP at 200 (ROM and model) so a run
                     can reach the end of the map
-  --autopilot       autopilot.py chooses the actions (Sector 1 route)
+  --autopilot       autopilot.py chooses the actions (level01 route)
   --pilot           the generic map pilot (sms_pilot.py) chooses them
   --plan FILE       replay the actions in a pickled plan
   --render          also compare every picture with live_data.Model

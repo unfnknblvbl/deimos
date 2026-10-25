@@ -24,14 +24,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))   # (the repository's tools)
 import bsp_parser  # noqa: E402
 import gamedata  # noqa: E402
+import game_text  # noqa: E402  (the maps' titles, from the jar)
 
 # ROM order: the map index the ROM and the model use
 MAPS = ["intro", "junction", "level01", "level02", "level03", "level04", "level05", "level06", "level07",
         "junction_destroyed", "reactor"]
-TITLES = {"intro": "UAC Base", "junction": "Junction", "junction_destroyed": "Junction", "reactor": "Reactor",  # map name -> the title shown on screen (end-of-sector statistics)
-          **{f"level0{i}": f"Sector {i}" for i in range(1, 8)}}
 
 
 def main():
@@ -54,7 +54,10 @@ def main():
         bsp_json.write_text(json.dumps(level))
         g = gamedata.build(bsp_json, jar / "entities.db", jar / "entities.str", jar / f"{name}.str",
                            out / "maps", out / "maps" / f"{name}.json")
-        camp["maps"].append({"name": name, "title": TITLES[name], "id": g["map_id"]})
+        # the title shown on screen (end-of-sector statistics): the game's
+        # name for the map, from the jar's texts (tools/game_text.py)
+        title = game_text.map_title(game_text.load(jar), name) or name
+        camp["maps"].append({"name": name, "title": title, "id": g["map_id"]})
     (out / "campaign.json").write_text(json.dumps(camp, indent=1))
 
 

@@ -38,6 +38,7 @@ const int BORDER_BASE[2] = {368, 40};             // first border tile in VRAM
 const int HEADER_SIZE = 64;                       // the level header at bank 3, $8000
 const int VIEW_LIST_MAX = 96;                     // rom/render.asm r_pvs
 const int LEVEL_ADDR = 0xA000, LEVEL_MAX = 0x2000, STRINGS_MAX = 0x2000;   // (strings: bank 4, $8000-$9FFF)
+const int TEXTS_ADDR = 0x8000, TEXTS_MAX = 0x2000;   // the texts table: bank 2, $8000-$9FFF
 const int MISC_BANK = 4, SPR_DIR_SMALL = 0xB000, SPR_DIR_LARGE = 0xB800;
 const int ROM_DIR = 0x7FC0;                       // the ROM directory (bank 1)
 
@@ -882,8 +883,14 @@ bool level_data(const Project &p, LevelData &d, bool with_pvs, const BuildOption
 // see sms_build.h. rom_in must be a ROM of this port (the engine part is
 // kept). Progress: 0..72% level_data, then tables, sprites (to 90%) and
 // the header.
-bool build(Bytes &rom_in, const Project &p, const BuildOptions &opt, BuildStats &stats, std::string &err)
+bool build(Bytes &rom_in, const Project &p, const Bytes &texts, const BuildOptions &opt, BuildStats &stats,
+           std::string &err)
 {
+    if (texts.size() > (size_t)TEXTS_MAX) {
+        err = "the game's texts are too long: " + std::to_string(texts.size()) + " bytes (max " +
+              std::to_string(TEXTS_MAX) + ")";
+        return false;
+    }
     // the game's data comes from q: the level as this console builds it (its
     // own pictures, texts and palette)
     const Project q = p.for_console(opt.console);
@@ -1036,14 +1043,17 @@ bool build(Bytes &rom_in, const Project &p, const BuildOptions &opt, BuildStats 
     // ---- the ROM image: a full 4 MB map, level-owned parts cleared
     Bytes rom = rom_in;
     rom.resize((size_t)256 * BANK, 0);
-    // clear: the level blob's area in bank 2, bank 3, the strings, the two
-    // sprite directories and palettes ($B000-$BFFF of bank 4), banks 9 on
+    // clear: the texts table's and the level blob's areas in bank 2, bank
+    // 3, the strings, the two sprite directories and palettes ($B000-$BFFF
+    // of bank 4), banks 9 on
+    memset(&rom[(size_t)2 * BANK + (TEXTS_ADDR - 0x8000)], 0, TEXTS_MAX);
     memset(&rom[(size_t)2 * BANK + (LEVEL_ADDR - 0x8000)], 0, LEVEL_MAX);
     memset(&rom[(size_t)LEVEL_BANK * BANK], 0, BANK);
     memset(&rom[(size_t)MISC_BANK * BANK], 0, STRINGS_MAX);
     memset(&rom[(size_t)MISC_BANK * BANK + (SPR_DIR_SMALL - 0x8000)], 0, 0x1000);
     memset(&rom[(size_t)FIRST_DATA_BANK * BANK], 0, rom.size() - (size_t)FIRST_DATA_BANK * BANK);
     for (auto &kv : images) memcpy(&rom[(size_t)kv.first * BANK], kv.second.data(), BANK);
+    put_bytes(rom, 2, TEXTS_ADDR, texts);
     put_bytes(rom, 2, LEVEL_ADDR, level);
     put_bytes(rom, MISC_BANK, 0x8000, strings);
 

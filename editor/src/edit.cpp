@@ -33,7 +33,7 @@ bool solid(const Project &p, int x, int z) { return !in_map(x, z) || p.wall[z * 
 
 // edge endpoints, in the direction the games draw them: a one-sided wall
 // shows only its front, and the inside of the cell must be in front
-// ((A - eye) x (B - A) > 0, as in Sector 1)
+// ((A - eye) x (B - A) > 0, as in level01)
 // Inputs: cell (x, z) and an Edge. Outputs: the end points A (ax, az) and
 // B (bx, bz) in world units. Going round the cell N, E, S, W the points run
 // clockwise (as seen on the map with z pointing down).
@@ -253,7 +253,7 @@ std::string add_door(Project &p, int x, int z, DoorKind kind, int tex)
     l.z = z;
     l.eType = kind == DOOR_SECRET ? 9 : 0;
     l.eSub = kind == DOOR_LOCKED ? 1 : 0;
-    l.name = kind == DOOR_SECRET ? "Wall" : kind == DOOR_LOCKED ? "Locked Door" : "Door";
+    l.name = kind == DOOR_SECRET ? "Wall" : kind == DOOR_LOCKED ? "Door (locked)" : "Door";   // (for the editor's lists)
     l.locked = kind == DOOR_LOCKED;
     p.lines.push_back(l);
     int slot = (int)p.lines.size() - 1;

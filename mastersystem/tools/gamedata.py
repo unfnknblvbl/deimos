@@ -50,6 +50,9 @@ import struct
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))   # (the repository's tools)
+import game_text  # noqa: E402  (the maps' titles, from the jar)
+
 # entity types (a def's eType)
 ET_LINE, ET_ENEMY, ET_HUMAN, ET_PICKUP, ET_INV, ET_WEAPON, ET_AMMO = 0, 1, 2, 3, 4, 5, 6
 ET_SPECIAL, ET_FIRE, ET_FIRE2, ET_DESTRUCT, ET_DECOR, ET_BLOCK14, ET_BLOCK15, ET_AMMO2 = 7, 10, 11, 12, 13, 14, 15, 16
@@ -128,10 +131,6 @@ def line_cell(w):
     return x >> 6, y >> 6                      # world units -> cell (64 units each)
 
 
-# the maps' names in the game (the .bsp file -> title)
-MAP_TITLES = {"intro": "UAC Base", "junction": "Junction", "junction_destroyed": "Junction",
-              "reactor": "Reactor", "endgame": "Ending", "items": "Items",
-              **{f"level0{i}": f"Sector {i}" for i in range(1, 8)}}
 
 
 def build(level_json, db, db_names, level_str, out_dir: Path, out_json=Path("analysis/gamedata.json"), sms=False):
@@ -306,9 +305,12 @@ def build(level_json, db, db_names, level_str, out_dir: Path, out_json=Path("ana
            "defs": defs, "entities": entities, "scenery": scenery,
            "lines": lines, "events": events, "strings": strings}
     if sms:
-        if out["map_id"] == 1:            # the UAC Base: the game starts here (a new game's kit)
+        if out["map_id"] == 1:            # the UAC Base: the game starts here (the starting kit)
             out["new_game"] = True
-        out["title"] = MAP_TITLES.get(Path(level_json).stem, Path(level_json).stem)
+        # the map's title, as the game names it (tools/game_text.py: from the
+        # jar's texts, the folder entities.str is in); else its file name
+        out["title"] = (game_text.map_title(game_text.load(Path(db_names).parent), Path(level_json).stem)
+                        or Path(level_json).stem)
         # the Master System's own ceiling and floor: black, and a dark red
         # floor fading into it (the editor's default too: Project::sms_ceil)
         out["sms_ceiling_rgb"] = [0, 0, 0]

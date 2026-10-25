@@ -806,7 +806,7 @@ void master_main(void)
     /* the saves */
     for (i = 0; i < SRAM_SIZE; i++) sram[i] = sram_out[i] = sram_io(1, i, 0);   /* all 8 KB, a byte at a time */
 #ifdef PLAT_SCRIPT
-    memset(sram, 0xFF, sizeof sram);                /* (no saved game: the SNES run had none) */
+    memset(sram, 0xFF, sizeof sram);                /* (nothing saved: the SNES run had none) */
 #endif
     r32x_init();                                    /* the 3D view's tables, the slave's half */
     sound_start();                                  /* the slave starts playing */

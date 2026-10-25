@@ -15,7 +15,7 @@
  * "VIEW", u16 the number of views (big-endian), then 10 bytes a view: the
  * map, the player's x, z, facing, 1 for the free camera, its angle (256
  * a turn), its x and z (big-endian s16, world units). For each view: a
- * new game (core/rules.c's game_init), the map, the player put there, the
+ * fresh game (core/rules.c's game_init), the map, the player put there, the
  * floor and ceiling, the picture (view.c, then gfx.c's stereo picture);
  * when it is on the screen, vt_done = the view's number (from 1), and the
  * test, having looked (fb in the work RAM, the screen's two eyes), sets
@@ -36,7 +36,7 @@ void viewtest_main(void)
     n = be16(l + 4);
     for (i = 0; i < n; i++) {
         const u8 *v = l + 6 + 10 * i;
-        game_init();                    /* (a new game: map 0) */
+        game_init();                    /* (a fresh game: map 0) */
         if (v[0]) map_change(v[0]);     /* (the view's map) */
         S.px = v[1];
         S.pz = v[2];

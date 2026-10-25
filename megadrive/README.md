@@ -31,7 +31,7 @@ the full layout.)
 | X / Z | previous / next weapon |
 | Y | notebook (the notes the story gives you) |
 | Mode (hold) | full detail, in smooth movement |
-| Start | pause menu: resume, items, notebook, save game, options, quit to title |
+| Start | pause menu: resume, items, notebook, save, options, quit to title |
 
 Every button except Start can be changed on the **options** screen (from
 the title or the pause menu): go to an action and press the button you
@@ -44,7 +44,7 @@ and turns smoothly (18 frames, 0.3 s), drawn in low detail (4-pixel-wide
 columns) so the 68000 can keep up; hold **Mode** to see the full-detail
 picture whenever you stop.
 
-**Saving**: SAVE GAME in the pause menu; CONTINUE on the title screen
+**Saving**: the pause menu saves the game; the title screen's first item continues it
 loads it, even after the console has been switched off. The options are
 saved too. The game also saves by itself at the start of every map; if
 you die, A (TRY AGAIN) puts you back at the start of the map.
@@ -61,9 +61,9 @@ a sector shows its statistics (A goes on). Things work as in the phone game:
 - **Vendors** sell medkits, ammunition and upgrades for credits: A buys
   the line under the cursor, B leaves.
 - **Items** (pause menu, ITEMS): the **Berserker** doubles your damage for
-  a while (the screen turns red), the **Dog Collar** gives you a dog that
+  a while (the screen turns red), the **collar** gives you a dog that
   fights for you and takes the hits.
-- **Secrets**: some walls slide away when you use them ("Found Secret!",
+- **Secrets**: some walls slide away when you use them (a message says so,
   +5 XP).
 - The doors, keys, terminals, door codes, the people and their stories,
   the Pain Elementals' lost souls and the invisible walls of the original.
@@ -118,11 +118,11 @@ original phone game did:
   the YM2612's FM voices and the PSG's noise channel
   (`tools/build_sfx.py`): a gunshot is the noise channel's crack over an
   FM body falling in pitch, the dog and the death are FM distortion
-  guitar, the plasma gun an FM synth drum. Where the phone game is silent
+  guitar, the plasma weapon an FM synth drum. Where the phone game is silent
   (doors, pick-ups, monsters) the Mega Drive game has effects written in the same
   instruments. An effect borrows FM voices 5 and 6 and the noise from the
   music and gives them back (`src/music.s`).
-- **Music**: the original game's tunes (title, new game, sector complete)
+- **Music**: the original game's tunes (title, fresh game, sector complete)
   on the YM2612: `tools/build_music.py` turns the MIDI files into a stream
   with FM instruments for the guitars, bass and organ, an FM kick and
   toms, and the snare, hi-hats and cymbals on the PSG's noise channel
@@ -142,6 +142,16 @@ original phone game did:
   edited in it. For the same maps it gives exactly the same bytes as
   `build.sh`. The ROM carries no copy of the maps for the editor: all the
   space goes to the maps themselves.
+- **The game's own texts come from the jar too**: the messages the rules
+  show, the menus' and the vendor's words, the weapons' names and the
+  maps' titles are not in the code. `../tools/game_text.py` makes each
+  from the jar's string tables (`base.str`, `entities.str`) by a recipe,
+  into the campaign block's **texts table** (the block header's bytes
+  24..31 give its place and size); the code names a text by its index
+  (`TX_*`, `build/gen/texts.h` and `texts.inc`: `gtext(TX_...)` in C, the
+  `TXT` and `SAYT` macros in `src/rules.s`). The editor makes the same
+  table (`editor/src/gametext.cpp`). `../tools/jar_text_scan.py` checks
+  that none of the jar's texts is in Deimos's own files.
 - **68000 assembler**: the renderer (`src/render.s`)
   and the game rules (`src/rules.s`) are written in assembler, for speed;
   menus, screens and saving are C.

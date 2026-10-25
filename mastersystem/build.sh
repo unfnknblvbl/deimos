@@ -37,7 +37,7 @@ source ../tools/deps.sh
 deps_require python3 pillow numpy wla-z80 zx0
 
 ASSETS=assets/jar   # the jar's files (level .bsp, entities, texts, images)
-LEVEL=${LEVEL:-intro}           # the map to build: intro (the UAC Base), LEVEL=level01 for Sector 1
+LEVEL=${LEVEL:-intro}           # the map to build: intro (the UAC Base), LEVEL=level01 for the first sector
 ANALYSIS=analysis               # parsed level and compiled game data (JSON)
 GFX=build/gfx                   # generated binaries and .inc files the assembler includes
 mkdir -p "$ANALYSIS" "$GFX/live" build/game
@@ -51,7 +51,7 @@ python3 tools/bsp_parser.py "$ASSETS/$LEVEL.bsp" "$ANALYSIS/$LEVEL.json"
 python3 tools/gamedata.py "$ANALYSIS/$LEVEL.json" "$ASSETS/entities.db" "$ASSETS/entities.str" \
     "$ASSETS/$LEVEL.str" "$GFX" "$ANALYSIS/gamedata.json" --sms
 # -> the level blob (bank 2), the strings (bank 4) and game/gen/*.inc
-python3 tools/gen_cdata.py "$ANALYSIS/gamedata.json" game/gen "$GFX"
+python3 tools/gen_cdata.py "$ANALYSIS/gamedata.json" game/gen "$GFX" "$ASSETS"
 
 echo "== 2. Renderer data: walls, visibility, textures, billboards, tables, border =="
 # writes build/gfx/live/ (the level header, data banks from 9 up, height

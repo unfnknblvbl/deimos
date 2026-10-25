@@ -37,9 +37,6 @@
 #include <cstring>
 #include <deque>
 
-// the player's 9 weapons; weapon frame i is WEAPONS[i / 2], odd i = firing
-static const char *WEAPONS[9] = {"Axe", "Fire extinguisher", "Pistol", "Shotgun", "Chaingun", "Super shotgun",
-                                 "Plasma gun", "Rocket launcher", "BFG"};
 // the art tools' names and keys, in ArtTool order (app.h)
 static const char *TOOL_NAMES[A_COUNT] = {"Pencil", "Line", "Box", "Filled box", "Fill", "Pick colour"};
 static const char *TOOL_KEYS[A_COUNT] = {"P", "L", "B", "Shift+B", "F", "K"};
@@ -108,7 +105,17 @@ std::string App::pic_name(const PicId &id) const
         return who.empty() ? s : s + " (" + who + ")";
     }
     case P_BORDER: return "Border around the view (Master System)";
-    default: return std::string("Weapon: ") + WEAPONS[id.id / 2] + (id.id & 1 ? ", firing" : "") + " (Mega Drive)";
+    default: {   // weapon frame i is the player's weapon i / 2 (odd i: firing)
+        // its name: the map's thing type that gives that weapon (eType 5,
+        // eSub the weapon's number), as the game names it; else its number
+        std::string w = "weapon " + std::to_string(id.id / 2);
+        for (auto &d : proj.defs)
+            if (d.eType == 5 && d.eSub == id.id / 2) {
+                w = d.name;
+                break;
+            }
+        return "Weapon: " + w + (id.id & 1 ? ", firing" : "") + " (Mega Drive)";
+    }
     }
 }
 

@@ -6,7 +6,7 @@
 # option) any later version, with NO WARRANTY: see the LICENSE file.
 
 """
-A simple player for Sector 1, driven by the Python model's view of the
+A simple player for level01, driven by the Python model's view of the
 world: walks to a list of goals (things to "use": terminals, people, door
 panels), opening doors on the way, fighting what gets in front of it and
 healing when low. Used by the lockstep test and the video recorder; the
@@ -22,7 +22,7 @@ import game_model as gm
 
 DIRS = gm.DIRS
 
-# Sector 1's solution, in order. The pilot stands next to each cell, faces it
+# level01's solution, in order. The pilot stands next to each cell, faces it
 # and presses "use" the given number of times (dialogs in between are
 # answered by the caller).
 # (cell to use, how many times, note)
@@ -32,10 +32,10 @@ WALKTHROUGH = [
     ((10, 9), 1, "terminal"),
     ((14, 9), 1, "terminal"),
     ((10, 21), 1, "terminal"),
-    ((6, 9), 1, "terminal: opens the west wing"),
-    ((1, 19), 1, "Dr. Guerard"),
+    ((6, 9), 1, "terminal: opens the west side"),
+    ((1, 19), 1, "the doctor"),
     ((3, 21), 3, "the civilian"),
-    ((1, 19), 1, "Dr. Guerard"),
+    ((1, 19), 1, "the doctor"),
     ((3, 21), 2, "the civilian, now with 10 credits"),
     ((4, 4), 1, "north door code 225"),
     ((9, 5), 4, "e-mail terminal: birthday 10/10"),
@@ -221,7 +221,7 @@ class Autopilot:
         li = w.line_at(nx, nz)
         if li is not None:
             if w.lines[li]["eType"] == gm.ET_DESTRUCT and w.weapon != 0:
-                return "wprev"           # jammed door: get the axe out
+                return "wprev"           # jammed-shut door: get the axe out
             return "use"                 # open the door / chop the jammed one
         for i in w.entities_at(nx, nz):
             et = w.etype(w.ents[i])

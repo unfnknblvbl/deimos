@@ -52,7 +52,7 @@ You edit a **project**: a `.deimos` file that holds the maps you change, the who
 
 The editor builds everything that depends on the maps; the game code is never changed, so your maps play by exactly the same rules as the original ones. A Master System map takes about 15 seconds, the whole game about a minute per console. The ROMs run in emulators and on flash carts.
 
-On the Master System the UAC Base, Sector 1, Sector 2, the Junctions and the Reactor fit by their counts (the Limits tab says what a map needs). Very big open areas can still be too much to see at once, and the build says so. The other consoles hold every map. A few script commands only the phone game had are listed and are skipped by the consoles.
+On the Master System the UAC Base, the first two sectors (level01, level02), the Junctions and the Reactor fit by their counts (the Limits tab says what a map needs). Very big open areas can still be too much to see at once, and the build says so. The other consoles hold every map. A few script commands only the phone game had are listed and are skipped by the consoles.
 
 The editor also works from the command line: `"Deimos Editor" --help` lists what it does (new projects, ROMs, level folders).
 

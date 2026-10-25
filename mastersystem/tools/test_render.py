@@ -19,7 +19,7 @@ The ROM's screen is read back as colour indices by matching each pixel to
 the level palette. Where a hardware sprite (a monster or item drawn with
 the VDP's sprites, not by the renderer) covers the view, those pixels are
 not compared. Standalone, the model's data comes from running
-live_data.main() on analysis/level01.json (Sector 1); the Checker used by
+live_data.main() on analysis/level01.json (level01); the Checker used by
 test_lockstep.py --render reads it from the ROM itself (rom_level.py).
 The engine variable addresses are read from rom/main.asm and
 rom/deimos.sym, so they follow the engine's source.
@@ -80,7 +80,7 @@ def sym(name):
 
 
 def load_data():
-    """Build the renderer's data for Sector 1 with live_data.main() and return it.
+    """Build the renderer's data for level01 with live_data.main() and return it.
 
     live_data reads its arguments from sys.argv, so they are swapped in for
     the call; its output files go to /tmp/live_test_out and its printing is

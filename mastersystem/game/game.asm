@@ -70,6 +70,7 @@
 
 .include "game/gen/defs.inc"
 .include "game/gen/sfx.inc"
+.include "game/gen/texts.inc"   ; TX_*: the game's texts (bank 2, $8000; tools/gen_cdata.py)
 
 ; ---- engine variables shared with the game (rom/main.asm .ENUM $C000)
 ; The game writes most of these and the engine (interrupts and services)
@@ -132,7 +133,7 @@
 .define ET_ENEMY        1           ; a monster
 .define ET_HUMAN        2           ; a person (talked to through events)
 .define ET_PICKUP       3           ; health, armour, credits, keys
-.define ET_INV          4           ; carried items: medkits, soul sphere
+.define ET_INV          4           ; carried items: medkits, soulsphere
 .define ET_WEAPON       5
 .define ET_AMMO         6
 .define ET_FIRE         10          ; a fire (1 damage, 2 armour when stood in)
@@ -270,7 +271,7 @@ dmg_hp          dw                  ; calc_damage results (the model's are not b
 dmg_arm         dw
 sel_kind        db                  ; select_target: T_ENT or T_LINE
 sel_idx         db                  ; the entity or the line
-sel_locked      db                  ; 1: a locked door was in the way
+sel_locked      db                  ; 1: a door that is locked was in the way
 m32a            dsb 4               ; 32-bit maths workspace (math32.asm), little-endian
 m32b            dsb 4
 m32c            dsb 4

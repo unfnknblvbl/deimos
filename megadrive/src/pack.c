@@ -14,7 +14,8 @@
  * without recompiling. Every offset in it counts from its start:
  *   0   "MDCP", u16 version, u16 number of maps (byte 7: the low byte)
  *   8   u32 texture bank, 12 u32 sprite bank, 16 u32 weapons,
- *   20  u32 block size, 24 two u32 zeros (reserved)
+ *   20  u32 block size, 24 u32 the texts table (the game's texts,
+ *       gtext), 28 u32 its size
  *   32  per map, 32 bytes: u32 its map pack, u8 the original game's map
  *       id, u8 0, the title (26 bytes, zero-padded)
  * The weapons: 4 x (u32 offset, u32 size): frames, sprites, palettes,
@@ -34,6 +35,7 @@
 #include "render_data.h"
 #include "weapon_data.h"
 #include "pack.h"
+#include "game.h"
 
 extern const u8 md_campaign[];      /* the block (build/gen/campaign.s) */
 
@@ -80,10 +82,19 @@ static const void *entry(const u8 *pk, int i)
     return md_campaign + rd32(pk + 32 + 8 * i);
 }
 
-/* the title of map `map` ("SECTOR 1"...), zero-ended in its record */
+/* the title of map `map` (the game's name for it, in capitals), zero-ended in its record */
 const char *map_title(u8 map)
 {
     return (const char *)md_campaign + 32 + 32 * map + 6;
+}
+
+/* see game.h: text id of the texts table, whose offset is the block
+   header's u32 at byte 24 (tools/game_text.py: a big-endian word per text,
+   its offset from the table's start, then the 0-ended texts) */
+const char *gtext(u8 id)
+{
+    const u8 *t = md_campaign + rd32(md_campaign + 24);
+    return (const char *)t + ((t[2 * id] << 8) | t[2 * id + 1]);
 }
 
 /* the original game's id of map `map`.

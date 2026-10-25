@@ -15,11 +15,11 @@ The phone game (J2ME) has fifteen sound clips, tiny General MIDI files for
 the phone's synthesiser (gunshot, distortion guitar, synth drum, timpani...).
 Its code plays them as follows (read from the game's classes):
   0.mid .. 8.mid   the weapons' attacks: axe, fire extinguisher, pistol,
-                   shotgun, chaingun, super shotgun, plasma gun, rocket
+                   shotgun, chaingun, super shotgun, plasma weapon, rocket
                    launcher, BFG (7.mid also for every explosion)
-  9, 10, 11.mid    the dog's bite (the Dog Collar)
+  9, 10, 11.mid    the dog's bite (the collar)
   n.mid            the player's death
-  p.mid            an item used (medkit, Soul Sphere, Berserker, collar), a
+  p.mid            an item used (medkit, soulsphere, Berserker, collar), a
                    secret found
   m.mid            the menus
 Those are turned into FM here note for note: each General MIDI instrument
@@ -230,57 +230,57 @@ def stream(notes):
 
 # ------------------------------------------------------------------ the effects
 def effects(jar):
-    """The effects, in SFX_* id order: [(name, [Note])]. Index 0 is "no
+    """The effects, in SFX_* id order: [(id name SFX_..., [Note])]. Index 0 is "no
     effect". The original's clips come from jar/<n>.mid; the others are
     written here with the same instruments.
     """
     clip = lambda f: from_midi(jar / f)  # noqa: E731
     G, L, T, D = P_GUITAR, P_LEAD, P_TIMPANI, P_SYNDRUM
     return [
-        ("NONE", []),
+        ("SFX_NONE", []),
         # ---- the player's weapons: the original clips
-        ("AXE", clip("0.mid")),
-        ("EXTINGUISHER", clip("1.mid")),
-        ("PISTOL", clip("2.mid")),
-        ("SHOTGUN", clip("3.mid")),
-        ("CHAINGUN", clip("4.mid")),
-        ("PLASMA", clip("6.mid")),
-        ("ROCKET", clip("7.mid")),
-        ("BFG", clip("8.mid")),
+        ("SFX_AXE", clip("0.mid")),
+        ("SFX_EXTINGUISHER", clip("1.mid")),
+        ("SFX_PISTOL", clip("2.mid")),
+        ("SFX_SHOTGUN", clip("3.mid")),
+        ("SFX_CHAINGUN", clip("4.mid")),
+        ("SFX_PLASMA", clip("6.mid")),
+        ("SFX_ROCKET", clip("7.mid")),
+        ("SFX_BFG", clip("8.mid")),
         # ---- monsters (the phone game is silent here)
-        ("MON_ATTACK", [fm(0, 9, G, 40, 120), fm(0, 9, G, 47, 110)]),
-        ("FIREBALL", [noise(0, N_HISS, 110), fm(0, 18, D, 64, 120)]),
-        ("RAISE", seq(0, 4, G, [36, 39, 42, 45, 48, 51], vel=110)),
-        ("MON_HURT", [fm(0, 6, G, 45, 115), noise(0, N_TICK, 100)]),
-        ("MON_DIE", seq(0, 5, G, [42, 41, 40, 39, 38, 37], vel=115)),
+        ("SFX_MON_ATTACK", [fm(0, 9, G, 40, 120), fm(0, 9, G, 47, 110)]),
+        ("SFX_FIREBALL", [noise(0, N_HISS, 110), fm(0, 18, D, 64, 120)]),
+        ("SFX_RAISE", seq(0, 4, G, [36, 39, 42, 45, 48, 51], vel=110)),
+        ("SFX_MON_HURT", [fm(0, 6, G, 45, 115), noise(0, N_TICK, 100)]),
+        ("SFX_MON_DIE", seq(0, 5, G, [42, 41, 40, 39, 38, 37], vel=115)),
         # ---- the player
-        ("HURT", [Note(0, 6, "kick", vel=127), fm(0, 10, D, 52, 115)]),
-        ("DODGE", [noise(0, N_OPEN, 100)]),
-        ("PLAYER_DIE", clip("n.mid")),
-        ("STEP", [noise(0, N_TICK, 70)]),
-        ("BUMP", [Note(0, 6, "kick", vel=100)]),
+        ("SFX_HURT", [Note(0, 6, "kick", vel=127), fm(0, 10, D, 52, 115)]),
+        ("SFX_DODGE", [noise(0, N_OPEN, 100)]),
+        ("SFX_PLAYER_DIE", clip("n.mid")),
+        ("SFX_STEP", [noise(0, N_TICK, 70)]),
+        ("SFX_BUMP", [Note(0, 6, "kick", vel=100)]),
         # ---- items
-        ("PICKUP", seq(0, 4, L, [76, 83], vel=110)),
-        ("CREDITS", seq(0, 3, L, [84, 91], vel=105)),
-        ("WEAPON", seq(0, 4, L, [60, 64, 67, 72], frames=6, vel=115)),
-        ("KEY", seq(0, 5, L, [67, 72, 76], frames=8, vel=115)),
-        ("HEAL", clip("p.mid")),
+        ("SFX_PICKUP", seq(0, 4, L, [76, 83], vel=110)),
+        ("SFX_CREDITS", seq(0, 3, L, [84, 91], vel=105)),
+        ("SFX_WEAPON", seq(0, 4, L, [60, 64, 67, 72], frames=6, vel=115)),
+        ("SFX_KEY", seq(0, 5, L, [67, 72, 76], frames=8, vel=115)),
+        ("SFX_HEAL", clip("p.mid")),
         # ---- the world
-        ("DOOR", [fm(0, 16, T, 40, 120), noise(0, N_HISS, 90)]),
-        ("DENIED", seq(0, 6, L, [50, 47], frames=7, vel=115)),
-        ("EXPLODE", clip("7.mid")),
-        ("BREAK", [noise(0, N_SNARE, 120), fm(0, 10, D, 48, 120)]),
-        ("LEVEL_UP", seq(0, 3, L, [60, 64, 67, 72, 76, 79], frames=4, vel=115) + [fm(18, 20, L, 84, 115)]),
+        ("SFX_DOOR", [fm(0, 16, T, 40, 120), noise(0, N_HISS, 90)]),
+        ("SFX_DENIED", seq(0, 6, L, [50, 47], frames=7, vel=115)),
+        ("SFX_EXPLODE", clip("7.mid")),
+        ("SFX_BREAK", [noise(0, N_SNARE, 120), fm(0, 10, D, 48, 120)]),
+        ("SFX_LEVEL_UP", seq(0, 3, L, [60, 64, 67, 72, 76, 79], frames=4, vel=115) + [fm(18, 20, L, 84, 115)]),
         # ---- menus
-        ("BLIP", clip("m.mid")),
-        ("SELECT", seq(0, 3, L, [72, 79], frames=4, vel=100)),
-        ("DIALOG", seq(0, 3, L, [69, 81], frames=4, vel=90)),
-        ("SWITCH", [noise(0, N_TICK, 120), fm(0, 5, D, 72, 110)]),
-        ("COMPLETE", []),          # (the sector's music plays)
+        ("SFX_BLIP", clip("m.mid")),
+        ("SFX_SELECT", seq(0, 3, L, [72, 79], frames=4, vel=100)),
+        ("SFX_DIALOG", seq(0, 3, L, [69, 81], frames=4, vel=90)),
+        ("SFX_SWITCH", [noise(0, N_TICK, 120), fm(0, 5, D, 72, 110)]),
+        ("SFX_COMPLETE", []),          # (the sector's music plays)
         # ---- added for the original's sounds
-        ("DOG", clip("9.mid")),
-        ("SECRET", clip("p.mid")),
-        ("ITEM", clip("p.mid")),
+        ("SFX_DOG", clip("9.mid")),
+        ("SFX_SECRET", clip("p.mid")),
+        ("SFX_ITEM", clip("p.mid")),
     ]
 
 
@@ -290,7 +290,8 @@ def main():
     (the SFX_* ids for C and for the assembler).
     """
     jar, gen = Path(sys.argv[1]), Path(sys.argv[2])
-    eff = [(name, stream(notes)) for name, notes in effects(jar)]
+    # (the table names each effect by its id, SFX_<name>; the data labels are sfx_<name>)
+    eff = [(name[4:], stream(notes)) for name, notes in effects(jar)]
     c = ["/* generated by tools/build_sfx.py - do not edit */"]
     for name, b in eff:
         c.append("static const unsigned char sfx_%s[] = {%s};" % (name.lower(), ",".join(str(x) for x in b)))

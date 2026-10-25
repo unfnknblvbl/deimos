@@ -13,13 +13,16 @@ the space the block may use. Big-endian; every offset below is from the
 start of the block, every table starts on a 4-byte boundary.
 
 Block:
-  0   "MDCP", u16 version (VERSION, now 2), u16 number of maps
+  0   "MDCP", u16 version (VERSION, now 3), u16 number of maps
   8   u32 texture bank, u32 sprite bank, u32 weapons, u32 block size
-  24  two u32 zeros (reserved)
+  24  u32 texts table, u32 its size
   32  per map, 32 bytes: u32 map pack, u8 original map id, u8 0,
       title (26 bytes, zero-padded)
   then the weapons (4 x u32 offset, u32 size: frames, sprites, palettes,
-  tiles), the banks and the map packs. Every console but the Master System
+  tiles), the banks, the map packs and the texts table (the game's texts
+  the code shows - messages, menus, weapons' names - read from the jar by
+  ../tools/game_text.py: a u16 offset per text, then the texts, each
+  ended by a 0; the code finds text TX_n through it). Every console but the Master System
   carries this same block (the SNES-layout ones in their cartridge image);
   the Deimos Editor's builder (editor/src/md_build.cpp) makes the same bytes.
 
@@ -49,9 +52,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))   # (the repository's tools: game_text)
 from build_render_data import tables, write_common  # noqa: E402
+from key_text import md_text  # noqa: E402
+import game_text  # noqa: E402
 
-VERSION = 2  # the block's format version (header offset 4)
+VERSION = 3  # the block's format version (header offset 4)
 PACK_VERSION = 2  # each map pack's format version
 # a map pack's tables, in order (the ROM looks them up by index; see
 # build_render_data.py for what each holds, gen_cdata.py for level and strings)
@@ -186,6 +192,9 @@ def main():
         title = m["title"].upper().encode("latin1")[:25]  # at most 25 characters, so at least one zero follows
         rec = struct.pack(">IBB", po, m["id"], 0) + title + bytes(26 - len(title))
         blk.data[HEAD + MAP_REC * i:HEAD + MAP_REC * (i + 1)] = rec
+    # the game's texts, from the jar's string tables (tokenised as the maps' texts)
+    tx = game_text.md_blob(game_text.load(jar), md_text)
+    struct.pack_into(">II", blk.data, 24, blk.add(tx), len(tx))      # header: the texts table
     blk.data += bytes(-len(blk.data) % 4)
     struct.pack_into(">I", blk.data, 20, len(blk.data))  # header: the block's size
     (gen / "campaign.bin").write_bytes(blk.data)

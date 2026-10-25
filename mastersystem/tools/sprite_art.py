@@ -35,8 +35,8 @@ from extract_sprites import load_bitshapes, decode_shape, render_shape
 JAR = Path(__file__).resolve().parent.parent / "assets" / "jar"
 
 
-# The ammo packs (even tiles 82..90: Halon Cans, Bullet Clips, Shell Clips,
-# Rockets, Cell Clips) have no picture of their own (their sprite id is 0,
+# The ammo packs (even tiles 82..90: halon, bullets, shells,
+# rockets, cells) have no picture of their own (their sprite id is 0,
 # the axe's): the original game draws the single item, tile - 1, four times
 # around the spot. PLURAL_OFFSETS: the copies' column offsets, drawn in this
 # order (the middle one last, in front).
@@ -73,7 +73,7 @@ class SpriteArt:
         if tile in self._cache:
             return self._cache[tile]
         if tile in PLURAL_TILES:
-            # an ammo pack (Bullet Clips, Halon Cans, ...): the original game
+            # an ammo pack (bullets, halon, ...): the original game
             # draws the single item's sprite (tile - 1) four times, 16 units
             # each side of the spot (r.java); from the front that is three
             # copies side by side, the middle one in front

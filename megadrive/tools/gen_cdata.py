@@ -32,7 +32,9 @@ Usage: python3 gen_cdata.py analysis/gamedata.json build/gen build/gen
 build.sh runs `gen_cdata.py analysis/campaign.json build/gen
 build/gen/maps`, which writes into build/gen: data.h, data.c, state.h,
 state.inc (the state offsets as assembler .equ lines, included by
-src/rules.s and src/render.s) and layout.json (read by md_lockstep.py),
+src/rules.s and src/render.s), texts.h and texts.inc (the indices TX_* of
+the game's texts, ../tools/game_text.py; the texts themselves are read
+from the jar into the campaign block) and layout.json (read by md_lockstep.py),
 and per campaign map build/gen/maps/<name>/level.bin and strings.bin,
 which tools/md_campaign.py puts into the campaign block. There are no
 banks on the Mega Drive: LEVEL_ADDR is only written into data.h, and
@@ -49,8 +51,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))   # (the repository's tools: game_text)
 from game_rules import WEAPONS, MONSTERS, weapon_damage_mult
 from key_text import md_text
+import game_text
 
 # limits shared by the ROM, the model's test layout and the editor
 # every MAX_* below is the most the ROM's RAM state has room for; level_blob refuses a map that needs more
@@ -245,7 +249,7 @@ def level_blob(g, map_index=None, map_id=0):
     sp = [(i, *e["spawns"]) for i, e in enumerate(ents) if "spawns" in e]
     if len(sp) > MAX_SPAWNS:
         raise ValueError(f"too many lost-soul spawners: {len(sp)}")
-    t["spawns"] = struct.pack(E + "H", len(sp)) + b"".join(struct.pack(E + "3H", *x) for x in sp)  # count, then (entity, lost soul 1, lost soul 2)
+    t["spawns"] = struct.pack(E + "H", len(sp)) + b"".join(struct.pack(E + "3H", *x) for x in sp)  # count, then (entity, its two souls)
     t["line_cells"] = bytes(line_cells)
     t["drop_def"] = bytes(drop_def(*dt) for dt in DROP_TYPES)  # per DD_* drop kind: its definition here
     sx, sz, sf = g["spawn"]
@@ -325,7 +329,6 @@ def main():
          f"#define N_WEAPONS {len(WEAPONS)}", f"#define LEVEL_ADDR 0x{LEVEL_ADDR:04X}",
          f"#define LEVEL_N_TABLES {len(BLOB_TABLES)}",
          "extern const unsigned char wpn_min[], wpn_max[], wpn_rmin[], wpn_rmax[], wpn_ammo[], wpn_use[], wpn_armor[], wpn_shots[];",
-         "extern const char * const wpn_name[];",
          "extern const unsigned char mon_base[], mon_atk[], mon_shots[];",
          "extern const unsigned short dmg_mult[];",
          "#define DD_HEALTH 0\n#define DD_ARMOR 1\n#define DD_CREDIT1 2\n#define DD_CREDIT5 3\n#define DD_SMMED 4\n"
@@ -339,8 +342,6 @@ def main():
     for nm, col in (("wpn_min", 1), ("wpn_max", 2), ("wpn_rmin", 3), ("wpn_rmax", 4), ("wpn_ammo", 5),
                     ("wpn_use", 6), ("wpn_armor", 7), ("wpn_shots", 8)):
         c.append(c_array(nm, "unsigned char", [w[col] for w in WEAPONS]))
-    c.append("const char * const wpn_name[%d] = {\n    %s\n};" % (
-        len(WEAPONS), ",\n    ".join(json.dumps(w[0].upper()) for w in WEAPONS)))
     c.append(c_array("mon_base", "unsigned char", [min(255, v) for m in MONSTERS for v in m[0]], 6))
     c.append(c_array("mon_atk", "unsigned char", [v for m in MONSTERS for v in m[1]], 2))
     c.append(c_array("mon_shots", "unsigned char", [m[2] for m in MONSTERS]))
@@ -350,6 +351,10 @@ def main():
     h.insert(-1, "extern const unsigned char *level_blob, *strings_blob;")
     (out_dir / "data.h").write_text("\n".join(h) + "\n")
     (out_dir / "data.c").write_text("\n\n".join(c) + "\n")
+    # the indices of the game's texts (their words come from the jar:
+    # tools/md_campaign.py puts the texts table into the campaign block)
+    (out_dir / "texts.h").write_text(game_text.c_header())
+    (out_dir / "texts.inc").write_text(game_text.gas_include())
 
     # assign each state field its offset
     lay = state_layout()

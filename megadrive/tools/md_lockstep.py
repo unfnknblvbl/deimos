@@ -21,7 +21,7 @@ Exit code 0 = all states matched.
 It needs a build: build/deimos.map (symbol addresses) and
 build/gen/layout.json (the state's layout, from gen_cdata.py). It plays a
 single map from analysis/gamedata.json (game_model.load), as when the ROM
-held Sector 1 alone; tools/md_campaign_lockstep.py is the test of the
+held level01 alone; tools/md_campaign_lockstep.py is the test of the
 whole campaign and reuses this file's Rom class and helpers.
 """
 import contextlib
@@ -247,7 +247,7 @@ def choose(w, rnd):
 def main():
     """Runs the test (arguments in the module docstring; also --plan FILE: a
     pickled action list, --autopilot, --god, --gamedata FILE). Starts a
-    new game in the ROM and the model, then does `steps` actions in both,
+    fresh game in the ROM and the model, then does `steps` actions in both,
     comparing the state after each one. Prints the last actions and
     either OK or the first mismatch. Returns the exit code (0 = all matched).
     """
@@ -284,14 +284,14 @@ def main():
     else:
         w = gm.load()
     rom.run(30)
-    rom.press(("start",))                     # PRESS START -> the title menu (no save: NEW GAME, OPTIONS)
+    rom.press(("start",))                     # PRESS START -> the title menu (no save: new-game and options items)
     if "--smooth" in sys.argv:
         rom.press(("down",))
         rom.press(("a",))                     # options
         rom.press(("a",))                     # movement: smooth
         rom.press(("start",))                 # done
         rom.press(("up",))
-    rom.press(("a",))                         # new game
+    rom.press(("a",))                         # fresh game
     if not rom.wait_idle():
         print("ROM never reached the game")
         return 1

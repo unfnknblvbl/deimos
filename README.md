@@ -29,6 +29,12 @@ Made by AI. Directed by unfnknblvbl.
 No part of the original game is included — not its maps, graphics, sounds,
 music or text. Every build reads them from your own copy of the J2ME game,
 `DoomRPG.jar`. Put it in `import/` (or `build.sh` asks for its path).
+Even the game's short texts that the consoles' code shows (the messages,
+the menus' and the vendor's words, the weapons' names, the maps' titles)
+are made from the jar's string tables when a ROM is built
+(`tools/game_text.py`, and the editor's `src/gametext.cpp`);
+`tools/jar_text_scan.py` checks that none of the jar's texts is in the
+repository or in the editor's engines.
 
 ## Reading the source
 
