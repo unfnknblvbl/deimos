@@ -1,7 +1,7 @@
 # Deimos — Doom RPG on retro consoles
 
 **Deimos** ports *Doom RPG* (id Software / Fountainhead, 2005, J2ME) to
-ten retro consoles. It includes the **Deimos Editor**, which makes the ROMs
+ten retro consoles (the Virtual Boy port is experimental). It includes the **Deimos Editor**, which makes the ROMs
 for all of them from the original game and lets you edit its maps.
 
 The editor keeps the maps you edit in a project (a `.deimos` file: the whole
@@ -20,7 +20,7 @@ Made by AI. Directed by unfnknblvbl.
 | `3ds/` | Nintendo 3DS homebrew (`.3dsx`) |
 | `gbc/` | Game Boy Color (`.gbc`) |
 | `gba/` | Game Boy Advance (`.gba`) |
-| `vb/` | Virtual Boy (`.vb`), in 3D |
+| `vb/` | Virtual Boy (`.vb`), in 3D: **experimental** (see `vb/README.md`) |
 | `editor/` | The Deimos Editor for Linux and Windows |
 | `core/`, `view/`, `tools/` | Shared by the SNES, Super FX, 32X, 3DS, GBC, GBA and Virtual Boy games: the game rules, the 3D view, the build tools |
 

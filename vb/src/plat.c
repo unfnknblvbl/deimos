@@ -133,7 +133,7 @@ static u16 read_keys(void)
 }
 
 /* pad_read: the pad for this frame (gfx.c's wait_vblank) */
-u16 pad_read(void) { return script_pad(read_keys()); }
+u16 pad_read(void) { DIAG(7); return script_pad(read_keys()); }
 
 /* ---- the script mode (a test build: build.sh test): the pad is played
    from the script 32x/tools/make_script.py packs from snes_play.py
@@ -247,6 +247,7 @@ void timer_irq(void)
     HW_TCR = 0x0C;                      /* (the zero flag cleared) */
     HW_TCR = 0x09;                      /* (running again, 100 us ticks, its interrupt on) */
     timer_periods++;
+    DIAG(5);
     sound_frame();                      /* (the music's and the effects' frame) */
 }
 
@@ -256,7 +257,11 @@ void vip_irq(void)
 {
     u16 p = VIP_INTPND;
     VIP_INTCLR = p;                     /* (acknowledged) */
+    DIAG(4);
     gfx_frame();
+#ifdef PLAT_DIAG
+    diag_redraw();
+#endif
 }
 
 /* time_100us: the time since the start in 100 microsecond units, from the
@@ -287,14 +292,70 @@ void plat_init(void)
 
 /* main: from crt0.s: set up, start the timer and the VIP's frame
    interrupt, run the game */
+#ifdef PLAT_DIAG
+/* ---- the diagnostic build: blocks at the top left of both eyes of both
+   frame buffers (columns 0..63, rows 16..31, left of the title's picture):
+   block n (8 columns) lit when step n is reached, kept lit each frame;
+   column block 7's lower half blinks with the frames, so a picture that
+   stops blinking means the frame interrupt stopped */
+static volatile u32 diag_bits, diag_frames;
+
+static void diag_block(u32 n, u16 v, u32 r)
+{
+    u32 b, e, x;
+    for (b = 0; b < 2; b++)
+        for (e = 0; e < 2; e++)
+            for (x = n * 8; x < n * 8 + 6; x++)
+                ((volatile u16 *)(FB_ADDR(b, e) + x * 64))[r] = v;
+}
+
+void diag_mark(u32 n)
+{
+    diag_bits |= 1u << n;
+    diag_block(n, 0xFFFF, 2);
+}
+
+void diag_redraw(void)
+{
+    u32 n;
+    diag_frames++;
+    for (n = 0; n < 8; n++)
+        if (diag_bits & (1u << n)) diag_block(n, 0xFFFF, 2);
+    diag_block(7, (diag_frames & 16) ? 0xFFFF : 0x0000, 3);
+}
+
+/* diag_display: brightness and column tables at once, so the blocks show
+   even if the game stops before gfx_init */
+static void diag_display(void)
+{
+    u32 i;
+    for (i = 0; i < 256; i++) {
+        COLTAB_L[i] = 0x00FE;
+        COLTAB_R[i] = 0x00FE;
+    }
+    VIP_BRTA = 32;
+    VIP_BRTB = 64;
+    VIP_BRTC = 32;
+    VIP_XPCTRL = 0;
+    VIP_DPCTRL = 0x0302;
+}
+#endif
+
 int main(void)
 {
     VSU_SSTOP = 1;                      /* (the sound's channels power up in any state: silent first) */
+#ifdef PLAT_DIAG
+    diag_display();
+#endif
+    DIAG(0);
     plat_init();
+    DIAG(1);
     gfx_init();                         /* (the display on, the VIP's interrupt on) */
+    DIAG(2);
     HW_TLR = TIMER_RELOAD & 0xFF;       /* the timer: TIMER_RELOAD + 1 ticks a period */
     HW_THR = TIMER_RELOAD >> 8;
     HW_TCR = 0x09;                      /* (running, 100 us ticks, its interrupt on) */
+    DIAG(3);
 #ifdef PLAT_VIEWTEST
     viewtest_main();                    /* (the view test: does not return) */
 #endif

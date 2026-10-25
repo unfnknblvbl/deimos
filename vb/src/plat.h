@@ -31,4 +31,13 @@ u8 sram_rd(u16 i);                      /* battery RAM byte i (0..8191) */
 void sram_wr(u16 i, u8 v);
 u16 pad_read(void);                     /* the pad as the SNES's bits (or the test script's) */
 u32 time_100us(void);                   /* a clock in 100 microsecond units (the timer: measurements) */
+/* the diagnostic build (build.sh diag): DIAG(n) lights block n (0..7) at
+   the screen's top left, a start-up step reached; nothing otherwise */
+#ifdef PLAT_DIAG
+void diag_mark(u32 n);
+void diag_redraw(void);
+#define DIAG(n) diag_mark(n)
+#else
+#define DIAG(n) ((void)0)
+#endif
 #endif

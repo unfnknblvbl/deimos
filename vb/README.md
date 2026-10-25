@@ -8,13 +8,19 @@ dialogs, and the Mega Drive game's music and sound effects on the VSU.
 
 Made by AI. Directed by unfnknblvbl.
 
+**Experimental.** The game runs in Mednafen (RetroArch's Beetle VB core),
+but not yet in Red Viper on the 3DS: there it shows no picture. Red Viper's
+own CPU and memory code, run on a PC, does reach the title screen, so the
+fault is in its 3DS-only code translator, or in how the game's frame
+buffers show on the 3DS. `./build.sh diag` makes a copy that lights blocks
+on screen as it starts, to find where it stops.
+
 ## Playing
 
 `out/deimos_vb.vb` (8 MB, 8 KB battery RAM) is tested in Mednafen
-(RetroArch's Beetle VB core) and written to the hardware's rules as Red
-Viper (3DS) emulates them; it should run in other Virtual Boy emulators,
-and on a Virtual Boy with a flash cartridge that has battery RAM for the
-saves (not yet tried on the hardware).
+(RetroArch's Beetle VB core). It does not yet run in Red Viper (see above),
+and it has not been tried on a Virtual Boy (a flash cartridge with battery
+RAM for the saves).
 
 | Button | |
 |---|---|

@@ -14,6 +14,8 @@
 #   ./build.sh            the game
 #   ./build.sh test       the script mode (SCRIPT= a 32x/tools/make_script.py script)
 #   ./build.sh viewtest   the view test (SCRIPT= a tools/vb_view_test.py view list)
+#   ./build.sh diag       the game with start-up markers (plat.h's DIAG), for
+#                         finding where an emulator stops
 # The compiler: v810-gcc 4.9.4 (VUEngine's patches; ../tools/deps.sh builds it).
 #
 # The steps: assemble the start-up and the vectors (src/crt0.s); compile
@@ -39,6 +41,7 @@ OUT=out/deimos_vb.vb              # (the cartridge to write)
 case "${1:-}" in
     test) EXTRA="-DPLAT_SCRIPT"; OUT=out/deimos_vb_test.vb ;;
     viewtest) EXTRA="-DPLAT_VIEWTEST"; OUT=out/deimos_vb_view.vb ;;
+    diag) EXTRA="-DPLAT_DIAG"; OUT=out/deimos_vb_diag.vb ;;
 esac
 mkdir -p obj out
 # -ffreestanding: no C library (gba/src/libc.c has the few functions the
