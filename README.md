@@ -27,8 +27,10 @@ Made by AI. Directed by unfnknblvbl.
 ## You need your own DoomRPG.jar
 
 No part of the original game is included — not its maps, graphics, sounds,
-music or text. Every build reads them from your own copy of the J2ME game,
-`DoomRPG.jar`. Put it in `import/` (or `build.sh` asks for its path).
+music or text. The editor and the console builds read them from your own
+copy of the J2ME game, `DoomRPG.jar`: give it to the editor when it asks,
+or put it in `import/` to build ROMs here (`build.sh` asks for its path
+otherwise). Building the editor and its engines needs no jar.
 Even the game's short texts that the consoles' code shows (the messages,
 the menus' and the vendor's words, the weapons' names, the maps' titles)
 are made from the jar's string tables when a ROM is built
@@ -47,26 +49,35 @@ gives back and what it changes. Start with the README in each folder.
 On Linux (or WSL on Windows):
 
 ```sh
-./build.sh            # asks what to build
-./build.sh editor     # just the editor: no DoomRPG.jar, no console compilers
-./build.sh gba sms    # or name them: sms md snes snesfx 32x 3ds gbc gba editor engines all
+./build.sh            # asks what to build; Enter (or no terminal): the engines and the editor
+./build.sh all        # the same, without asking: no DoomRPG.jar needed
+./build.sh editor     # just the editor, from the engines in editor/engines/: no console compilers
+./build.sh gba sms    # console ROMs (need the jar): sms md snes snesfx 32x 3ds gbc gba vb, or roms for all
 ```
 
-The ROMs go to `roms/`. The editor goes to `editor/build/linux/` and/or
-`editor/build/windows/` (it asks which), ready to zip up and pass on.
+The editor goes to `editor/build/linux/` and/or `editor/build/windows/` (it
+asks which), ready to zip up and pass on: when it starts it asks for your
+`DoomRPG.jar` and makes every console's ROM from it. Console ROMs built
+here go to `roms/`.
 
+- **all** (the default) remakes the editor's engines from this source,
+  then builds the editor. No jar is needed.
 - **editor** builds the Deimos Editor from the engines in `editor/engines/`:
   each console's game code, with nothing of the original game in it. It
   needs only CMake and a C++ compiler — none of the console toolchains and
   no jar. The editor's users give it their own `DoomRPG.jar`, and it makes
   every console's ROM from it (or from a project of maps edited in it), the
-  same bytes as the builds below.
-- **engines** remakes those engines from this source, after a change to a
-  game's code: every console is built from your jar, then everything that
-  came from the jar is cut out of each ROM again. No ROMs are kept.
-- **sms**, **md**, ... build a console's ROM into `roms/`.
-- **all** builds every ROM, the engines, then the editor.
-- The SNES, Super FX, 32X, 3DS, GBC and GBA games are built from parts of
+  same bytes as the console builds below.
+- **engines** remakes those engines from this source (after a change to a
+  game's code), without the jar: every console is built with each part
+  that would come from the jar left as zeros of the size it takes (the
+  consoles' `DEIMOS_NOJAR=1` mode; the sizes are read from the engines in
+  `editor/engines/`), just as an engine has it. It needs
+  every console's compilers. The engines are the same bytes as those cut
+  from full builds made with the jar.
+- **sms**, **md**, ... build a console's ROM from your jar into `roms/`
+  (the same bytes the editor makes); **roms** builds all of them.
+- The SNES, Super FX, 32X, 3DS, GBC, GBA and Virtual Boy games are built from parts of
   the Mega Drive and SNES builds, so choosing any of them builds those first
   (that needs the 68000 compiler and cc65 as well).
 

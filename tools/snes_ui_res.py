@@ -21,8 +21,9 @@ res.bin (from a bank boundary; the header's $FFB7 says which bank):
 spc_streams: the music and the sound effects for the SPC (tools/
 snes_sound.py's spc_streams.bin, from the Mega Drive game's streams).
 
-Usage: snes_ui_res.py <deimos dir> <out res.bin> <spc_streams.bin> <version> [title word]
-(the title word defaults to SUPER; it is passed to build_md_ui.py)
+Usage: snes_ui_res.py <deimos dir> <out res.bin> <spc_streams.bin> <version> [title word] [--no-jar ENGINE.eng]
+(the title word defaults to SUPER; it is passed to build_md_ui.py. --no-jar:
+the builds without the jar - zeros the size of ENGINE.eng's resources)
 Licence: GPL-2.0-or-later.
 """
 import struct
@@ -52,6 +53,18 @@ def build(arrays):
 def main():
     """Run megadrive/tools/build_md_ui.py into a scratch folder, take its arrays
     (ui_data.c), add the SPC streams, write res.bin."""
+    if "--no-jar" in sys.argv:
+        # without DoomRPG.jar (DEIMOS_NOJAR=1 builds): zeros, the size of
+        # the resources' region in the engine file named after --no-jar
+        # (the size the jar's pictures and sounds give: the maps' block
+        # follows them); the engine is blanked there anyway
+        i = sys.argv.index("--no-jar")
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from engine_file import regions
+        size = regions(sys.argv[i + 1])["snes_res"][1]
+        Path(sys.argv[2]).write_bytes(bytes(size))
+        print(f"{sys.argv[2]}: {size} zero bytes (no jar)")
+        return
     md = Path(sys.argv[1])
     sys.path.insert(0, str(md / "tools"))
     from make_engine import c_arrays

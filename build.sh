@@ -7,22 +7,26 @@
 #
 # Deimos: Doom RPG on retro consoles, and the Deimos Editor - builds from source.
 #
-#   ./build.sh               asks what to build
+#   ./build.sh               asks what to build (Enter: "all"; not at a
+#                            terminal: "all" without asking)
 #   ./build.sh <what> ...    without asking; <what> is one or more of
-#                            sms md snes snesfx 32x 3ds gbc gba vb editor engines all
+#                            all editor engines roms sms md snes snesfx 32x 3ds gbc gba vb
 #
-#   editor   the Deimos Editor, from the engines kept in editor/engines/ (the
-#            consoles' game code with nothing of the original game in it).
-#            Needs no DoomRPG.jar: the editor's users give it theirs, and it
+#   all      the editor's engines from this source, then the Deimos Editor.
+#            Needs no DoomRPG.jar: the editor asks its user for theirs, and
 #            makes every console's ROM from it.
+#   editor   the Deimos Editor alone, from the engines in editor/engines/
+#            (the consoles' game code with nothing of the original game in
+#            it: the ones in the repository, or the last "engines" made).
 #   engines  remakes those engines from this source (after a change to a
-#            game's code): every console is built, each ROM has everything
-#            that came from the jar blanked out, and what is left is the
-#            engine. Needs the jar; no ROMs are kept.
-#   sms ...  a console's ROM, into roms/. Needs the jar.
-#   all      every ROM, the engines, then the editor.
+#            game's code). Every console is built without the jar: each part
+#            that would come from it is left as zeros, as an engine has it
+#            (the consoles' DEIMOS_NOJAR mode). Needs each console's compilers.
+#   sms ...  a console's ROM, into roms/, made with the jar (as the editor
+#            makes it). Needs DoomRPG.jar.
+#   roms     every console's ROM (needs the jar).
 #
-# The games are made from your own copy of the original game, DoomRPG.jar
+# The ROMs are made from your own copy of the original game, DoomRPG.jar
 # (the J2ME version): put it in import/ (or give its path when asked). None
 # of the original game is in this repository.
 #
@@ -54,49 +58,60 @@ name_of() {
         32x) echo "32X" ;;                          3ds) echo "Nintendo 3DS" ;;
         gbc) echo "Game Boy Color" ;;               gba) echo "Game Boy Advance" ;;
         vb) echo "Virtual Boy" ;;
-        editor) echo "the Deimos Editor (needs no DoomRPG.jar)" ;;
-        engines) echo "the editor's engines, remade from this source" ;;
+        editor) echo "the Deimos Editor only, from the engines in editor/engines/" ;;
+        engines) echo "the editor's engines only, remade from this source" ;;
     esac
 }
 
 # ---- what to build -------------------------------------------------------
 what=("$@")
 if [ ${#what[@]} -eq 0 ]; then
-    echo "Deimos (Doom RPG on retro consoles) - build which?"
-    i=1
-    for t in $ALL_ROMS editor engines; do printf "  %2d) %s\n" $i "$(name_of $t)"; i=$((i + 1)); done
-    printf "  %2d) all of them\n" $i
-    read -r -p "Choose a number (or several, e.g. \"1 3\"): " answer
-    for a in $answer; do
+    if [ -t 0 ]; then
+        echo "Deimos (Doom RPG on retro consoles) - build which?"
+        printf "  %2d) %s\n" 1 "the Deimos Editor and its engines (no DoomRPG.jar needed) [Enter]"
+        i=2
+        for t in editor engines; do printf "  %2d) %s\n" $i "$(name_of $t)"; i=$((i + 1)); done
+        for t in $ALL_ROMS; do printf "  %2d) %s ROM (needs DoomRPG.jar)\n" $i "$(name_of $t)"; i=$((i + 1)); done
+        printf "  %2d) every console's ROM (needs DoomRPG.jar)\n" $i
+        read -r -p "Choose a number (or several, e.g. \"5 7\"): " answer
+    fi
+    for a in ${answer:-1}; do
         case $a in
-            1) what+=(sms) ;; 2) what+=(md) ;; 3) what+=(snes) ;; 4) what+=(snesfx) ;;
-            5) what+=(32x) ;; 6) what+=(3ds) ;; 7) what+=(gbc) ;; 8) what+=(gba) ;; 9) what+=(vb) ;;
-            10) what+=(editor) ;; 11) what+=(engines) ;; 12) what+=(all) ;;
+            1) what+=(all) ;; 2) what+=(editor) ;; 3) what+=(engines) ;;
+            4) what+=(sms) ;; 5) what+=(md) ;; 6) what+=(snes) ;; 7) what+=(snesfx) ;;
+            8) what+=(32x) ;; 9) what+=(3ds) ;; 10) what+=(gbc) ;; 11) what+=(gba) ;; 12) what+=(vb) ;;
+            13) what+=(roms) ;;
             *) echo "\"$a\" is not one of the choices" >&2; exit 2 ;;
         esac
     done
-    [ ${#what[@]} -gt 0 ] || { echo "Nothing chosen." >&2; exit 2; }
 fi
 # targets: the targets to build; keep: the consoles whose ROMs go to roms/
-# (those asked for by name, or by "all"); engines=1 to remake the editor's
+# (those asked for by name, or by "roms"); engines=1 to remake the editor's
 # engines (which needs every console built first).
 targets=() keep=() engines=0
 for w in "${what[@]}"; do
     case $w in
-        all) targets+=($ALL_ROMS editor); keep+=($ALL_ROMS); engines=1 ;;
+        all) targets+=($ALL_ROMS editor); engines=1 ;;
         engines) targets+=($ALL_ROMS); engines=1 ;;
+        roms) targets+=($ALL_ROMS); keep+=($ALL_ROMS) ;;
         sms | md | snes | snesfx | 32x | 3ds | gbc | gba | vb) targets+=("$w"); keep+=("$w") ;;
         editor) targets+=(editor) ;;
-        *) echo "Unknown target \"$w\" (sms md snes snesfx 32x 3ds gbc gba vb editor engines all)" >&2; exit 2 ;;
+        *) echo "Unknown target \"$w\" (all editor engines roms sms md snes snesfx 32x 3ds gbc gba vb)" >&2; exit 2 ;;
     esac
 done
+# nojar=1: no console's ROM is wanted, only the engines - the consoles are
+# built without DoomRPG.jar (DEIMOS_NOJAR=1: each part made from the jar is
+# left as zeros, as the engines have it), so no jar is needed
+nojar=0
+[ ${#keep[@]} -gt 0 ] || nojar=1
+[ $nojar = 0 ] || export DEIMOS_NOJAR=1
 # wants TARGET: succeeds when TARGET is one of the chosen targets.
 wants() { local t; for t in "${targets[@]}"; do [ "$t" = "$1" ] && return 0; done; return 1; }
 # keeps TARGET: succeeds when TARGET's ROM goes to roms/.
 keeps() { local t; for t in "${keep[@]}"; do [ "$t" = "$1" ] && return 0; done; return 1; }
 # rom TARGET FROM TO: copies a built ROM to roms/TO, if TARGET's ROM is kept.
 rom() { if keeps "$1"; then cp "$2" "roms/$3"; built+=("$1"); fi; }
-# roms=1: at least one console ROM is wanted (so the jar and Python are needed);
+# roms=1: at least one console is built (so Python is needed; the jar too unless nojar);
 # ports=1: one of the consoles built from the Mega Drive and SNES builds' parts.
 roms=0; for t in $ALL_ROMS; do wants $t && roms=1; done
 ports=0; for t in snes snesfx 32x 3ds gbc gba vb; do wants $t && ports=1; done
@@ -110,7 +125,8 @@ ports=0; for t in snes snesfx 32x 3ds gbc gba vb; do wants $t && ports=1; done
 # they can also be run on their own.
 source tools/deps.sh
 items=()
-if [ $roms = 1 ]; then items+=(python3 pillow numpy unzip cc); fi
+if [ $roms = 1 ]; then items+=(python3 pillow numpy cc); fi
+if [ $nojar = 0 ]; then items+=(unzip); fi
 if wants sms; then items+=(wla-z80 zx0); fi
 if wants md || [ $ports = 1 ]; then items+=(m68k-elf zx0); fi     # (the ports use the Mega Drive build's maps)
 if [ $ports = 1 ]; then items+=(cc65 wla-spc700); fi              # (and the SNES build's parts)
@@ -123,8 +139,8 @@ if wants 3ds; then items+=(devkitpro-3ds); fi
 if wants editor; then items+=(cmake cxx make git pkgconf sdl-deps); fi
 deps_require "${items[@]}"
 
-# ---- the original game ---------------------------------------------------
-if [ $roms = 1 ]; then
+# ---- the original game (for the ROMs) ------------------------------------
+if [ $roms = 1 ] && [ $nojar = 0 ]; then
     JAR=${JAR:-$(ls import/*.jar 2>/dev/null | head -1 || true)}
     while [ -z "$JAR" ] || [ ! -f "$JAR" ]; do
         [ -t 0 ] || { echo "Put DoomRPG.jar in import/ (or set JAR=path)." >&2; exit 1; }

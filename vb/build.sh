@@ -33,6 +33,10 @@ cd "$(dirname "$0")"
 # install what is missing (with your package manager, or built from source)
 source ../tools/deps.sh
 deps_require python3 pillow numpy v810-gcc
+# without DoomRPG.jar (DEIMOS_NOJAR=1, for the editor's engine): the resources as
+# zeros of the size the engine's region has (../tools/snes_ui_res.py --no-jar)
+NOJAR_RES=()
+[ -z "${DEIMOS_NOJAR:-}" ] || NOJAR_RES=(--no-jar ../editor/engines/ntnd32vr.eng)
 V=${V810:-v810}
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}      # (megadrive/: its build makes the maps' block)
 VERSION=$(cat VERSION)
@@ -82,7 +86,7 @@ $V-objcopy -O binary -j .vectors obj/vb.elf obj/vectors.bin
 $V-nm obj/vb.elf > obj/vb.syms
 $V-size -A obj/vb.elf | grep -E '^\.(text|data|bss|vbss) '     # (print the sizes)
 # the game's data: the SNES game's (snes/build.sh's parts), with this version
-python3 ../tools/snes_ui_res.py $MD obj/res_vb.bin ../snes/out/spc_streams.bin "$VERSION" "VIRTUAL BOY" > /dev/null
+python3 ../tools/snes_ui_res.py $MD obj/res_vb.bin ../snes/out/spc_streams.bin "$VERSION" "VIRTUAL BOY" ${NOJAR_RES[@]+"${NOJAR_RES[@]}"} > /dev/null
 python3 ../tools/snes_rom.py ../snes/out/deimos.bin ../snes/out/tables.bin obj/res_vb.bin \
     $MD/build/gen/campaign.bin obj/deimos_vb.sfc > /dev/null
 python3 tools/vb_rom.py obj/code.bin obj/vectors.bin obj/deimos_vb.sfc $OUT ${SCRIPT:-}

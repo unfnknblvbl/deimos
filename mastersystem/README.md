@@ -84,6 +84,17 @@ and corridors so monsters come one at a time, keep the axe for jammed doors
 and the fire extinguisher for fires, and don't stand next to a barrel you're
 shooting.
 
+### Known limits
+
+- **Bars, railings and gates** standing free across an opening (not on a
+  wall) are drawn as a flat picture that always faces you. Seen straight
+  on, from either side, they look right; from beside them they are
+  missing, and from a square diagonally away they appear face-on instead
+  of at an angle. Drawing them at their true angle needs new renderer code.
+- **Monsters, people and items** show only when straight ahead (1 to 4
+  cells): one at a time, as a hardware sprite with its own 16 colours. Things
+  off to the side are not drawn until you face them.
+
 ## How it's built
 
 ```

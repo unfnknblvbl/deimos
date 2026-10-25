@@ -33,6 +33,8 @@ def trim(src):
     b = Block(src)
     raw = b.b
     n = b.n_maps
+    if n == 0:                  # (an empty block - the builds without the jar: nothing to trim)
+        return bytes(raw)
     out = bytearray(raw[:32 + 32 * n])
 
     def add(data):

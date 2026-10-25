@@ -42,7 +42,17 @@ def pack(code, snes, script=b""):
     used = max((i for i in range(min(len(code), DATA_AT)) if code[i] != 0xFF), default=0)
     if len(code) > DATA_AT and any(b != 0xFF for b in code[DATA_AT:]):
         raise SystemExit("the code is past bank 63")
-    s, res, _ = gb_res.build(snes)          # (the SNES data, the Game Boy's resources)
+    res_at = (snes[0xFFB7] & 0x3F) * 0x10000
+    if snes[res_at:res_at + 8] == b"DEIMRES1":
+        s, res, _ = gb_res.build(snes)      # (the SNES data, the Game Boy's resources)
+    else:
+        # (no resources: a build without the jar, DEIMOS_NOJAR=1, for the
+        # engine only - the SNES data as it is, no Game Boy resources; both
+        # come after the code, where the editor writes them)
+        end = len(snes)
+        while end > res_at and snes[end - 1] == 0xFF:
+            end -= 1
+        s, res = type("Snes", (), {"data": snes[res_at:end]}), b""
     rom = bytearray(b"\xFF" * SIZE)
     rom[:min(len(code), DATA_AT)] = code[:DATA_AT]
     rom[DATA_AT:DATA_AT + len(s.data)] = s.data

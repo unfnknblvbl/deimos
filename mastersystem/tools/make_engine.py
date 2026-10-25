@@ -12,7 +12,10 @@ the status bar, fonts and title (listed, so the editor makes them again
 from the user's own jar - its C++ port of tools/build_ui_gfx.py gives the
 same bytes) and the level's own parts (the editor's level builder writes
 those: the texts table and the level blob in bank 2, bank 3, the strings
-and sprite directories, banks 9 on).
+and sprite directories, banks 9 on), and the bytes the editor works out for
+each ROM (the ROM directory at $7FC0, the header's checksum and size code).
+So the engine is the same from a build with the jar and from one without
+it (build.sh with DEIMOS_NOJAR=1, tools/nojar.py).
 
   make_engine.py rom/deimos.sms rom/deimos.sym build/gfx OUT.eng
   make_engine.py rom/deimos.gg rom/deimos_gg.sym build/gfx OUT.eng --gg   (the Game Gear: console 2,
@@ -58,6 +61,7 @@ UI = {"hud_palette": "hud_palette_data", "font_index": "font_index_data", "hud_t
 # bank 4 (4 KB); FIRST_DATA_BANK the first of the level's data banks (9)
 LEVEL_ADDR, LEVEL_MAX, STRINGS_MAX, SPR_DIR_SMALL, FIRST_DATA_BANK, MISC_BANK = 0xA000, 0x2000, 0x2000, 0xB000, 9, 4
 TEXTS_ADDR, TEXTS_MAX = 0x8000, 0x2000
+ROM_DIR = 0x7FC0                # the ROM directory (tools/rom_dir.py; the editor writes it)
 
 
 def labels(sym):
@@ -114,6 +118,13 @@ def main():
     o = MISC_BANK * BANK + (SPR_DIR_SMALL - 0x8000)
     rom[o:o + 0x1000] = bytes(0x1000)
     rom[FIRST_DATA_BANK * BANK:] = bytes(len(rom) - FIRST_DATA_BANK * BANK)
+    # and what the editor works out for each ROM it makes: the ROM directory
+    # at $7FC0 (16 bytes), the header's checksum ($7FFA) and its size code
+    # (the low half of $7FFF; the high half, the region, stays) - so the
+    # engine is the same whatever map and jar it was built with
+    rom[ROM_DIR:ROM_DIR + 16] = bytes(16)
+    rom[0x7FFA:0x7FFC] = bytes(2)
+    rom[0x7FFF] &= 0xF0
     template = bytes(rom[:FIRST_DATA_BANK * BANK])     # banks 0..8: the engine proper
     version = (Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
     with tempfile.TemporaryDirectory() as td:

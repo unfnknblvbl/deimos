@@ -10,6 +10,10 @@ The engine the Doom RPG editor carries: this ROM with nothing of the
 original game in it. Every part made from DoomRPG.jar is blanked (zeros)
 and listed, so the editor can make it again from the user's own jar (its
 C++ ports of the same tools give the same bytes) and put the maps after it.
+The header's checksum and ROM end and the areas table's address ($1D8),
+which the editor works out for each ROM, are zeroed too: the engine is the
+same from a build with the jar and from one without it (build.sh with
+DEIMOS_NOJAR=1, tools/nojar.py).
 
   make_engine.py build/deimos.elf out/deimos.md build/gen OUT.eng
 
@@ -89,6 +93,12 @@ def main():
             raise SystemExit(f"{name}: the ROM's bytes are not the generated ones")
         rom[a:a + len(b)] = bytes(len(b))
         regions.append((name, a, len(b)))
+    # what the editor works out for each ROM it makes: the header's checksum
+    # ($18E) and the ROM's end address ($1A4) - so the engine is the same
+    # whatever maps (and jar) it was built with
+    rom[0x18E:0x190] = bytes(2)
+    rom[0x1A4:0x1A8] = bytes(4)
+    rom[0x1D8:0x1DC] = bytes(4)     # (and the areas table's address, after the maps: the editor's)
     template = bytes(rom[:camp])  # the ROM up to the campaign block (the editor writes the maps after it)
     version = (Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
     with tempfile.TemporaryDirectory() as td:

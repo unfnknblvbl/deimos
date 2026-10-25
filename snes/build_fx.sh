@@ -27,6 +27,10 @@ cd "$(dirname "$0")"
 # what is missing (with your package manager, or built from source)
 source ../tools/deps.sh
 deps_require python3 pillow numpy cc65 wla-spc700 wla-superfx
+# without DoomRPG.jar (DEIMOS_NOJAR=1, for the editor's engine): the resources as
+# zeros of the size the engine's region has (../tools/snes_ui_res.py --no-jar)
+NOJAR_RES=()
+[ -z "${DEIMOS_NOJAR:-}" ] || NOJAR_RES=(--no-jar ../editor/engines/ntnd16fx.eng)
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}
 WLA_SUPERFX=${WLA_SUPERFX:-wla-superfx}
 WLALINK=${WLALINK:-wlalink}
@@ -72,7 +76,7 @@ ld65 -C snes_fx.cfg -m objfx/deimos_fx.map -Ln objfx/deimos_fx.lbl -o out/deimos
 # sound, tables and resources as in build.sh (the title says "SUPER FX")
 python3 ../tools/snes_sound.py $MD out > /dev/null
 python3 ../tools/snes_tables.py out/tables_game.bin out/spc_engine.bin --view $VIEW_W $VIEW_H > /dev/null
-python3 ../tools/snes_ui_res.py $MD out/res_fx.bin out/spc_streams.bin "$(cat VERSION)" "SUPER FX" > /dev/null
+python3 ../tools/snes_ui_res.py $MD out/res_fx.bin out/spc_streams.bin "$(cat VERSION)" "SUPER FX" ${NOJAR_RES[@]+"${NOJAR_RES[@]}"} > /dev/null
 # the campaign block, trimmed to fit the 2 MB ROM
 python3 ../tools/snes_fx_block.py $MD/build/gen/campaign.bin out/fx_block.bin > /dev/null
 # the cartridge in the GSU's layout (header at $7FB0)

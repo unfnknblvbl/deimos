@@ -404,7 +404,7 @@ def main():
     for name, (o, sz) in layout.items():
         if (name in WORDS or name in LONGS or name == "active") and o & 1:
             raise SystemExit(f"state field {name} at an odd offset")
-    print(f"gen_cdata: {len(camp)} maps, level data {min(sizes)}..{max(sizes)} B; game state {off} B")
+    print(f"gen_cdata: {len(camp)} maps, level data {min(sizes, default=0)}..{max(sizes, default=0)} B; game state {off} B")
 
 
 if __name__ == "__main__":

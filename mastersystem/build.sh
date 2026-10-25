@@ -15,6 +15,8 @@
 #   TEST_STEPS=0 ./build.sh     skip the lockstep test
 #   TEST_STEPS=N ./build.sh     run the lockstep test for N actions (default 300)
 #   LEVEL=level01 ./build.sh    build another map from the jar (default: intro)
+#   DEIMOS_NOJAR=1 ./build.sh   no jar: a ROM with the engine's code and nothing
+#                               from the jar, for tools/make_engine.py (tools/nojar.py)
 #
 # Flow: the Python tools turn the original game's files (extracted from
 # DoomRPG.jar into assets/) into generated data: game/gen/*.inc for the
@@ -44,32 +46,42 @@ mkdir -p "$ANALYSIS" "$GFX/live" build/game
 # drop bank files left by an earlier build, so a smaller level leaves none behind
 rm -f "$GFX"/view_bank_*.bin "$GFX"/sprite_bank_[0-9]*.bin
 
-echo "== 1. Parse $LEVEL.bsp and compile the level's game data =="
-# the map file -> JSON (walls, cells, things, scripts)
-python3 tools/bsp_parser.py "$ASSETS/$LEVEL.bsp" "$ANALYSIS/$LEVEL.json"
-# + the entity definitions and texts -> the game's view of the level
-python3 tools/gamedata.py "$ANALYSIS/$LEVEL.json" "$ASSETS/entities.db" "$ASSETS/entities.str" \
-    "$ASSETS/$LEVEL.str" "$GFX" "$ANALYSIS/gamedata.json" --sms
-# -> the level blob (bank 2), the strings (bank 4) and game/gen/*.inc
-python3 tools/gen_cdata.py "$ANALYSIS/gamedata.json" game/gen "$GFX" "$ASSETS"
+if [ -n "${DEIMOS_NOJAR:-}" ]; then
+    # without DoomRPG.jar (../build.sh engines, with no jar): the engine's
+    # code and tables, every part made from the jar or the map left as
+    # zeros of the size it takes (tools/nojar.py) - for the editor's engine
+    # only, not a game
+    echo "== 1-3. No DoomRPG.jar: stand-ins for the parts made from it =="
+    python3 tools/nojar.py ../editor/engines
+    TEST_STEPS=0
+else
+    echo "== 1. Parse $LEVEL.bsp and compile the level's game data =="
+    # the map file -> JSON (walls, cells, things, scripts)
+    python3 tools/bsp_parser.py "$ASSETS/$LEVEL.bsp" "$ANALYSIS/$LEVEL.json"
+    # + the entity definitions and texts -> the game's view of the level
+    python3 tools/gamedata.py "$ANALYSIS/$LEVEL.json" "$ASSETS/entities.db" "$ASSETS/entities.str" \
+        "$ASSETS/$LEVEL.str" "$GFX" "$ANALYSIS/gamedata.json" --sms
+    # -> the level blob (bank 2), the strings (bank 4) and game/gen/*.inc
+    python3 tools/gen_cdata.py "$ANALYSIS/gamedata.json" game/gen "$GFX" "$ASSETS"
 
-echo "== 2. Renderer data: walls, visibility, textures, billboards, tables, border =="
-# writes build/gfx/live/ (the level header, data banks from 9 up, height
-# and chunky-to-planar tables, the unrolled fill code) and next_bank.txt,
-# the first free bank after them
-python3 tools/live_data.py "$ANALYSIS/$LEVEL.json" "$ANALYSIS/gamedata.json" "$ANALYSIS/${LEVEL}_sms.json" \
-    "$ASSETS" "$GFX/live"
+    echo "== 2. Renderer data: walls, visibility, textures, billboards, tables, border =="
+    # writes build/gfx/live/ (the level header, data banks from 9 up, height
+    # and chunky-to-planar tables, the unrolled fill code) and next_bank.txt,
+    # the first free bank after them
+    python3 tools/live_data.py "$ANALYSIS/$LEVEL.json" "$ANALYSIS/gamedata.json" "$ANALYSIS/${LEVEL}_sms.json" \
+        "$ASSETS" "$GFX/live"
 
-echo "== 3. Status bar, fonts, title, sprites, sound effects =="
-python3 tools/build_ui_gfx.py "$ASSETS" "$GFX"          # status bar, fonts, title screen
-python3 tools/build_sfx.py "$GFX" game/gen              # sound effects and their ids
-# the hardware sprites go in the banks after the renderer's data; each
-# run prints the next free bank
-NEXT=$(cat "$GFX/live/next_bank.txt")
-NEXT=$(python3 tools/build_sprites.py "$ANALYSIS/gamedata.json" "$GFX" "$NEXT" large)
-NEXT=$(python3 tools/build_sprites.py "$ANALYSIS/gamedata.json" "$GFX" "$NEXT" small)
-# the ROM directory (where the level's banks are)
-python3 tools/rom_dir.py "$GFX"
+    echo "== 3. Status bar, fonts, title, sprites, sound effects =="
+    python3 tools/build_ui_gfx.py "$ASSETS" "$GFX"          # status bar, fonts, title screen
+    # the hardware sprites go in the banks after the renderer's data; each
+    # run prints the next free bank
+    NEXT=$(cat "$GFX/live/next_bank.txt")
+    NEXT=$(python3 tools/build_sprites.py "$ANALYSIS/gamedata.json" "$GFX" "$NEXT" large)
+    NEXT=$(python3 tools/build_sprites.py "$ANALYSIS/gamedata.json" "$GFX" "$NEXT" small)
+    # the ROM directory (where the level's banks are)
+    python3 tools/rom_dir.py "$GFX"
+fi
+python3 tools/build_sfx.py "$GFX" game/gen              # sound effects and their ids (made here, not from the jar)
 
 echo "== 4. Assemble + link the ROM (engine, renderer, game logic) =="
 wla-z80 -o rom/main.o rom/main.asm
