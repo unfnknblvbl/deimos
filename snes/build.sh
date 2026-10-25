@@ -38,9 +38,16 @@ cd "$(dirname "$0")"
 source ../tools/deps.sh
 deps_require python3 pillow numpy cc65 wla-spc700
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}      # (megadrive/: its build makes the maps' block)
-if [ -z "${CC65_LIB:-}" ]; then                       # (cc65's none.lib: installed, or built in place)
-    P=$(dirname "$(dirname "$(command -v cc65 || echo /usr/bin/cc65)")")
+# cc65's install: its library (none.lib) and ca65's macro packages
+# (longbranch.mac: newer cc65 keeps them as files in asminc/, and finds
+# them through CA65_INC when it was installed somewhere else than it was
+# built for), both beside the cc65 found on PATH unless set
+P=$(dirname "$(dirname "$(command -v cc65 || echo /usr/bin/cc65)")")
+if [ -z "${CC65_LIB:-}" ]; then
     CC65_LIB=$P/share/cc65/lib; [ -f "$CC65_LIB/none.lib" ] || CC65_LIB=$P/lib
+fi
+if [ -z "${CA65_INC:-}" ]; then
+    for d in "$P/share/cc65/asminc" "$P/asminc"; do [ -d "$d" ] && { export CA65_INC=$d; break; }; done
 fi
 mkdir -p obj out obj/shared
 # the 3D view's size for the SNES game (view/view.h, src/view.inc): 104 x 72,

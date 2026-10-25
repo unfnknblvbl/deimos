@@ -30,9 +30,16 @@ deps_require python3 pillow numpy cc65 wla-spc700 wla-superfx
 MD=${MEGADRIVE_DIR:-$(cd ../megadrive 2>/dev/null && pwd)}
 WLA_SUPERFX=${WLA_SUPERFX:-wla-superfx}
 WLALINK=${WLALINK:-wlalink}
-if [ -z "${CC65_LIB:-}" ]; then                       # (cc65's none.lib: installed, or built in place)
-    P=$(dirname "$(dirname "$(command -v cc65 || echo /usr/bin/cc65)")")
+# cc65's install: its library (none.lib) and ca65's macro packages
+# (longbranch.mac: newer cc65 keeps them as files in asminc/, and finds
+# them through CA65_INC when it was installed somewhere else than it was
+# built for), both beside the cc65 found on PATH unless set
+P=$(dirname "$(dirname "$(command -v cc65 || echo /usr/bin/cc65)")")
+if [ -z "${CC65_LIB:-}" ]; then
     CC65_LIB=$P/share/cc65/lib; [ -f "$CC65_LIB/none.lib" ] || CC65_LIB=$P/lib
+fi
+if [ -z "${CA65_INC:-}" ]; then
+    for d in "$P/share/cc65/asminc" "$P/asminc"; do [ -d "$d" ] && { export CA65_INC=$d; break; }; done
 fi
 mkdir -p objfx out
 # the 3D view's size (view/view.h, src/view.inc, gsu/view.s): 104 x 72, as
