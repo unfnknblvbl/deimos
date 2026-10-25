@@ -27,6 +27,8 @@
 # Environment:
 #   DEIMOS_TOOLS=DIR     where the tools built from source go
 #   DEIMOS_YES=1         install without asking (for unattended builds)
+#   DEPS_HOST_CC, DEPS_HOST_CXX  the host compiler that builds the cross compilers
+#                        (default: the system's gcc / g++)
 #   DEIMOS_NO_INSTALL=1  never install: only report what is missing
 #
 # Every build script in the repository sources this one file.
@@ -342,9 +344,13 @@ deps_build_cross() {
         [ -f $DEPS_GCC.tar.xz ] || curl -fLO "$DEPS_GNU_MIRROR/gcc/$DEPS_GCC/$DEPS_GCC.tar.xz" || exit 1
         [ -d $DEPS_BINUTILS ] || tar xf $DEPS_BINUTILS.tar.xz || exit 1
         [ -d $DEPS_GCC ] || tar xf $DEPS_GCC.tar.xz || exit 1
-        # (the host compiler in an older C dialect: GCC 15 and later default to
-        # C23, which these releases' sources predate)
-        export CFLAGS="-O2 -std=gnu17" CXXFLAGS="-O2"
+        # (the host compiler in the dialects these releases were written for:
+        # GCC 15 and later default to C23, GCC 16 and later to C++20, which
+        # GCC 13's sources predate; DEPS_HOST_CC / DEPS_HOST_CXX can name
+        # another host compiler, such as gcc-13 / g++-13)
+        export CFLAGS="-O2 -std=gnu17" CXXFLAGS="-O2 -std=gnu++17"
+        [ -z "${DEPS_HOST_CC:-}" ] || export CC=$DEPS_HOST_CC
+        [ -z "${DEPS_HOST_CXX:-}" ] || export CXX=$DEPS_HOST_CXX
         # binutils: the assembler and linker (MAKEINFO=true: no manuals, so no texinfo needed)
         mkdir -p "$b/binutils" && cd "$b/binutils"
         deps_logged "$b/binutils.log" "$s/$DEPS_BINUTILS/configure" --target=$t --prefix="$p" --disable-nls \
