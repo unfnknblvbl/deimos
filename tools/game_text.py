@@ -31,9 +31,9 @@ the jar's `table`, or its piece number `piece` between the "%1"-style
 placeholders the phone game fills in (None: the whole string), changed by
 op:
   ""        as it is
-  "colon"   without its ':'                   ("Credits:" -> "Credits")
+  "colon"   without its ':'                   ("Name:" -> "Name")
   "bar"     without a trailing '|'            ("!|" -> "!")
-  "count"   "10x Shells" -> "10 Shells" (the 'x' after a leading number)
+  "count"   "10x Things" -> "10 Things" (the 'x' after a leading number)
   "word"    its first word only
 or a plain string of Deimos's own (a space, or a name the game does not
 spell this way). The Deimos Editor makes the same table with the same
@@ -70,12 +70,12 @@ TEXTS = [
     ("HEALTH_GAINED", [p(B, 69, 1)]),
     ("ARMOR_GAINED", [p(B, 68, 1)]),
     ("XP_GAINED", [p(B, 84, 1)]),
-    ("LEVEL_UP", [p(B, 78), " ", p(B, 76, 0, "colon")]),   # "LEVEL UP! LEVEL " n
+    ("LEVEL_UP", [p(B, 78), " ", p(B, 76, 0, "colon")]),   # base 78, a space, then base 76 up to its %1 (without its colon), then n
     ("DAMAGE", [p(B, 0, 1)]),                     # n " DAMAGE!"
     ("NEAR_DEATH", [p(B, 31)]),
     ("LOW_HEALTH", [p(B, 30)]),
     ("ARMOR_GONE", [p(B, 32)]),
-    ("DOG_TOOK", [p(B, 29, 0)]),                  # "DOG TOOK " n " DAMAGE!"
+    ("DOG_TOOK", [p(B, 29, 0)]),                  # base 29 up to its %1, then n and the rest
     ("DOG_DIED", [p(B, 28)]),
     ("DIED", [p(B, 16, 2)]),                      # name " DIED!"
     ("ATTACKS", [p(B, 1, 1)]),                    # name " ATTACKS"
@@ -109,16 +109,16 @@ TEXTS = [
     ("BURNS_MORE", [p(B, 51)]),
     ("NOTHING", [p(B, 66)]),
     ("TURN_PASSED", [p(B, 67)]),
-    ("PORTAL_SPAWNS", [p(B, 91, 0)]),                    # "PORTAL SPAWNS " name "!"
+    ("PORTAL_SPAWNS", [p(B, 91, 0)]),                    # base 91 up to its %1, then the name
     ("PORTAL_END", [p(B, 91, 1)]),
     ("BERSERK_ON", [p(B, 85)]),
     ("BERSERK_OFF", [p(B, 86)]),
     ("NO_DOG", [p(B, 12)]),
     ("BAD_TARGET", [p(B, 10)]),
-    ("WONT_FIT", [p(B, 13, 0)]),                  # "DOG COLLAR WON'T FIT " name
+    ("WONT_FIT", [p(B, 13, 0)]),                  # base 13 up to its %1, then the name
     # ---- the menus and boxes
     ("CREDITS_WORD", [p(B, 162, None, "colon")]),      # the status bar's word
-    ("CREDITS_SP", [p(B, 162, None, "colon"), " "]),        # the vendor's "CREDITS " n
+    ("CREDITS_SP", [p(B, 162, None, "colon"), " "]),        # the vendor's label (base 162, without its colon), a space, then n
     ("CREDITS_MID", ["  ", p(B, 162, None, "colon"), " "]),  # a sector's "LEVEL l  CREDITS c"
     ("NOTEBOOK_ITEM", [p(B, 117)]),
     ("OPTIONS_ITEM", [p(B, 148)]),
@@ -127,11 +127,11 @@ TEXTS = [
     ("SAVE_GAME", [p(B, 154)]),
     ("GAME_SAVED", [p(B, 120)]),
     ("GAME_LOADED", [p(B, 115)]),
-    ("NO_CREDITS", [p(B, 238)]),                  # the vendor: not enough credits
+    ("NO_CREDITS", [p(B, 238)]),                  # the vendor: the player can't afford it (base 238)
     ("TOO_MANY", [p(B, 217), " ", p(B, 218, None, "word")]),  # ... or too many already
     ("BERSERKER_ITEM", [p(E, 73)]),                    # the items box
     ("DOG_COLLAR", [p(E, 74)]),
-    ("CAPTURED", [p(B, 11, 0)]),                  # "YOU CAPTURED|THE " name "!"
+    ("CAPTURED", [p(B, 11, 0)]),                  # base 11 up to its %1, then the name
     ("CAPTURED_END", [p(B, 11, 1, "bar")]),
     # ---- the vendor's items, by the rules' item tag (0, 1, 6, 12: none)
     ("STORE_0", []), ("STORE_1", []),
@@ -156,7 +156,7 @@ ID = {n: i for i, n in enumerate(NAMES)}        # name -> its index in the table
 # texts only the Python models use (as the phone game writes them; the
 # consoles say these their own way)
 MODEL_ONLY = {
-    "HOLD_MORE": [p(B, 41, 0)],                   # "Can't hold more " name "s"
+    "HOLD_MORE": [p(B, 41, 0)],                   # base 41 up to its %1, then the name
     "HOLD_MORE_END": [p(B, 41, 1)],
     "CRIT": [p(B, 14, 0)],                        # "Crit! " n " damage!"
     "CAPTURED_FULL": [p(B, 11)],                  # the dialog, with "%1" for the name

@@ -127,7 +127,7 @@ std::string part(const std::vector<std::string> tables[3], const Part &pt)
         s = t;
     } else if (pt.op == NO_BAR) {
         while (!s.empty() && s.back() == '|') s.pop_back();
-    } else if (pt.op == COUNT) {   // "10x Shells" -> "10 Shells"
+    } else if (pt.op == COUNT) {   // "10x Things" -> "10 Things"
         size_t k = 0;
         while (k < s.size() && s[k] >= '0' && s[k] <= '9') k++;
         if (k > 0 && k + 1 < s.size() && s[k] == 'x' && s[k + 1] == ' ') s.erase(k, 1);
