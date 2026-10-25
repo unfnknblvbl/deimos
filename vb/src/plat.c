@@ -289,6 +289,7 @@ void plat_init(void)
    interrupt, run the game */
 int main(void)
 {
+    VSU_SSTOP = 1;                      /* (the sound's channels power up in any state: silent first) */
     plat_init();
     gfx_init();                         /* (the display on, the VIP's interrupt on) */
     HW_TLR = TIMER_RELOAD & 0xFF;       /* the timer: TIMER_RELOAD + 1 ticks a period */

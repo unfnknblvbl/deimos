@@ -259,16 +259,27 @@ void sound_frame(void)
 }
 
 /* sound_init: the streams found (the SNES resources' entry 8), every
-   channel stopped, the five waves written (the VSU takes them only while
-   every channel is stopped), the driver on */
+   channel stopped and its registers cleared, the five waves written (the
+   VSU takes wave RAM writes only while every channel is stopped: the
+   driver never writes them again; an instrument picks one of the five
+   with its channel's RAM register), the driver on */
 void sound_init(void)
 {
     const u8 *rb = snes_ptr((u32)(snes_rom[0xFFB7] & 0x3F) << 16 | 0xC00000), *e = rb + 12 + 8 * 8;
     u32 w, i;
     streams = rb + (e[0] | (e[1] << 8) | (e[2] << 16) | ((u32)e[3] << 24));
-    VSU_SSTOP = 1;                      /* (every channel stopped) */
-    for (w = 0; w < 5; w++)
+    VSU_SSTOP = 1;                      /* (every channel stopped: the wave RAM can be written) */
+    for (i = 0; i <= NOISE; i++) {      /* (every channel's registers to a known state: they power up random) */
+        VSU_CH(i, VSU_INT) = 0;
+        VSU_CH(i, VSU_LRV) = 0;
+        VSU_CH(i, VSU_EV0) = 0;
+        VSU_CH(i, VSU_EV1) = 0;
+        VSU_CH(i, VSU_RAM) = 0;
+    }
+    VSU_CH(4, 7) = 0;                   /* (channel 4's sweep / modulation register, S5SWP: none) */
+    for (w = 0; w < 5; w++)             /* the waves: written once, here; never while a channel plays */
         for (i = 0; i < 32; i++) VSU_WAVE(w, i) = snd_wave[w][i];
+    for (i = 0; i < 32; i++) REG8(0x01000280u + 4 * i) = 0;    /* (the modulation table: unused) */
     mus.p = efx.p = 0;
     snd_on = 1;
 }
