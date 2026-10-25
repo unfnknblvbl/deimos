@@ -55,7 +55,7 @@ void make_floor(Project &p, int x, int z, int tex);
 // Gives every wall on one edge of cell (x, z) the texture tex.
 void set_edge_texture(Project &p, int x, int z, int edge, int tex);
 
-// What the Door tool places: a plain door (opens when used), a locked door
+// What the Door tool places: a plain door (opens when used), a door that is locked
 // (a script must UNLOCK it), or a secret sliding wall (a script must OPENLINE it).
 enum DoorKind { DOOR_NORMAL, DOOR_LOCKED, DOOR_SECRET };
 // returns "" or why it can't
@@ -78,7 +78,7 @@ void delete_event(Project &p, int i);
 // Adds a thing of type `def` (index into p.defs) in cell (x, z).
 void add_entity(Project &p, int def, int x, int z);
 // Removes thing i: SHOW commands naming it go, higher numbers shift down,
-// and Pain Elemental spawn links to it become "none" ($FFFF).
+// and the class-7 monsters' spawn links to it become "none" ($FFFF).
 void delete_entity(Project &p, int i);
 // The things in cell (x, z), as indices into p.entities, in list order.
 std::vector<int> entities_at(const Project &p, int x, int z);

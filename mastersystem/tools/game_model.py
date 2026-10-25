@@ -6,7 +6,7 @@
 # option) any later version, with NO WARRANTY: see the LICENSE file.
 
 """
-Reference model of Doom RPG's game rules for Sector 1, in plain Python.
+Reference model of Doom RPG's game rules for level01, in plain Python.
 
 This is the spec the Z80 engine (rom/game/*.asm) implements, and the
 oracle the lockstep test (tools/test_lockstep.py) compares the ROM against:
@@ -27,7 +27,7 @@ analysis/gamedata.json (gamedata.py) and the rule tables in game_rules.py.
 
 Words used here: an "entity" is a dynamic thing on the map (monster,
 person, pickup, fire, barrel, crate); its "def" is its entity
-definition; a "line" is a switchable wall (door, secret wall, jammed
+definition; a "line" is a switchable wall (door, secret wall, jammed-shut
 door); an "event" is a script on one cell, a list of commands run when
 the player steps, turns, or uses the cell; a "trace" walks the cells
 along a row or column and lists what blocks it. Cells are 32 x 32,
@@ -37,13 +37,30 @@ end of calc_damage; multipliers are in 1/256.
 Run as a script it loads the level and prints the starting state.
 """
 import json
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))   # (the repository's tools)
+import game_text  # noqa: E402  (the game's texts, read from the jar)
 from game_rules import (WEAPONS, MONSTERS, weapon_damage_mult, PLAYER_START, CAMPAIGN_START, EVF_USE, EVF_MODIFY,
                         EVF_MOVE, FACING_FLAG, LEAVE_FLAG, ARRIVE_FLAG, MASK_PLAYER_MOVE,
                         MASK_MONSTER_MOVE, MASK_SHOT, MASK_SHOW_KILL, MASK_RAISE_FREE, W_RAISE)
 
 DIRS = [(0, -1), (1, 0), (0, 1), (-1, 0)]          # facing 0=N 1=E 2=S 3=W
+
+# the game's texts the model says (its messages), read from the jar's files
+# that the build unpacked (assets/jar) when first needed
+JAR = Path(__file__).resolve().parent.parent / "assets" / "jar"
+_texts = None
+
+
+def T(name):
+    """The game's text `name` (tools/game_text.py's TEXTS or MODEL_ONLY), as
+    the phone game writes it."""
+    global _texts
+    if _texts is None:
+        _texts = game_text.model_texts(game_text.load(JAR))
+    return _texts[name]
 # entity types (a def's eType)
 ET_LINE, ET_ENEMY, ET_HUMAN, ET_PICKUP, ET_INV, ET_WEAPON, ET_AMMO = 0, 1, 2, 3, 4, 5, 6
 ET_PLAYERMARK, ET_WALLMARK, ET_FIRE, ET_FIRE2, ET_DESTRUCT, ET_AMMO2 = 8, 9, 10, 11, 12, 16
@@ -229,7 +246,7 @@ class World:
         self.defs = g["defs"]
         self.wall = g["wall"]
         self.static = g["static_block"]
-        p = dict(CAMPAIGN_START if g.get("new_game") else PLAYER_START)   # (the UAC Base: a new game's kit)
+        p = dict(CAMPAIGN_START if g.get("new_game") else PLAYER_START)   # (the UAC Base: the starting kit)
         self.p = Combatant(p["hp"], p["armor"], p["defense"], p["strength"], p["agility"], p["accuracy"])
         self.p.maxarmor = p["maxarmor"]
         self.level, self.xp, self.nextxp = p["level"], p["xp"], p["nextxp"]
@@ -360,14 +377,14 @@ class World:
         before = self.p.hp
         self.p.hp = max(0, min(self.p.hp + n, self.p.maxhp))
         if self.p.hp > before:
-            self.say(f"Gained {self.p.hp - before} health")
+            self.say(f"{T('GAINED')}{self.p.hp - before}{T('HEALTH_GAINED')}")
 
     def add_armor(self, n):
         """Add n armour, up to maxarmor; reports a gain."""
         before = self.p.armor
         self.p.armor = min(self.p.armor + n, self.p.maxarmor)
         if self.p.armor > before:
-            self.say(f"Gained {self.p.armor - before} armor")
+            self.say(f"{T('GAINED')}{self.p.armor - before}{T('ARMOR_GAINED')}")
 
     def add_ammo(self, t, n):
         """Add n of ammo type t, up to 99. False (nothing added) if already at 99."""
@@ -379,7 +396,7 @@ class World:
     def add_xp(self, n):
         """Add n XP; each time it reaches nextxp, the excess carries over and the player levels up.
         """
-        self.say(f"Gained {n} XP!")
+        self.say(f"{T('GAINED')}{n}{T('XP_GAINED')}")
         self.xp += n
         while self.xp >= self.nextxp:
             self.xp -= self.nextxp
@@ -406,14 +423,14 @@ class World:
             if v + n > 99:
                 n = 99 - v
             setattr(c, attr, v + n)
-        self.say(f"Level up! Level {self.level}")
+        self.say(f"{T('LEVEL_UP')}{self.level}")
 
     def player_pain(self, dmg, arm):
         """Hurt the player: dmg to health, arm to armour (armour that runs out
         passes the rest to health). Warns when health falls below about 10%
         (26/256) or 30% (78/256) or armour is used up; sets dead at 0 HP.
         """
-        self.say(f"{dmg + arm} damage!")
+        self.say(f"{dmg + arm}{T('DAMAGE')}")
         if dmg + arm:
             a = self.p.armor
             if a < arm:
@@ -425,11 +442,11 @@ class World:
             h2 = ((self.p.hp - dmg) << 16) // (self.p.maxhp << 8)
             if h2 > 0:
                 if h1 > 26 >= h2:
-                    self.say("Near Death!")
+                    self.say(T("NEAR_DEATH"))
                 elif h1 > 78 >= h2:
-                    self.say("Low Health!")
+                    self.say(T("LOW_HEALTH"))
                 elif a > 0 and self.p.armor == 0:
-                    self.say("Armor Gone!")
+                    self.say(T("ARMOR_GONE"))
             self.p.hp = max(0, self.p.hp - dmg)
             if self.p.hp <= 0:
                 self.dead = True
@@ -737,19 +754,19 @@ class World:
             return
         d = self.edef(e)
         if target and target[0] == "raise":
-            self.say(f"{d['name']} casts raise")
+            self.say(d["name"] + T("CASTS_RAISE"))
             j = target[1]
             c = self.ents[j]
             if not self.blocked(c["x"], c["z"], c["x"], c["z"], MASK_RAISE_FREE):
                 c["flags"] = (c["flags"] & ~(F_CORPSE | F_RAISING)) | F_ALIVE | F_LINKED
                 c["c"].hp, c["c"].armor = c["c"].maxhp, c["c"].maxarmor
                 self.activate(j)
-                self.say(f"{self.edef(c)['name']} is revived!")
+                self.say(self.edef(c)["name"] + T("REVIVED"))
             else:
                 c["flags"] &= ~F_RAISING
-                self.say("Raise failed!")
+                self.say(T("RAISE_FAILED"))
             return
-        self.say(f"{d['name']} attacks")
+        self.say(d["name"] + T("ATTACKS"))
         w = self.attack_weapon(e)
         shots = MONSTERS[d["eSub"]][2]
         tot = tarm = 0
@@ -768,7 +785,7 @@ class World:
                 tot += 1                    # an object: any shot breaks it
         if target is None:
             if tot + tarm == 0:
-                self.say("Dodged!")
+                self.say(T("DODGED"))
             else:
                 self.player_pain(tot, tarm)
         else:
@@ -788,7 +805,7 @@ class World:
             return
         e["flags"] &= ~(F_ALIVE | F_LINKED)
         if d["eType"] == ET_FIRE:
-            self.say("Fire cleared!")
+            self.say(T("FIRE_CLEARED"))
             self.add_xp(2)
         elif d["eType"] == ET_DESTRUCT and d["eSub"] == 1:
             self.pending_explosions.append((e["x"], e["z"]))
@@ -796,7 +813,7 @@ class World:
             r = self.rng.byte()
             dt = None
             if r < 2:
-                self.say("Trapped!")
+                self.say(T("TRAPPED"))
                 self.pending_explosions.append((e["x"], e["z"]))
             elif r < 4:
                 dt = (3, 23)
@@ -857,7 +874,7 @@ class World:
             if d["eType"] == ET_ENEMY:
                 self.monster_pain(j, dmg, arm)
                 if e["c"].hp <= 0:
-                    self.say(f"{d['name']} died!")
+                    self.say(d["name"] + T("DIED"))
                     self.monster_died(j)
             elif d["eType"] != ET_FIRE and not (d["eType"] == ET_DESTRUCT and d["eSub"] in (3, 4)):
                 self.destroy(j)
@@ -879,7 +896,7 @@ class World:
         """What "use" would attack: the first thing a shot trace finds up to 8
         cells ahead. Returns ("ent", i), ("line", i) or None.
 
-        A jammed door (DESTRUCT line) only with the axe; a crate only with a
+        A jammed-shut door (DESTRUCT line) only with the axe; a crate only with a
         weapon in its parm bit mask; fire only with the extinguisher; a monster
         standing in an open door's cell behind the line is the target.
         """
@@ -933,7 +950,7 @@ class World:
         w = self.weapon
         wi = WEAPONS[w]
         if wi[6] > 0 and self.ammo[wi[5]] < wi[6]:
-            self.say("Not enough ammo!")
+            self.say(T("NO_AMMO"))
             return False
         self.ammo[wi[5]] -= wi[6]
         kind, j = target
@@ -963,14 +980,14 @@ class World:
             e = self.ents[j]
             d = self.edef(e)
             if tot + tarm == 0:
-                self.say("Missed!" if w != 1 else "No effect!")
+                self.say(T("MISSED") if w != 1 else T("NO_EFFECT"))
             else:
                 c = e["c"]
                 over = tiles == 1 and (c.hp + c.armor - tot - tarm) <= -(((c.maxhp << 16) // 637) >> 8)
-                self.say(("Crit! " if crit else "") + f"{tot + tarm} damage!")
+                self.say((T("CRIT") if crit else "") + f"{tot + tarm}{T('DAMAGE')}")
                 self.monster_pain(j, tot, tarm)
                 if c.hp <= 0:
-                    self.say(f"{d['name']} died!")
+                    self.say(d["name"] + T("DIED"))
                     self.monster_died(j, overkill=over)
         else:
             if hit:
@@ -979,14 +996,14 @@ class World:
                 else:
                     self.destroy(j)
             elif w == 1:
-                self.say("No effect!")
+                self.say(T("NO_EFFECT"))
             else:
-                self.say("Missed!")
+                self.say(T("MISSED"))
         return True
 
     def calc_hit_object(self, target, tiles):
         """Hit roll for an object: against a dummy whose agility is 80% of the
-        player's accuracy. Then the weapon must suit it: the axe for a jammed
+        player's accuracy. Then the weapon must suit it: the axe for a jammed-shut
         door, the extinguisher for fire, anything but the extinguisher for the
         rest. Returns 1 hit, 0 miss.
         """
@@ -1004,12 +1021,12 @@ class World:
         return 0 if self.weapon == 1 else 1
 
     def line_destroyed(self, li):
-        """A jammed door is chopped through: it opens for good, 1 XP, and its cell's use event runs.
+        """A jammed-shut door is chopped through: it opens for good, 1 XP, and its cell's use event runs.
         """
         l = self.lines[li]
         l["alive"] = False
         l["open"] = True                    # the line entity is removed either way
-        self.say("Door cleared!")
+        self.say(T("DOOR_CLEARED"))
         self.add_xp(1)
         self.run_tile(l["x"], l["z"], EVF_USE)
 
@@ -1037,32 +1054,32 @@ class World:
                 self.credits += parm
             elif es == 21:
                 if self.p.armor >= self.p.maxarmor:
-                    self.say("Armor at maximum")
+                    self.say(T("ARMOR_MAX"))
                     return
                 self.add_armor(parm)
             elif es == 20:
                 if self.p.hp >= self.p.maxhp:
-                    self.say("Health at maximum")
+                    self.say(T("HEALTH_MAX"))
                     return
                 self.add_health(parm)
             elif es == 24:
                 self.keys |= 1 << parm
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et == ET_INV:
             k = es - 25                     # inventory slot: eSub 25.. -> 0..
-            # (slots 0-2 medkits and Soul Sphere, 3 berserk, 4 dog collar)
+            # (slots 0-2 medkits and soulsphere, 3 berserk, 4 collar)
             if self.inventory[k] == 99:
-                self.say(f"Can't hold more {d['name']}s")
+                self.say(T("HOLD_MORE") + d["name"] + T("HOLD_MORE_END"))
                 return
             self.inventory[k] = min(99, self.inventory[k] + 1)
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et in (ET_AMMO, ET_AMMO2):
             if not self.add_ammo(es, parm):
-                self.say("Ammo at maximum")
+                self.say(T("AMMO_MAX"))
                 return
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et == ET_WEAPON:
             # eSub is the weapon index; a new weapon is taken in hand
@@ -1072,14 +1089,14 @@ class World:
             self.weapons |= 1 << es
             if WEAPONS[es][6]:
                 self.add_ammo(WEAPONS[es][5], parm)
-            self.say(f"Got {d['name']}")
+            self.say(T("GOT") + d["name"])
             e["flags"] &= ~F_LINKED
         elif et == ET_FIRE:
             self.player_pain(1, 2)
-            self.say("It burns!")
+            self.say(T("BURNS"))
         elif et == ET_FIRE2:
             self.player_pain(10, 10)
-            self.say("It really burns!!")
+            self.say(T("BURNS_MORE"))
 
     def end_player_turn(self):
         """Game_advanceTurn only flags the monsters' turn; it runs once no
@@ -1146,7 +1163,7 @@ class World:
             return
         t = self.select_target()
         if t is None:
-            self.say("Nothing to use")
+            self.say(T("NOTHING"))
             return
         if self.player_attack(t):
             self.touch_tile(False)
@@ -1154,7 +1171,7 @@ class World:
 
     def pass_turn(self):
         """Do nothing for one turn (button 2 + Down)."""
-        self.say("Turn passed.")
+        self.say(T("TURN_PASSED"))
         self.touch_tile(False)
         self.end_player_turn()
 
@@ -1170,7 +1187,7 @@ class World:
 
     def use_health_item(self):
         """PORT: no inventory menu - button 2 + Up uses the smallest medkit you
-        carry (Sm Medkit, else Lg Medkit, else Soul Sphere)."""
+        carry (a small medkit, else a large one, else soulsphere)."""
         for k, es in ((0, 25), (1, 26), (2, 27)):
             if self.inventory[k]:
                 d = next(dd for dd in self.defs if (dd["eType"], dd["eSub"]) == (4, es))
@@ -1253,7 +1270,7 @@ class World:
 
     def exec_cmd(self, ev, k, c, flags):
         """Execute one event command c (index k of event ev). Returns True if it
-        counted as run (False: a locked door, a door already in that state, or
+        counted as run (False: a door that is locked, a door already in that state, or
         a key that is held). Sets self.suspend to "dialog", "password" or
         "stop" to pause or end the event.
 
@@ -1263,7 +1280,7 @@ class World:
         op, a1 = c["op"], c["a1"]
         s = self.g["strings"]
         if op == 2:                       # CHANGEMAP
-            if c["a1"] & 0x80000000:      # "show stats" exit: Sector 1 completed
+            if c["a1"] & 0x80000000:      # "show stats" exit: level01 completed
                 self.level_done = True
             else:                         # PORT: the way back to Junction (not in this port)
                 self.say("The way back is sealed")
@@ -1271,7 +1288,7 @@ class World:
         elif op == 4:                     # MESSAGE
             self.say(s[a1])
         elif op == 5:                     # PAIN: a1 damage to health
-            self.say("Pain!")
+            self.say(T("PAIN"))
             self.player_pain(a1, 0)
         elif op == 7:                     # SHOW
             if a1 == 0xFF:
@@ -1340,8 +1357,7 @@ class World:
             stat, need = a1 & 0xFF, (a1 >> 8) & 0xFF
             have = [self.p.hp, self.p.armor, self.credits, self.xp][stat]
             if have < need:
-                self.say(["Insufficient health!", "Insufficient armor!", "Insufficient funds!",
-                          "Insufficient XP!"][stat])
+                self.say(T(["LOW_HP", "LOW_ARMOR", "LOW_FUNDS", "LOW_XP"][stat]))
                 self.suspend = "stop"
                 txt = s[a1 >> 16]
                 if txt:
@@ -1356,7 +1372,7 @@ class World:
         elif op == 41:                    # CHECK_KEY
             need = {0: 1, 1: 2, 2: 4, 3: 8}[a1]   # key number -> keys bit
             if not self.keys & need:
-                self.say(["Need Green Key", "Need Yellow Key", "Need Blue Key", "Need Red Key"][a1])
+                self.say(T(["NEED_GREEN", "NEED_YELLOW", "NEED_BLUE", "NEED_RED"][a1]))
                 self.suspend = "stop"
                 return True
             return False
@@ -1384,9 +1400,9 @@ class World:
             self.password = None
             if password != want:
                 if password:
-                    self.say("Invalid code!")
+                    self.say(T("CODE_BAD"))
                 return
-            self.say("Correct code!")
+            self.say(T("CODE_GOOD"))
             self.run_event(ev, k + 1, flags)
         self.settle()
 

@@ -466,7 +466,7 @@ class Pilot:
                     self.blocked_doors[(c.index, li)] = self.situation(w)
                     return "pass"
                 if w.weapon != 0:
-                    return "wnext"               # the axe for a jammed door
+                    return "wnext"               # the axe for a jammed-shut door
                 return "use"
             ev = w.find_event(nx, nz)
             sit = self.situation(w)

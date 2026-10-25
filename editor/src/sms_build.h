@@ -105,9 +105,11 @@ void sprite_colours(const Art &canvas, RGB pal[16]); // the 15 console colours a
 
 // writes the level-dependent parts of a ROM image (the engine's): p in
 // the single-level form (Project::single_level), as console opt.console
-// ("sms" or "gg") has it. rom is replaced only on success (then a power of
-// two, 128 KB to 1 MB)
-bool build(Bytes &rom, const Project &p, const BuildOptions &opt, BuildStats &stats, std::string &err);
+// ("sms" or "gg") has it, and texts, the texts table for bank 2 at $8000
+// (gametext::sms_blob: the game's texts from the jar, for that console).
+// rom is replaced only on success (then a power of two, 128 KB to 1 MB)
+bool build(Bytes &rom, const Project &p, const Bytes &texts, const BuildOptions &opt, BuildStats &stats,
+           std::string &err);
 
 // the bit-exact model of rom/render.asm: H x W colour indices
 // (sms_model.cpp) size 0 large, 1 small; (gx, gz, f) the cell and facing;

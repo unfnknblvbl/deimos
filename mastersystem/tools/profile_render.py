@@ -7,7 +7,7 @@
 
 """
 Where the time goes while the Master System draws a view: a sampling
-profiler on the Gearsystem core. The autopilot plays the start of Sector 1;
+profiler on the Gearsystem core. The autopilot plays the start of level01;
 at the end of every emulated frame spent drawing (the engine isn't waiting
 for input) the program counter is looked up in rom/deimos.sym. Each
 sample is one frame (1/60 s).

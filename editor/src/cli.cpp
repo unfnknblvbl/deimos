@@ -290,15 +290,17 @@ static int demo_map(const char *in, const char *outp, const char *json_out)
     p.spawn_x = 15;   // start in the first room, facing north
     p.spawn_z = 21;
     p.spawn_f = 0;
-    // the index of the thing type with this name (0 if there is none)
-    auto def_of = [&](const char *name) {
+    // the index of the thing type of this kind (the original game's eType,
+    // eSub and parm; 0 if the map has none)
+    auto def_of = [&](int etype, int esub, s32 parm) {
         for (size_t i = 0; i < p.defs.size(); i++)
-            if (p.defs[i].name == name) return (int)i;
+            if (p.defs[i].eType == etype && p.defs[i].eSub == esub && p.defs[i].parm == parm) return (int)i;
         return 0;
     };
-    edit::add_entity(p, def_of("Health Vial"), 15, 19);   // in the corridor
-    edit::add_entity(p, def_of("Zombie Pvt"), 15, 11);    // in the far room
-    edit::add_entity(p, def_of("Barrel"), 13, 10);
+    const int VIAL[3] = {3, 20, 4}, ZOMBIE[3] = {1, 0, 294}, BARREL[3] = {12, 1, 4095};   // the kinds placed
+    edit::add_entity(p, def_of(VIAL[0], VIAL[1], VIAL[2]), 15, 19);         // a health pick-up, in the corridor
+    edit::add_entity(p, def_of(ZOMBIE[0], ZOMBIE[1], ZOMBIE[2]), 15, 11);   // the weakest zombie, in the far room
+    edit::add_entity(p, def_of(BARREL[0], BARREL[1], BARREL[2]), 13, 10);   // a barrel
     edit::add_scenery(p, 140, 12, 9, true);   // a lamp
     // a script in the start room shows a new text (8 = DIALOG, a1 = the
     // string's number; '|' in a text is a line break); a2 holds the
@@ -326,7 +328,7 @@ static int demo_map(const char *in, const char *outp, const char *json_out)
     // a monster in other colours
     // (red and blue swapped in each of its 16 colours)
     for (auto &dd : p.defs)
-        if (dd.name == "Zombie Pvt") {
+        if (dd.eType == ZOMBIE[0] && dd.eSub == ZOMBIE[1] && dd.parm == ZOMBIE[2]) {
             ArtRef &sp = p.sprites[dd.tile];
             for (int i = 0; i < 16; i++) std::swap(sp.pal[i].r, sp.pal[i].b);
         }
@@ -352,7 +354,7 @@ static int list_maps(const char *jar_path)
             continue;
         }
         std::string lim = check_limits(p);   // "" if it fits the Master System
-        std::cout << m << " (" << Jar::map_title(m) << "): " << p.walls.size() << " walls, " << p.entities.size()
+        std::cout << m << " (" << jar.map_title(m) << "): " << p.walls.size() << " walls, " << p.entities.size()
                   << " things, " << p.events.size() << " scripts, " << p.strings.size() << " texts -> "
                   << (lim.empty() ? "fits the Master System" : lim) << "\n";
         for (auto &n : notes) std::cout << "    " << n << "\n";

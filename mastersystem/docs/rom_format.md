@@ -13,6 +13,7 @@ and the editor write byte-for-byte the same ROM for the same level.
 | 1 `$4000-$7FBF` | game logic: combat, actions (game/*.asm) | assembler |
 | 1 `$7FC0` | **ROM directory** (below) | rom_dir.py / editor |
 | 1 `$7FF0` | SMS header (checksum and size) | rom_size.py / editor |
+| 2 `$8000-$9FFF` | **texts table**: the game's texts the code shows (below) | gen_cdata.py / editor |
 | 2 `$A000-$BFFF` | **level blob**: the rules' view of the level (below) | gen_cdata.py / editor |
 | 3 `$8000` | **level header** (64 bytes, `rom/live_layout.inc`), then the renderer's small tables | live_data.py / editor |
 | 4 `$8000-$97FF` | **strings** | gen_cdata.py / editor |
@@ -26,8 +27,8 @@ and the editor write byte-for-byte the same ROM for the same level.
 | 9.. | the level's big tables (each starts on a bank): visibility lists, texture columns, billboard sprites | live_data.py / editor |
 | then | hardware sprites, large view, then small view | build_sprites.py / editor |
 
-Banks 2 (`$A000`-), 3, 4 (strings and sprite directories) and everything
-from bank 9 up belong to the level; the rest is the engine.
+Banks 2, 3, 4 (strings and sprite directories) and everything from bank 9
+up belong to the level; the rest is the engine.
 
 ## Level header (bank 3, `$8000`)
 
@@ -117,6 +118,16 @@ table, in this order, then the tables:
 
 Limits: 64 types, 152 things, 56 monsters, 32 lines, 96 scripted cells,
 240 commands, 255 strings.
+
+## Texts table (bank 2, `$8000`, max 8 KB)
+
+The game's own texts the code shows (the rules' messages, the pause menu's
+and the status bar's words, the weapons' names), read from the jar by
+`../tools/game_text.py`: a u16 per text, its CPU address (`$8000` + its
+offset), then the NUL-terminated texts. `game/gen/texts.inc` names each
+text's pointer (`TX_*`), so the code loads a text's address with
+`ld hl, (TX_...)` while bank 2 is in slot 2. The Game Gear's table names
+its own buttons where a text names a key.
 
 ## Strings (bank 4, `$8000`, max 6 KB)
 

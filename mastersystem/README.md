@@ -7,7 +7,7 @@ pictures in 4 MB). The view comes in two sizes and sits in a border in the
 style of the original Doom. The ROM is **512 KB**. The Deimos Editor (`../editor/`) makes the
 same ROM from your DoomRPG.jar, or from a level you have edited in it (a `.deimos` project).
 
-A port of **Doom RPG** (id Software / Fountainhead, 2005, J2ME) Sector 1 to
+A port of **Doom RPG** (id Software / Fountainhead, 2005, J2ME) - its first sector, level01 - to
 the **Sega Master System**, built from the level, textures and sprites in
 the original `DoomRPG.jar`, with the original game's rules re-implemented:
 turn-based combat, monster AI, items, drops and XP, doors, scripted events,
@@ -67,7 +67,7 @@ and solid walls together bring that to 0.4 s, and the small view at low
 detail with solid walls to 0.3 s. See "Speed" below. The settings last
 until the console is switched off.
 
-The top line shows messages ("5 DAMAGE!", "GOT ARMOR SHARD", "LEVEL UP!"),
+The top line shows messages (the damage done, what was picked up, a new level),
 the bottom shows health/armour, weapon and ammo, level and XP, credits and
 keycards, medkits. The view flashes red when you're hit.
 
@@ -78,7 +78,7 @@ doors and wrong codes, level-ups, dialogs and the end of the sector. The
 effects of one turn play one after another; pressing a button drops any
 that are still waiting, so the sound keeps up with you.
 
-Sector 1 at level 1 with 30 HP is a hard fight, exactly as in the original
+level01 at level 1 with 30 HP is a hard fight, exactly as in the original
 (where you normally arrive with a few levels from the Entrance). Use doors
 and corridors so monsters come one at a time, keep the axe for jammed doors
 and the fire extinguisher for fires, and don't stand next to a barrel you're
@@ -93,10 +93,11 @@ game/           the game logic, Z80 assembler (WLA-DX), included by rom/main.asm
   math32.asm    24/32/40-bit arithmetic for the damage formulas
   combat.asm    hit and damage rolls, stats, monsters, their AI and turn, explosions
   events.asm    the tile scripts: commands, conditions, stopping and resuming
-  actions.asm   move, turn, use/attack, pickups, weapons, medkits, a new game
+  actions.asm   move, turn, use/attack, pickups, weapons, medkits, a fresh game
   ui.asm        input, messages, status bar, dialogs, codes, notebook, pause menu
   gen/          generated: limits and state addresses (defs.inc), rule tables
-                (tables.inc), sound ids (sfx.inc), the state layout for the tests
+                (tables.inc), sound ids (sfx.inc), where each of the game's
+                texts is (texts.inc), the state layout for the tests
 rom/main.asm    the display engine (Z80, WLA-DX): reset, interrupts, VDP,
                 sprites, dialog box, status bar, services at $0100
 rom/render.asm  the live renderer
@@ -187,7 +188,7 @@ Monsters, people and items straight ahead (1-4 cells) are hardware sprites,
 as in 0.1.5, with one set of pre-scaled art per view size.
 
 **Speed** (Gearsystem, the autopilot's moves and turns over the start of
-Sector 1, `tools/time_steps.py`; medians, from the button press):
+level01, `tools/time_steps.py`; medians, from the button press):
 
 | | picture finished | whole step (monsters, status bar) |
 |---|---|---|
@@ -307,11 +308,11 @@ hangs during development were found): `git apply` it, then
 
 The whole sector in lockstep: `python3 tools/test_lockstep.py
 rom/deimos.sms 3000 1 --god --autopilot` plays the intended solution
-(terminal sequence, Dr. Guerard, paying the civilian, door code 225, the
+(terminal sequence, the doctor, paying the civilian, door code 225, the
 e-mails, override code 1010, the exit) with `tools/autopilot.py` driving
 both sides; `--god` has the harness top the player's health up in both the
-ROM and the model so the scripted player survives. It ends on "SECTOR 1
-COMPLETE" after 570 actions with every state identical. Add `--render`
+ROM and the model so the scripted player survives. It ends on the sector's
+completion screen after 570 actions with every state identical. Add `--render`
 to check every picture against the renderer's model too.
 Random play: `test_lockstep.py rom/deimos.sms 500 <seed>`; `--frames DIR`
 saves every frame, `--audio FILE.wav` records the sound.

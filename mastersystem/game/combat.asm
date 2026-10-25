@@ -682,7 +682,7 @@ add_health:
 ++: xor a
 +++:
     ld (S_HP), a
-    ld hl, str_health
+    ld hl, (TX_HEALTH_GAINED)
     jr gained                   ; "GAINED n HEALTH" if it went up
 
 ; hl = n (signed): armour, at most maxarmor
@@ -705,7 +705,7 @@ add_armor:
     ld l, a
 ++: ld a, l
     ld (S_ARMOR), a
-    ld hl, str_armor
+    ld hl, (TX_ARMOR_GAINED)
 ; a = the new value, (pp_a) = the old, hl = what: "GAINED <diff><what>" if more
 ; Clobbers every register except IX, IY.
 gained:
@@ -720,7 +720,7 @@ gained:
     ld d, 0                     ; de = the difference
     ld b, h
     ld c, l                     ; bc = what
-    ld hl, str_gained
+    ld hl, (TX_GAINED)
     jp say_num                  ; "GAINED " n what
 
 ; c = ammo type, a = n -> a = 0 (Z) if that ammo was already full
@@ -766,9 +766,9 @@ rnd_mod:
     ld a, b
     ret
 
-; one level up: nextxp = level * 20 + 60; maxhp and maxarmour + 3..5
+; one more level: nextxp = level * 20 + 60; maxhp and maxarmour + 3..5
 ; (hp refilled); defence, strength, agility, accuracy + 1..2 each; all
-; at most 99. Six random numbers. Then "LEVEL UP! LEVEL n". Clobbers
+; at most 99. Six random numbers. Then TX_LEVEL_UP n. Clobbers
 ; every register except IX, IY.
 level_up:
     ld hl, S_LEVEL
@@ -794,7 +794,7 @@ level_up:
     ld a, (S_MAXARMOR)
     call stat_up
     ld (S_MAXARMOR), a
-    ld hl, S_DEFENSE            ; defense, strength, agility, accuracy: + 1 + rnd % 2
+    ld hl, S_DEFENSE            ; defense, strength, agility, accuracy each + 1 + rnd % 2
     ld b, 4                     ; (four bytes in a row in the state)
 -:  push bc
     push hl
@@ -814,9 +814,9 @@ level_up:
     ld a, (S_LEVEL)
     ld e, a
     ld d, 0
-    ld hl, str_level_up
+    ld hl, (TX_LEVEL_UP)
     ld bc, str_empty
-    jp say_num                  ; "LEVEL UP! LEVEL n"
+    jp say_num                  ; TX_LEVEL_UP n
 
 ; hl = n: "GAINED n XP!", then any levels gained
 ; Each level up subtracts nextxp from the XP before nextxp grows.
@@ -826,8 +826,8 @@ level_up:
 add_xp:
     push hl
     ex de, hl
-    ld hl, str_gained
-    ld bc, str_xp
+    ld hl, (TX_GAINED)
+    ld bc, (TX_XP_GAINED)
     call say_num                ; "GAINED n XP!"
     pop de
     ld hl, (S_XP)
@@ -846,8 +846,8 @@ add_xp:
 ; Says "n DAMAGE!" (n = both together). If both are 0 nothing else
 ; happens. Otherwise: player_hurt = 1 (a red flash); armour absorbs the
 ; armour damage, and any it cannot absorb is added to the damage
-; (armour 0); warnings "NEAR DEATH!" / "LOW HEALTH!" when health crosses
-; 26/256 or 78/256 of maxhp, or "ARMOR GONE!"; then health drops, and at
+; (armour 0); warnings TX_NEAR_DEATH / TX_LOW_HEALTH when health crosses
+; 26/256 or 78/256 of maxhp, or TX_ARMOR_GONE; then health drops, and at
 ; 0 the player is dead (S_DEAD). Clobbers every register except IX, IY.
 ; Called by monster_attack, hurt_at (explosions), touch (fires) and
 ; ec_pain.
@@ -857,7 +857,7 @@ player_pain:
     add hl, de
     ex de, hl
     ld hl, str_empty
-    ld bc, str_damage
+    ld bc, (TX_DAMAGE)
     call say_num                ; "n DAMAGE!"
     ld hl, (pp_dmg)
     ld de, (pp_arm)
@@ -869,7 +869,7 @@ player_pain:
     ld a, 1
     ld (player_hurt), a         ; after_action flashes the view
     ld a, (S_ARMOR)
-    ld (pp_a), a                ; armour before (for "ARMOR GONE!")
+    ld (pp_a), a                ; armour before (for TX_ARMOR_GONE)
     ld l, a
     ld h, 0
     or a
@@ -912,11 +912,11 @@ player_pain:
     ld (pp_h2), hl
     ld de, 26
     call pp_crossed             ; crossed about 10% of maxhp?
-    ld hl, str_near_death
+    ld hl, (TX_NEAR_DEATH)
     jr c, ++
     ld de, 78
     call pp_crossed             ; crossed about 30%?
-    ld hl, str_low_health
+    ld hl, (TX_LOW_HEALTH)
     jr c, ++
     ld a, (pp_a)
     or a
@@ -924,7 +924,7 @@ player_pain:
     ld a, (S_ARMOR)
     or a
     jr nz, +                    ; still has some
-    ld hl, str_armor_gone
+    ld hl, (TX_ARMOR_GONE)
 ++: call say                    ; the warning
 +:  ; hp - dmg <= 0: dead
     ld a, (S_HP)
@@ -1372,9 +1372,9 @@ spawn_drop:
     ld c, a                     ; c = 230 + bonus
     ld a, (sd_n5)
     cp c
-    ld b, DD_CREDIT5            ; n5 < c: 5 credits
+    ld b, DD_CREDIT5            ; n5 < c: 5-credit pick-up
     jp c, _sd_have
-    ld b, DD_CREDIT1            ; else 1 credit
+    ld b, DD_CREDIT1            ; else 1-credit pick-up
     jp _sd_have
 
 ; hl = parm (low word), de = a value -> Z if equal; keeps hl
@@ -1426,7 +1426,7 @@ _sd_even:
     jr _sd_have
 +:  cp 7
     jr nz, +
-    ld b, DD_CREDIT5            ; 7: 5 credits
+    ld b, DD_CREDIT5            ; 7: 5-credit pick-up
     jr _sd_have
 +:  cp 8
     jr nz, +
@@ -2576,7 +2576,7 @@ monster_hurt_or_died_e:
     push bc
     ld a, c
     call ent_name
-    ld de, str_died
+    ld de, (TX_DIED)
     call say2                   ; "<NAME> DIED!"
     pop bc
     pop de
@@ -2586,9 +2586,9 @@ monster_hurt_or_died_e:
 ; a = entity: destroyed (a fire put out, a barrel blown up, a crate broken
 ; open), then any explosions it set off
 ; Only if alive. It loses F_ALIVE and leaves the map. A fire (ET_FIRE):
-; "FIRE CLEARED!" and 2 XP. A destructible of sub-type 1 (a barrel):
+; TX_FIRE_CLEARED and 2 XP. A destructible of sub-type 1 (a barrel):
 ; an explosion on its cell. Sub-type 2 (a crate): one random number r:
-; r < 2 trapped (an explosion), < 4 5 credits, < 12 1 credit, < 24 a
+; r < 2 trapped (an explosion), < 4 5-credit pick-up, < 12 1-credit pick-up, < 24 a
 ; small medkit, < 150 armour, < 213 ammo (one more random number for the
 ; type), else empty; the crate's entity becomes that drop (if the level
 ; has one) and goes back on the map. Then run_explosions. Uses ds_*
@@ -2614,7 +2614,7 @@ destroy:
     ld a, (ds_et)
     cp ET_FIRE
     jr nz, +
-    ld hl, str_fire_cleared
+    ld hl, (TX_FIRE_CLEARED)
     call say
     ld hl, 2
     call add_xp                 ; 2 XP for a fire
@@ -2640,7 +2640,7 @@ destroy:
     pop af
     cp 2
     jr nc, +
-    ld hl, str_trapped
+    ld hl, (TX_TRAPPED)
     call say
     ld a, SFX_EXPLODE
     call sfx
@@ -2702,7 +2702,7 @@ ds_explode:
 ; "<NAME> ATTACKS", its weapon's sound, then mon_shots[class] shots. At
 ; the player: calc_hit for each (one random number each), calc_damage
 ; for each hit (one more), a crit only on the first shot; the totals go
-; to player_pain, or "DODGED!" if all missed. At an entity (a barrel in
+; to player_pain, or TX_DODGED if all missed. At an entity (a barrel in
 ; the way): no rolls; it is destroyed. Clobbers every register except
 ; IX, IY.
 monster_attack:
@@ -2721,7 +2721,7 @@ monster_attack:
     jp z, _ma_raise
     ld a, (ma_i)
     call ent_name
-    ld de, str_attacks
+    ld de, (TX_ATTACKS)
     call say2                   ; "<NAME> ATTACKS"
     ld a, (ma_i)
     call attack_weapon
@@ -2808,7 +2808,7 @@ _ma_done:
     or d
     or e
     jp nz, player_pain          ; hurt the player with the totals
-    ld hl, str_dodged
+    ld hl, (TX_DODGED)
     call say
     ld a, SFX_DODGE
     jp sfx
@@ -2817,12 +2817,12 @@ _ma_done:
 
 ; an arch-vile raises corpse ma_tgt, if its cell is still free: the
 ; corpse is alive again with full health and armour, back on the map and
-; active. Otherwise "RAISE FAILED!" and F_RAISING is cleared.
+; active. Otherwise TX_RAISE_FAILED and F_RAISING is cleared.
 _ma_raise:
     ld a, (ma_i)
     call ent_name
-    ld de, str_casts_raise
-    call say2                   ; "<NAME> CASTS RAISE"
+    ld de, (TX_CASTS_RAISE)
+    call say2                   ; <name> TX_CASTS_RAISE
     ld a, SFX_RAISE
     call sfx
     ld a, (ma_tgt)
@@ -2843,7 +2843,7 @@ _ma_raise:
     ld hl, S_E_FLAGS
     call add_hl_a
     res 7, (hl)                 ; F_RAISING
-    ld hl, str_raise_failed
+    ld hl, (TX_RAISE_FAILED)
     jp say
 +:  ld a, (ma_tgt)
     ld hl, S_E_FLAGS
@@ -2874,8 +2874,8 @@ _ma_raise:
     call activate               ; it takes turns again
     ld a, (ma_tgt)
     call ent_name
-    ld de, str_revived
-    jp say2                     ; "<NAME> IS REVIVED!"
+    ld de, (TX_REVIVED)
+    jp say2                     ; <name> TX_REVIVED
 
 ; hl = a list, b = its length, a = a value -> Z if it is in the list
 ; Clobbers a, b, c, hl.
@@ -3023,22 +3023,5 @@ wpn_sfx:
     .db SFX_MON_ATTACK, SFX_MON_ATTACK, SFX_MON_ATTACK, SFX_FIREBALL, SFX_FIREBALL
     .db SFX_FIREBALL, SFX_RAISE
 
-str_gained:       .db "GAINED ", 0
-str_health:       .db " HEALTH", 0
-str_armor:        .db " ARMOR", 0
-str_xp:           .db " XP!", 0
-str_level_up:     .db "LEVEL UP! LEVEL ", 0
 str_empty:        .db 0
-str_damage:       .db " DAMAGE!", 0
-str_near_death:   .db "NEAR DEATH!", 0
-str_low_health:   .db "LOW HEALTH!", 0
-str_armor_gone:   .db "ARMOR GONE!", 0
-str_died:         .db " DIED!", 0
-str_fire_cleared: .db "FIRE CLEARED!", 0
 str_barrel:       .db "BARREL EXPLODES!", 0
-str_trapped:      .db "TRAPPED!", 0
-str_attacks:      .db " ATTACKS", 0
-str_casts_raise:  .db " CASTS RAISE", 0
-str_revived:      .db " IS REVIVED!", 0
-str_raise_failed: .db "RAISE FAILED!", 0
-str_dodged:       .db "DODGED!", 0

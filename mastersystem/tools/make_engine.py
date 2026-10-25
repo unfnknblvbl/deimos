@@ -11,8 +11,8 @@ original game in it. Every part made from DoomRPG.jar is blanked (zeros):
 the status bar, fonts and title (listed, so the editor makes them again
 from the user's own jar - its C++ port of tools/build_ui_gfx.py gives the
 same bytes) and the level's own parts (the editor's level builder writes
-those: the level blob, bank 3, the strings and sprite directories, banks 9
-on).
+those: the texts table and the level blob in bank 2, bank 3, the strings
+and sprite directories, banks 9 on).
 
   make_engine.py rom/deimos.sms rom/deimos.sym build/gfx OUT.eng
   make_engine.py rom/deimos.gg rom/deimos_gg.sym build/gfx OUT.eng --gg   (the Game Gear: console 2,
@@ -50,11 +50,14 @@ UI = {"hud_palette": "hud_palette_data", "font_index": "font_index_data", "hud_t
       "hud_static": "hud_static_data", "dlg_font": "dlg_font_data", "title_tiles": "title_tiles_data",
       "title_map": "title_map_data"}
 # what the editor's level builder (editor/src/sms_build.cpp) rewrites:
+# TEXTS_ADDR/TEXTS_MAX the texts table (the game's texts the code shows,
+# from the jar: ../../tools/game_text.py) at $8000 in bank 2, 8 KB;
 # LEVEL_ADDR/LEVEL_MAX the level blob (the game data compiled by gen_cdata.py)
 # at $A000 in bank 2, 8 KB; STRINGS_MAX the first 8 KB of MISC_BANK (bank 4,
 # the strings); SPR_DIR_SMALL the small-view sprite directory at $B000 in
 # bank 4 (4 KB); FIRST_DATA_BANK the first of the level's data banks (9)
 LEVEL_ADDR, LEVEL_MAX, STRINGS_MAX, SPR_DIR_SMALL, FIRST_DATA_BANK, MISC_BANK = 0xA000, 0x2000, 0x2000, 0xB000, 9, 4
+TEXTS_ADDR, TEXTS_MAX = 0x8000, 0x2000
 
 
 def labels(sym):
@@ -100,9 +103,11 @@ def main():
             raise SystemExit(f"{name}: the ROM's bytes are not the generated ones")
         rom[a:a + len(b)] = bytes(len(b))
         regions.append((name, a, len(b)))
-    # the level's parts: the level blob in bank 2, all of bank 3 (level
-    # header and small tables), the strings and small sprite directory in
-    # bank 4, and every bank from 9 on
+    # the level's parts: the texts table and the level blob in bank 2, all
+    # of bank 3 (level header and small tables), the strings and small
+    # sprite directory in bank 4, and every bank from 9 on
+    t = 2 * BANK + (TEXTS_ADDR - 0x8000)
+    rom[t:t + TEXTS_MAX] = bytes(TEXTS_MAX)
     rom[2 * BANK + (LEVEL_ADDR - 0x8000):2 * BANK + (LEVEL_ADDR - 0x8000) + LEVEL_MAX] = bytes(LEVEL_MAX)
     rom[3 * BANK:4 * BANK] = bytes(BANK)
     rom[MISC_BANK * BANK:MISC_BANK * BANK + STRINGS_MAX] = bytes(STRINGS_MAX)

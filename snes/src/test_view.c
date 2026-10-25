@@ -72,7 +72,7 @@ int main(void)
 #endif
     dbg = 10;
     campaign_init();            /* find the campaign block */
-    game_init();                /* a new game, the first map */
+    game_init();                /* a fresh game, the first map */
     dbg = 11;
     screen_on();
     picture();

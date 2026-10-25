@@ -815,7 +815,7 @@ bool App::load_jar(const std::string &path)
     for (auto &m : j->maps()) {
         GameMap g;
         g.name = m;
-        g.title = Jar::map_title(m);   // e.g. "UAC Base"
+        g.title = j->map_title(m);     // (the game's name for it)
         Project p;
         if (!import_map(*j, m, p, err, &g.notes)) {   // convert the map to a level
             g.verdict = err;
@@ -1042,7 +1042,7 @@ void App::draw_newrom_window()
         for (size_t i = 0; i < newrom_maps.size(); i++) {
             bool v = newrom_sel[i];
             // the label shows the title; "##name" keeps each checkbox's ImGui id unique
-            if (ImGui::Checkbox((Jar::map_title(newrom_maps[i]) + "##" + newrom_maps[i]).c_str(), &v)) newrom_sel[i] = v;
+            if (ImGui::Checkbox(((jar ? jar->map_title(newrom_maps[i]) : newrom_maps[i]) + "##" + newrom_maps[i]).c_str(), &v)) newrom_sel[i] = v;
             n_maps += v;
             // beside it, in green or red, whether it fits the Master System
             for (auto &g : jar_maps)

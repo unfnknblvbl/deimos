@@ -17,8 +17,8 @@ import autopilot
 from PIL import Image, ImageDraw, ImageFont
 
 # The script runs at import: it starts ffmpeg at once and films the ROM as
-# it goes. It was written for version 0.0.3 (Sector 1 alone: it plays with
-# game_model.load() and the Sector 1 autopilot); the menu positions it
+# it goes. It was written for version 0.0.3 (level01 alone: it plays with
+# game_model.load() and the level01 autopilot); the menu positions it
 # steps through are that version's, so it may not match the current ROM
 # (md_campaign_demo.py is the current demo).
 ROM = str(Path(__file__).resolve().parent.parent / 'out' / 'deimos.md')
@@ -69,7 +69,7 @@ def boot(sram=None, pad=6):
 
 
 def play(r, w, pilot, n, held=()):
-    """Lets the Sector 1 autopilot play n actions in the ROM (r) and the model
+    """Lets the level01 autopilot play n actions in the ROM (r) and the model
     (w), holding `held` throughout. Health below 22 is refilled in both
     (to keep the demo going). Dialogs and codes are answered at a reading
     pace. Asserts that the ROM's state still matches the model's at the end.
@@ -150,7 +150,7 @@ tap(r, 'down', 30)
 tap(r, 'a', 40)
 assert mode(r) == 8
 # ---- 3. step play
-say('New game', r)
+say('Starting the game', r)
 tap(r, 'up', 30)
 tap(r, 'a', 10)
 r.wait_idle()
@@ -189,7 +189,7 @@ say('SMOOTH movement (low detail)', r)
 play(r, w, pilot, 25)
 r.run(30)
 # ---- 5. save, power off, continue
-say('Pause menu: Save game', r)
+say('Pause menu: saving the game', r)
 tap(r, 'start', 40)
 tap(r, 'down', 15)
 tap(r, 'down', 30)

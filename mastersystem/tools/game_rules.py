@@ -14,61 +14,62 @@ Python reference model (game_model.py) and the ROM table generator
 drift apart.
 
 Indices used throughout: a weapon index is a row of WEAPONS; an ammo type
-is an index into AMMO_NAMES; a monster class is a row of MONSTERS (each
+is 0..5 (halon, bullets, shells, rockets, cells, the dog); a monster class is a row of MONSTERS (each
 class has three ranks, e.g. Zombie Private/Lieutenant/Captain, which share
 the class's attacks and damage multipliers).
 """
 
 # Player and monster weapons: (name, strMin, strMax, rangeMin, rangeMax,
-# ammoType, ammoUsage, armorShare, numShots)
+# ammoType, ammoUsage, armorShare, numShots); the name is the weapon's entry
+# in the texts table (../../tools/game_text.py TX_WPN_n: from the jar)
 #   armorShare/256 of the damage goes to armour (the rest to health)
 #   numShots = how many hit rolls one attack makes (chaingun/plasma 3)
 #   strMin..strMax is the damage roll range; rangeMin/rangeMax are the
 #   weapon's range numbers as in the original tables; ammoUsage is ammo
 #   spent per attack (0: needs no ammo)
 WEAPONS = [
-    ("Axe",            3,  12, 0,  70, 0,  0,  25, 1),   # 0
-    ("Fire Ext",       1,   2, 0, 100, 0,  1, 204, 1),   # 1
-    ("Pistol",         6,   7, 5,  80, 1,  1, 102, 1),   # 2
-    ("Shotgun",        6,  10, 2,  80, 2,  1, 128, 1),   # 3
-    ("Chaingun",       3,   6, 3,  90, 1,  3, 102, 3),   # 4
-    ("Super Shotgun", 12,  18, 1,  90, 2,  2,  51, 1),   # 5
-    ("Plasma Gun",     6,   8, 4,  90, 4,  3, 230, 3),   # 6
-    ("Rocket Lnchr",  15,  36, 8,  70, 3,  1, 128, 1),   # 7
-    ("BFG",           60, 105, 8, 100, 4, 15,  76, 1),   # 8
-    ("Hell Hound",     5,   9, 0,  75, 5,  0,  25, 1),   # 9
-    ("Cerberus",       8,  12, 0,  75, 5,  0,  25, 1),   # 10
-    ("Demon Wolf",    15,  18, 0,  75, 5,  0,  25, 1),   # 11
-    ("Melee 1",        3,   5, 0,  90, 0,  0, 128, 0),   # 12  (monster attacks: numShots
-    ("Melee 2",        4,   7, 0,  80, 0,  0, 128, 0),   # 13   come from MONSTERS' shots)
-    ("Melee 3",        5,  15, 0,  70, 0,  0, 128, 0),   # 14
-    ("Missile",        4,  10, 3,  85, 0,  0, 128, 0),   # 15
-    ("Boss Missile",  10,  20, 3,  75, 0,  0, 128, 0),   # 16
-    ("Rocket Missile", 15, 30, 2,  80, 0,  0, 128, 0),   # 17
-    ("Raise",          0,   0, 0,   0, 0,  0,   0, 0),   # 18
+    ("WPN_0",   3,  12,   0,  70,   0,   0,  25,   1),    # 0 the axe
+    ("WPN_1",   1,   2,   0, 100,   0,   1, 204,   1),    # 1 the fire extinguisher
+    ("WPN_2",   6,   7,   5,  80,   1,   1, 102,   1),    # 2 the pistol
+    ("WPN_3",   6,  10,   2,  80,   2,   1, 128,   1),    # 3 the shotgun
+    ("WPN_4",   3,   6,   3,  90,   1,   3, 102,   3),    # 4 the chaingun
+    ("WPN_5",  12,  18,   1,  90,   2,   2,  51,   1),    # 5 the super shotgun
+    ("WPN_6",   6,   8,   4,  90,   4,   3, 230,   3),    # 6 the plasma weapon
+    ("WPN_7",  15,  36,   8,  70,   3,   1, 128,   1),    # 7 the rocket launcher
+    ("WPN_8",  60, 105,   8, 100,   4,  15,  76,   1),    # 8 the BFG
+    ("WPN_9",   5,   9,   0,  75,   5,   0,  25,   1),    # 9 the first dog
+    ("WPN_10",  8,  12,   0,  75,   5,   0,  25,   1),    # 10 the second dog
+    ("WPN_11", 15,  18,   0,  75,   5,   0,  25,   1),    # 11 the third dog
+    ("WPN_12",  3,   5,   0,  90,   0,   0, 128,   0),    # 12  (monster attacks: numShots
+    ("WPN_13",  4,   7,   0,  80,   0,   0, 128,   0),    # 13   come from MONSTERS' shots)
+    ("WPN_14",  5,  15,   0,  70,   0,   0, 128,   0),    # 14 (melee attacks 1, 2, 3: 12..14)
+    ("WPN_15",  4,  10,   3,  85,   0,   0, 128,   0),    # 15 a missile
+    ("WPN_16", 10,  20,   3,  75,   0,   0, 128,   0),    # 16 a boss's missile
+    ("WPN_17", 15,  30,   2,  80,   0,   0, 128,   0),    # 17 a rocket
+    ("WPN_18",  0,   0,   0,   0,   0,   0,   0,   0),    # 18 the raise (see W_RAISE)
 ]
 W_AXE, W_EXT, W_PISTOL = 0, 1, 2
 W_RAISE = 18                    # the Archvile's "attack": raise a corpse
-# ammo type names, indexed by WEAPONS' ammoType ("Dog": the hound weapons 9-11)
-AMMO_NAMES = ["Halon", "Bullets", "Shells", "Rockets", "Cells", "Dog"]
+# (ammo types 0..5, WEAPONS' ammoType: halon, bullets, shells, rockets, cells,
+# and 5 the dog's health: the hound weapons 9-11)
 
 # Monster classes (eSubType): base (hp, armor, defense, strength, agility,
 # accuracy), attack weapons (attack1, attack2: indices into WEAPONS) and
 # shots per attack. The base stats are scaled per def by its parm
 # (game_model.setup_enemy), which is how the three ranks differ.
 MONSTERS = [
-    ((5, 4, 13, 13, 13, 13),     (2, 3),   1),   # 0 Zombie Pvt/Lt/Cpt
-    ((7, 3, 12, 14, 12, 12),     (12, 13), 1),   # 1 Hellhound/Cerberus/Demon Wolf
+    ((5, 4, 13, 13, 13, 13),     (2, 3),   1),   # 0 the zombies (three ranks)
+    ((7, 3, 12, 14, 12, 12),     (12, 13), 1),   # 1 the dogs (three ranks)
     ((10, 5, 14, 7, 13, 12),     (4, 4),   3),   # 2 Troop/Commando/Assassin
-    ((9, 4, 13, 14, 13, 13),     (15, 12), 1),   # 3 Impling/Imp/Imp Lord
-    ((6, 3, 14, 6, 15, 15),      (13, 14), 3),   # 4 Phantom/Lost Soul/Nightmare
-    ((10, 5, 14, 16, 12, 13),    (13, 12), 1),   # 5 Bull Demon/Pinky/Belphegor
+    ((9, 4, 13, 14, 13, 13),     (15, 12), 1),   # 3 Impling/Imp and their lord
+    ((6, 3, 14, 6, 15, 15),      (13, 14), 3),   # 4 Phantom/Nightmare class (the lost souls)
+    ((10, 5, 14, 16, 12, 13),    (13, 12), 1),   # 5 Pinky/Belphegor class
     ((13, 7, 12, 10, 13, 15),    (15, 13), 3),   # 6 Malwrath/Cacodemon/Wretched
-    ((15, 8, 14, 12, 12, 12),    (15, 14), 1),   # 7 Beholder/Rahovart/Pain Elemental
+    ((15, 8, 14, 12, 12, 12),    (15, 14), 1),   # 7 Beholder/Rahovart class (the souls' spawner)
     ((13, 8, 16, 14, 15, 15),    (7, 12),  1),   # 8 Ghoul/Fiend/Revenant
     ((20, 10, 16, 14, 15, 15),   (7, 3),   1),   # 9 Behemoth/Mancubus/Druj
     ((18, 9, 15, 17, 14, 16),    (15, 15), 1),   # 10 Infernis/Archvile/Apollyon
-    ((25, 15, 16, 15, 15, 15),   (16, 17), 1),   # 11 Ogre/Hell Knight/Baron
+    ((25, 15, 16, 15, 15, 15),   (16, 17), 1),   # 11 Ogre/Baron class
     ((600, 400, 45, 30, 35, 40), (7, 17),  1),   # 12 Cyberdemon (values clamp to 255)
     ((400, 250, 30, 35, 40, 55), (12, 13), 3),   # 13 Kronos
 ]
@@ -114,13 +115,13 @@ def weapon_damage_mult(mclass, weapon):
 
 
 # Player start (Player_reset), plus what the Entrance level would have given
-# by the time the player reaches Sector 1 (axe, fire extinguisher, a few
-# halon cans) - documented in the README as a port decision.
+# by the time the player reaches level01 (axe, fire extinguisher, a few
+# halon) - documented in the README as a port decision.
 PLAYER_START = dict(hp=30, maxhp=30, armor=0, maxarmor=20, defense=16, strength=12,
                     agility=14, accuracy=16, level=1, xp=0, nextxp=80, credits=0,
                     weapons=(1 << 0) | (1 << 1) | (1 << 2), weapon=2,
                     ammo=[6, 8, 0, 0, 0, 0], inventory=[0, 0, 0, 0, 0], keys=0)
-# a new game of the whole campaign (Player_reset): the pistol and 8 bullets
+# a fresh game of the whole campaign (Player_reset): the pistol and 8 bullets
 CAMPAIGN_START = dict(PLAYER_START, weapons=1 << 2, ammo=[0, 8, 0, 0, 0, 0])
 
 # Event flag bits used when running tile events. A tile event fires when

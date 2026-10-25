@@ -30,7 +30,7 @@ from key_text import md_text  # noqa: E402
 
 UI_DONE, UI_END = 4, 11  # values of the ROM's eng_mode: the sector's statistics screen, THE END
 # pilot action -> the ROM's button presses (default 6-button layout); the
-# Berserker and the Dog Collar go through the pause menu's ITEMS list
+# Berserker and the collar go through the pause menu's ITEMS list
 BUTTONS = {"fwd": [("up",)], "back": [("down",)], "left": [("left",)], "right": [("right",)],
            "use": [("a",)], "pass": [("b",)], "wnext": [("z",)], "wprev": [("x",)], "heal": [("c",)],
            "close": [("b",)],
@@ -124,7 +124,7 @@ def pages(text):
 
 
 def main():
-    """Runs the test (arguments in the module docstring). Starts a new game
+    """Runs the test (arguments in the module docstring). Starts a fresh game
     in the ROM and a game_model.Campaign, then lets the pilot play up to
     `max actions`: answers dialogs and codes, presses each action's
     buttons in the ROM and applies it to the model, follows map changes
@@ -147,7 +147,7 @@ def main():
     pilot = cp.Pilot()
     rom.run(30)
     rom.press(("start",))
-    rom.press(("a",))                          # new game
+    rom.press(("a",))                          # fresh game
     if not rom.wait_idle():
         print("ROM never reached the game")
         return 1

@@ -31,10 +31,13 @@ public:
     bool open(const std::string &path, std::string &err);
     // a file's unpacked bytes, or nullptr when the jar has no such file
     const Bytes *get(const std::string &name) const;
-    // the maps in the jar (level01, junction, ...), and a readable name for each
+    // the maps in the jar (level01, junction, ...), and a readable name for
+    // each: short_title as the games show it (the game's own name for the
+    // map, from the jar's texts: gametext::map_title; else the file name),
+    // map_title for the editor's lists (with a word on the map's place)
     std::vector<std::string> maps() const;
-    static std::string map_title(const std::string &map);    // for lists: "Junction (destroyed)"
-    static std::string short_title(const std::string &map);  // as the games show it: "Junction"
+    std::string map_title(const std::string &map) const;
+    std::string short_title(const std::string &map) const;
 
 private:
     std::map<std::string, Bytes> files_;   // file name in the zip -> its contents

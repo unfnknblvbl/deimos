@@ -150,7 +150,7 @@ void App::draw_tools_panel()
     if (tool == T_DOOR) {
         // door_kind is an edit::DoorKind: 0 door, 1 locked, 2 secret wall
         ImGui::RadioButton("Door", &door_kind, 0);
-        ImGui::RadioButton("Locked door", &door_kind, 1);
+        ImGui::RadioButton("Door, locked", &door_kind, 1);
         ImGui::RadioButton("Secret sliding wall", &door_kind, 2);
         para("Locked doors need an UNLOCK command in a script. Secret walls need OPENLINE.");
     }

@@ -10,10 +10,10 @@ Reads the Mega Drive game's campaign block (tools/md_campaign.py format: big-end
 offsets from the block's start), for the ports' tools and tests.
 
 The "campaign block" holds every map of the campaign:
-  0    "MDCP", 6 u16 the number of maps
+  0    "MDCP", u16 version, 6 u16 the number of maps
   8    u32 tex_bank, spr_bank, weapons, size (the textures' and sprites'
-       pixel data, the weapons' tables, the block's size); 24 two u32
-       zeros (reserved)
+       pixel data, the weapons' tables, the block's size); 24 u32 the
+       texts table, u32 its size (the game's texts, tools/game_text.py)
   32 + 32 m   map m: u32 its pack's offset, u8 the original game's id,
               then its title (bytes 6..31, NUL-padded)
 A map's "pack": 8 six u16 (walls, textures, sprites, scenery, floor and
@@ -37,14 +37,21 @@ FMT = {"walls": "h", "tex_off": "I", "tex_pal": "H", "tex_hist": "H", "spr_cols"
 
 class Block:
     """A campaign block, from a file path or bytes: b the bytes, n_maps,
-    tex_bank / spr_bank / weapons / size from the header."""
+    tex_bank / spr_bank / weapons / size / texts / texts_size from the
+    header."""
 
     def __init__(self, path_or_bytes):
         self.b = Path(path_or_bytes).read_bytes() if not isinstance(path_or_bytes, (bytes, bytearray)) \
             else bytes(path_or_bytes)
         assert self.b[:4] == b"MDCP"
         self.n_maps = struct.unpack_from(">H", self.b, 6)[0]
-        self.tex_bank, self.spr_bank, self.weapons, self.size = struct.unpack_from(">4I", self.b, 8)
+        self.tex_bank, self.spr_bank, self.weapons, self.size, self.texts, self.texts_size = \
+            struct.unpack_from(">6I", self.b, 8)
+
+    def text(self, i):
+        """the texts table's text i (TX_* of tools/game_text.py), as bytes"""
+        o = self.texts + struct.unpack_from(">H", self.b, self.texts + 2 * i)[0]
+        return self.b[o:self.b.index(b"\0", o)]
 
     def map(self, i):
         """map i (a Map)"""

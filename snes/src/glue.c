@@ -11,6 +11,8 @@
 /* The rules (core/rules.c, the "game core" shared by every port) call:
  *   map_level, level_string   the current map's level data and strings,
  *                             copied out of the campaign block (campaign.c)
+ *   gtext                     one of the game's texts (the block's texts
+ *                             table, read from DoomRPG.jar by the build)
  *   say, say2, say3, say_num  a message for the status line
  *   sfx                       a sound effect
  * The messages wait in msgq for ui.c to show them one after another; the
@@ -63,6 +65,27 @@ const char *level_string(u8 id)
     u32 at = strings_off + blk_u16(strings_off + 2 * (u16)id);  /* the string's place */
     str_next = (str_next + 1) & (STR_BUFS - 1);
     blk_strcpy(at, b, STR_MAX);                                 /* copy it out */
+    return b;
+}
+
+/* the game's texts (the rules' messages, the menus' words, the weapons'
+   names): the campaign block's texts table, whose offset is the block
+   header's u32 at byte 24 (tools/game_text.py). Each is copied out of the
+   ROM into one of four buffers in turn, at most GT_MAX characters. */
+#define GT_BUFS 4                       /* buffers used in turn (a power of two) */
+#define GT_MAX 47                       /* the most characters a text keeps */
+static char gt_buf[GT_BUFS][GT_MAX + 1];
+static u8 gt_next;                      /* the buffer the next call fills */
+
+/* text id (TX_*): the table starts with a big-endian word per text, its
+   offset from the table's start. The result stays valid for the next
+   three calls. */
+const char *gtext(u8 id)
+{
+    char *b = gt_buf[gt_next];
+    u32 t = blk_u32(24);                                /* the texts table */
+    gt_next = (gt_next + 1) & (GT_BUFS - 1);
+    blk_strcpy(t + blk_u16(t + 2 * (u16)id), b, GT_MAX);  /* copy it out */
     return b;
 }
 

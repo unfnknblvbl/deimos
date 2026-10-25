@@ -13,7 +13,7 @@
  * ui.c, view.c and the drawing, all banked.)
  *
  * It implements the platform hooks the portable core (core/rules.c) and
- * the SNES port's ui.c / save.c expect (map_level, level_string, say*,
+ * the SNES port's ui.c / save.c expect (map_level, level_string, gtext, say*,
  * sfx, plat_ev_at, plat_cmd_a1/a2, the campaign.h readers), and the 3D
  * view's data access (view/vdata.h: vd_u8 ... vd_pack). It lives in bank 0
  * because it switches the ROM bank at $4000-$7FFF itself.
@@ -365,6 +365,27 @@ const char *level_string(u8 id)
     u32 at = strings_off + blk_u16(strings_off + 2 * (u16)id);  /* (u16 offsets from the strings' start) */
     str_next ^= 1;
     blk_strcpy(at, b, STR_MAX);
+    return b;
+}
+
+/* the game's texts (the rules' messages, the menus' words, the weapons'
+   names): the campaign block's texts table, at the offset in the block
+   header's u32 at byte 24 (tools/game_text.py), a big-endian word per
+   text (its offset from the table) and then the texts. Each is copied
+   into one of four small buffers in turn (work RAM is short: at most
+   GT_MAX characters, as many as a message line holds) */
+#define GT_BUFS 4
+#define GT_MAX 31
+static char gt_buf[GT_BUFS][GT_MAX + 1];
+static u8 gt_next;
+
+/* the core's hook: text id (TX_*), valid for the next three calls */
+const char *gtext(u8 id)
+{
+    char *b = gt_buf[gt_next];
+    u32 t = blk_u32(24);                                /* (the texts table) */
+    gt_next = (gt_next + 1) & (GT_BUFS - 1);
+    blk_strcpy(t + blk_u16(t + 2 * (u16)id), b, GT_MAX);
     return b;
 }
 

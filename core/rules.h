@@ -41,6 +41,7 @@
 #include "types.h"
 #include "gen/state.h"
 #include "gen/sfx.h"
+#include "gen/texts.h"
 
 /* the game state (core/rules.c) */
 extern struct state S;
@@ -105,7 +106,7 @@ extern struct state S;
 #define SUSP_PASSWORD 2
 #define SUSP_STOP 3
 
-#define DLG_CAPTURED 0xFE          /* dialog_str: "you captured the <captured_def>!" */
+#define DLG_CAPTURED 0xFE          /* dialog_str: TX_CAPTURED <captured_def> TX_CAPTURED_END */
 
 /* the level in play (core/rules.c: level_load): the numbers of defs,
    monster slots, lines, events, texts; the map's id; the def a "you
@@ -135,23 +136,23 @@ extern const u8 STORE_LINES[];     /* per vendor 16 x (name tag, price), tag 0 e
 extern const u8 STORE_ITEMS[];     /* per name tag: kind (1 item, 2 ammo, 3 stat), what */
 
 /* the actions (the platform's input code calls these)
-   game_init       a new game: the first map
+   game_init       a fresh game: the first map
    game_restore    S was loaded from a saved game
    act_turn        turn by delta quarter turns (+1 right, -1 left); free
    act_move        a step forward (back 0) or back (1); 1 if it moved
    act_use         use what is ahead, or attack it; may take a turn
    act_pass        let a turn pass
    act_cycle_weapon the next (+1) or previous (-1) usable weapon; free
-   act_health_item use a medkit or soul sphere; 1 if one was used
-   use_item        3 the Berserker, 4 the Dog Collar; 1 if used
+   act_health_item use a medkit or soulsphere; 1 if one was used
+   use_item        3 the Berserker, 4 the collar; 1 if used
    resume          a dialog closed, or a code was entered (0: cancelled)
    settle          let the monsters move if they are owed a turn
    modal           1 while a dialog, a code entry or a store is open
-   store_buy       buy a line of the open store: 0 bought, 1 not enough
+   store_buy       buy a line of the open store: 0 bought, 1 too few
                    credits, 2 too many
    store_close     the store's menu closed
    map_change      through the exit (S.exit) to map `map` */
-void game_init(void);              /* a new game: the first map */
+void game_init(void);              /* a fresh game: the first map */
 void game_restore(void);           /* S was loaded from a saved game */
 void act_turn(s8 delta);
 u8 act_move(u8 back);              /* -> 1 if it moved */
@@ -159,11 +160,11 @@ void act_use(void);
 void act_pass(void);
 void act_cycle_weapon(s8 step);
 u8 act_health_item(void);
-u8 use_item(u8 k);                 /* 3 the Berserker, 4 the Dog Collar -> 1 used */
+u8 use_item(u8 k);                 /* 3 the Berserker, 4 the collar -> 1 used */
 void resume(const char *password); /* a dialog closed / a code was entered (0: cancelled) */
 void settle(void);
 u8 modal(void);
-u8 store_buy(u8 line);             /* -> 0 bought, 1 not enough credits, 2 too many */
+u8 store_buy(u8 line);             /* -> 0 bought, 1 too few credits, 2 too many */
 void store_close(void);
 void map_change(u8 map);           /* through the exit (S.exit) to map `map` */
 
@@ -205,5 +206,9 @@ void sfx(u8 id);
    blob), readable until a few more strings have been asked for */
 const u8 *map_level(u8 map);
 const char *level_string(u8 id);
+/* the game's text `id` (TX_* in gen/texts.h: the texts table that the
+   build reads from DoomRPG.jar, tools/game_text.py), 0-terminated;
+   readable until three more texts have been asked for */
+const char *gtext(u8 id);
 
 #endif

@@ -83,7 +83,7 @@ facing_move_flags:
 
 ;-----------------------------------------------------------------------
 ; what Use / attack aims at: the first thing straight ahead (up to 8 cells)
-; -> a = 1 (NZ) with sel_kind / sel_idx; sel_locked = 1 if a locked door
+; -> a = 1 (NZ) with sel_kind / sel_idx; sel_locked = 1 if a door that is locked
 ; was in the way
 ; A MASK_SHOT trace from the player 8 cells ahead (clamped to the map).
 ; The first hit decides, skipping entities on the player's own cell:
@@ -341,7 +341,7 @@ calc_hit_object:
     ret
 
 ; a = line: a breakable door is broken open
-; (L_ALIVE cleared, L_OPEN set), "DOOR CLEARED!", 1 XP, then the door
+; (L_ALIVE cleared, L_OPEN set), TX_DOOR_CLEARED, 1 XP, then the door
 ; cell's event runs as if used (EVF_USE). Clobbers every register except
 ; IX, IY.
 line_destroyed:
@@ -353,7 +353,7 @@ line_destroyed:
     or L_OPEN
     ld (hl), a
     push bc
-    ld hl, str_door_cleared
+    ld hl, (TX_DOOR_CLEARED)
     call say
     ld a, SFX_BREAK
     call sfx
@@ -378,8 +378,8 @@ line_destroyed:
 ; In: sel_kind / sel_idx (select_target). Takes the ammo (wpn_use of
 ; type wpn_ammo), plays the weapon's sound, then fires wpn_shots shots.
 ; At a monster: calc_hit (range = |dx| + |dz|) and calc_damage per hit,
-; a crit only on the first shot; "n DAMAGE!" (or "MISSED!" / "NO
-; EFFECT!"); monster_pain, then its death or hurt sound. A blow from the
+; a crit only on the first shot; n TX_DAMAGE (or TX_MISSED /
+; TX_NO_EFFECT); monster_pain, then its death or hurt sound. A blow from the
 ; next cell that leaves hp + armour at or below -maxhp * 0.4 blows it
 ; apart (no corpse). At anything else: calc_hit_object per shot, and if
 ; the last shot worked the door breaks or the thing is destroyed.
@@ -406,7 +406,7 @@ player_attack:
     ld a, (hl)
     cp b
     jr nc, +
-    ld hl, str_no_ammo
+    ld hl, (TX_NO_AMMO)
     call say
     ld a, SFX_DENIED
     call sfx
@@ -541,11 +541,11 @@ _pa_done:
     ld a, h
     or l
     jr nz, +
-    ld hl, str_missed           ; (the extinguisher: no effect)
+    ld hl, (TX_MISSED)           ; (the extinguisher: no effect)
     ld a, (pa_w)
     cp 1
     jr nz, ++
-    ld hl, str_no_effect
+    ld hl, (TX_NO_EFFECT)
 ++: call say
     jp _pa_true
 +:  ; left = hp + armour - damage; thr = maxhp * 256 / 637 (a blow past
@@ -582,7 +582,7 @@ _pa_done:
     or a
     jr nz, +
     ld hl, str_empty
-+:  ld bc, str_damage
++:  ld bc, (TX_DAMAGE)
     call say_num                ; "[CRITICAL! ]n DAMAGE!"
     ld hl, (pa_tot)
     ld de, (pa_tarm)
@@ -618,11 +618,11 @@ _pa_object:                     ; (only the last shot's result counts)
     jp _pa_true
 ++: call destroy                ; put out, blown up, broken open
     jp _pa_true
-+:  ld hl, str_missed
++:  ld hl, (TX_MISSED)
     ld a, (pa_w)
     cp 1
     jr nz, +
-    ld hl, str_no_effect
+    ld hl, (TX_NO_EFFECT)
 +:  call say
 _pa_true:
     ld a, 1
@@ -638,7 +638,7 @@ _pa_true:
 ;     22 / 23 credits, 24 a key (key number = parm & 7); others are
 ;     simply taken. "GOT <name>" and the item leaves the map.
 ;   ET_INV: one more of carried item (sub-type - 25: small medkit, large
-;     medkit, soul sphere), at most 99
+;     medkit, soulsphere), at most 99
 ;   ET_AMMO / ET_AMMO2: parm rounds of ammo type (sub-type), refused if
 ;     full
 ;   ET_WEAPON: the weapon (sub-type) is added; a new one is selected;
@@ -673,7 +673,7 @@ touch:
     ld b, a
     ld a, (S_ARMOR)
     cp b
-    ld hl, str_armor_max
+    ld hl, (TX_ARMOR_MAX)
     jp nc, say                  ; full: left where it is
     call to_parm
     call add_armor              ; + parm, "GAINED n ARMOR"
@@ -684,7 +684,7 @@ touch:
     ld b, a
     ld a, (S_HP)
     cp b
-    ld hl, str_health_max
+    ld hl, (TX_HEALTH_MAX)
     jp nc, say                  ; full: left where it is
     call to_parm
     call add_health             ; + parm, "GAINED n HEALTH"
@@ -716,7 +716,7 @@ _to_say_got:
     ld a, (to_j)
     call ent_name
     ex de, hl
-    ld hl, str_got
+    ld hl, (TX_GOT)
     call say2                   ; "GOT <name>"
     ld a, (to_j)
     jp ent_unlink               ; taken: off the map
@@ -750,7 +750,7 @@ _to_ammo:
     ld a, l
     call add_ammo               ; + parm rounds
     jr nz, +
-    ld hl, str_ammo_max
+    ld hl, (TX_AMMO_MAX)
     jp say                      ; full: left where it is
 +:  ld a, SFX_PICKUP
     call sfx
@@ -802,14 +802,14 @@ _to_fire:
     ld hl, 1
     ld de, 2
     call player_pain            ; 1 damage, 2 armour damage
-    ld hl, str_burns
+    ld hl, (TX_BURNS)
     jp say
 +:  cp ET_FIRE2
     ret nz                      ; anything else: nothing happens
     ld hl, 10
     ld de, 10
     call player_pain            ; 10 and 10
-    ld hl, str_burns2
+    ld hl, (TX_BURNS_MORE)
     jp say
 
 ; -> hl = the low word of the touched entity's parm (de = the high word);
@@ -985,7 +985,7 @@ act_move:
 ; EVF_MOVE): unless it opened a dialog or door code (skip_turn), fires
 ; underfoot burn and the monsters take their turn. Otherwise the target
 ; from select_target is attacked (a turn, unless out of ammo); with no
-; target: "NOTHING TO USE" or "THE DOOR IS LOCKED". Clobbers every
+; target: TX_NOTHING or "THE DOOR IS LOCKED". Clobbers every
 ; register except IX, IY.
 act_use:
     xor a
@@ -1018,7 +1018,7 @@ act_use:
     jr nz, +
     ld a, (sel_locked)
     or a
-    ld hl, str_nothing_to_use
+    ld hl, (TX_NOTHING)
     ld c, SFX_BLIP
     jr z, ++
     ld hl, str_door_locked
@@ -1034,10 +1034,10 @@ act_use:
     call touch_tile             ; fires underfoot
     jp end_player_turn
 
-; Button 2 + Down: "TURN PASSED.", fires underfoot, the monsters' turn.
+; Button 2 + Down: TX_TURN_PASSED, fires underfoot, the monsters' turn.
 ; Clobbers every register except IX, IY.
 act_pass:
-    ld hl, str_turn_passed
+    ld hl, (TX_TURN_PASSED)
     call say
     xor a
     call touch_tile
@@ -1103,7 +1103,7 @@ act_cycle_weapon:
     jr c, -
     ret
 
-; Button 2 + Up: a medkit (small, then large, then the soul sphere) ->
+; Button 2 + Up: a medkit (small, then large, then the soulsphere) ->
 ; a = 1 (NZ) if one was used
 act_health_item:
     ld c, 0
@@ -1126,7 +1126,7 @@ act_health_item:
     ld a, c
     cp 2
     jr nz, +
-    ld hl, 200                  ; the soul sphere
+    ld hl, 200                  ; the soulsphere
     call add_health             ; (+200: up to maxhp)
     ld hl, 200
     call add_armor              ; (+200: up to maxarmour)
@@ -1152,7 +1152,7 @@ act_health_item:
     ret
 
 ;-----------------------------------------------------------------------
-; a new game: the level's entities, doors, events and monsters, the
+; a fresh game: the level's entities, doors, events and monsters, the
 ; player at the start
 ; Order matters for the RNG (the model does the same): the state is
 ; cleared, the RNG seeded with $1234, then each monster draws 6 random
@@ -1199,7 +1199,7 @@ game_init:
     ld (S_AMMO), a              ; ammo type 0 (the extinguisher's): 6
     ld a, 8
     ld (S_AMMO+1), a            ; type 1 (bullets): 8
-    LTAB LT_START               ; the UAC Base: a new game's kit, the pistol and 8 bullets
+    LTAB LT_START               ; the UAC Base: the starting kit, the pistol and 8 bullets
     ld a, (hl)                  ; (a nonzero byte in the level's "start" table)
     or a
     jr z, +
@@ -1402,21 +1402,9 @@ gi_one:
     inc de
     ret
 
-str_door_cleared:   .db "DOOR CLEARED!", 0
-str_no_ammo:        .db "NOT ENOUGH AMMO!", 0
-str_missed:         .db "MISSED!", 0
-str_no_effect:      .db "NO EFFECT!", 0
 str_critical:       .db "CRITICAL! ", 0
-str_armor_max:      .db "ARMOR AT MAXIMUM", 0
-str_health_max:     .db "HEALTH AT MAXIMUM", 0
-str_got:            .db "GOT ", 0
 str_cant_carry:     .db "CAN'T CARRY MORE ", 0
-str_ammo_max:       .db "AMMO AT MAXIMUM", 0
-str_burns:          .db "IT BURNS!", 0
-str_burns2:         .db "IT REALLY BURNS!!", 0
-str_nothing_to_use: .db "NOTHING TO USE", 0
 str_door_locked:    .db "THE DOOR IS LOCKED", 0
-str_turn_passed:    .db "TURN PASSED.", 0
 str_no_health:      .db "NO HEALTH ITEMS", 0
 
 ; the scratch blocks must not overlap (game.asm, combat, events, actions, ui, core, math)

@@ -68,7 +68,7 @@ bool Project::from_json(const std::string &text, std::string &err)
     try {
         json j = json::parse(text);
         *this = Project();   // start from the defaults
-        name = j.value("name", std::string("Sector 1"));
+        name = j.value("name", std::string("Map"));   // (Project's default)
         new_game = j.value("new_game", false);
         floor = rgb_of(j["floor_rgb"]);
         ceiling = rgb_of(j["ceiling_rgb"]);

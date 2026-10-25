@@ -93,7 +93,7 @@ def plan():
                 events.append((s, a, None))
         if store0 is None and w.store is not None:
             events.append((s, "store", None))
-        if "Found Secret!" in w.messages[nmsg:]:
+        if gm.T("SECRET") in w.messages[nmsg:]:      # (the secret's message)
             events.append((s, "secret", None))
         here = c.index
         if c.advance():
@@ -132,13 +132,13 @@ def windows(steps, events, titles):
     for s, kind, info in events:
         if kind == "secret" and secrets < 3:
             secrets += 1
-            win(s - 3, s + 3, "A secret wall: Found Secret! (+5 XP)")
+            win(s - 3, s + 3, "A secret wall slides away (+5 XP)")
         elif kind == "store" and sum(1 for c in cap.values() if c.startswith("A vendor")) < 12:
             win(s - 4, s + 4, "A vendor: credits buy medkits, ammo and upgrades")
         elif kind == "berserk":
             win(s - 2, s + 8, "Items: the Berserker (double damage for a while)")
         elif kind == "collar":
-            win(s - 2, s + 8, "Items: the Dog Collar - the dog fights for you")
+            win(s - 2, s + 8, "Items: the collar - the dog fights for you")
         elif kind == "end":
             win(s - 30, s + 1, "The last fight ...")
     # the opening: SMOOTH movement, then back to STEP through the pause menu
@@ -297,7 +297,7 @@ def main():
     if not only:
         FILM.card("A 6-button pad for the rest of the game", 90)
 
-    # ---- the title: SMOOTH movement, new game
+    # ---- the title: SMOOTH movement, fresh game
     r = boot(pad=6)
     FILM.caption = "Mega Drive version 0.0.6: the whole game"
     r.run(150)
@@ -312,7 +312,7 @@ def main():
         assert mode(r) == UI_TITLE, mode(r)
     else:
         tap(r, "down", 30)
-    FILM.caption = "New game"
+    FILM.caption = "Starting the game"
     tap(r, "up", 30)
     r.press(("a",))
     r.wait_idle()
@@ -337,7 +337,7 @@ def main():
             FILM.caption = "Pause menu: Options: movement STEP"
             tap(r, "start", 40)
             assert mode(r) == UI_PAUSE
-            # down 4 lines to OPTIONS (resume, items, notebook, save game, options)
+            # down 4 lines to OPTIONS (resume, items, notebook, save, options)
             for _ in range(4):
                 tap(r, "down", 15)
             tap(r, "a", 50)

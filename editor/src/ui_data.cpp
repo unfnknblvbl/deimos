@@ -40,10 +40,10 @@ static const char *ETYPES[] = {"line", "monster", "person", "pickup", "inventory
 static const char *subtype_help(int et)
 {
     switch (et) {
-    case 1: return "class: 0 zombie, 1 hellhound, 2 troop, 3 imp, 4 phantom, 5 bull demon, 6 cacodemon, 7 beholder, "
+    case 1: return "class: 0 zombie, 1 hellhound, 2 troop, 3 imp, 4 phantom, 5 pinky, 6 cacodemon, 7 beholder, "
                    "8 ghoul, 9 behemoth, 10 archvile, 11 ogre, 12 cyberdemon, 13 kronos. Strength scale: 294 weak, 467, 640 strong.";
     case 3: return "20 health (+amount), 21 armour (+amount), 22/23 credits (+amount), 24 key card (0 green 1 yellow 2 blue 3 red)";
-    case 4: return "25 small medkit, 26 large medkit, 27 soul sphere, 28-29 other items";
+    case 4: return "25 small medkit, 26 large medkit, 27 soulsphere, 28-29 other items";
     case 5: return "weapon number: 0 axe 1 extinguisher 2 pistol 3 shotgun 4 chaingun 5 super shotgun 6 plasma 7 rockets 8 BFG; amount = ammo";
     case 6: case 16: return "ammo kind: 0 halon 1 bullets 2 shells 3 rockets 4 cells; amount = how many";
     case 12: return "1 barrel (explodes), 2 crate (random loot), 3/4 jammed doors; amount = which weapons can break it (bit mask)";

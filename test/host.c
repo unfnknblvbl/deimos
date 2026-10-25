@@ -7,7 +7,8 @@
 
 /* The portable core on the build machine, for the lockstep test
  * (test/lockstep_host.py): the platform hooks, the maps read from
- * megadrive/build/gen/maps/<name>/{level,strings}.bin.
+ * megadrive/build/gen/maps/<name>/{level,strings}.bin and the game's texts
+ * from megadrive/build/gen/campaign.bin.
  * lockstep_host.py loads it with ctypes and calls host_load, then the
  * core's own functions (game_init, act_*, resume, map_change); the host_*
  * functions give it the state and the messages. Sounds are ignored.
@@ -18,6 +19,7 @@
 #include "../core/rules.h"
 
 static unsigned char *levels[32], *strings[32];     /* each map's level blob and strings, in campaign order */
+static unsigned char *block;                        /* the campaign block (for its texts table) */
 static char msgbuf[65536];                          /* the messages since the last host_messages, a line each */
 static size_t msglen;
 
@@ -38,12 +40,16 @@ static unsigned char *slurp(const char *path)
 }
 
 /* dir/<names[i]>/level.bin, strings.bin: names is a comma-separated list;
-   returns the maps loaded, or -1 if one is missing */
+   and dir/../campaign.bin, the campaign block (the game's texts). Returns
+   the maps loaded, or -1 if one is missing */
 int host_load(const char *dir, const char *names)
 {
     char path[1024], name[64];
     int i = 0;
     const char *p = names;
+    snprintf(path, sizeof path, "%s/../campaign.bin", dir);
+    block = slurp(path);
+    if (!block) return -1;
     while (*p) {
         int k = 0;
         while (*p && *p != ',') name[k++] = *p++;
@@ -67,6 +73,15 @@ const char *level_string(u8 id)
 {
     const u8 *s = strings[cur_map];
     return (const char *)s + ((s[2 * id] << 8) | s[2 * id + 1]);
+}
+
+/* the core's hook: the game's text id, from the block's texts table (its
+   offset is the big-endian u32 at byte 24; a big-endian u16 offset per
+   text, then the texts) */
+const char *gtext(u8 id)
+{
+    const u8 *t = block + (((u32)block[24] << 24) | ((u32)block[25] << 16) | (block[26] << 8) | block[27]);
+    return (const char *)t + ((t[2 * id] << 8) | t[2 * id + 1]);
 }
 
 /* s appended to msgbuf (dropped when it is full) */

@@ -6,7 +6,7 @@
 # option) any later version, with NO WARRANTY: see the LICENSE file.
 
 """
-Renders every (cell, facing) view of Sector 1 with the pixel-faithful
+Renders every (cell, facing) view of level01 with the pixel-faithful
 offline renderer (view_render.py: walls + baked scenery), in every state of
 the doors/secret walls that visibly change it, converts each picture to SMS
 tiles with its own 16-colour palette, ZX0-compresses it and packs the lot

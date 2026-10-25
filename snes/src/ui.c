@@ -353,7 +353,7 @@ static void hud_update(void)
     hud_text(1, c, "/");
     hud_num(1, c + 1, S.maxarmor);
 
-    hud_text(2, 7, wpn_name[S.weapon]);
+    hud_text(2, 7, gtext(TX_WPN_0 + S.weapon));
     if (wpn_use[S.weapon]) {
         hud_text(2, 21, "AMMO");
         hud_num(2, 26, S.ammo[wpn_ammo[S.weapon]]);
@@ -365,7 +365,7 @@ static void hud_update(void)
     hud_text(3, c, "/");
     hud_num(3, c + 1, G16(S.nextxp));
 
-    hud_text(4, 7, "CREDITS");
+    hud_text(4, 7, gtext(TX_CREDITS_WORD));
     hud_num(4, 15, G16(S.credits));
     hud_text(4, 20, "KEYS");
     if (S.keys & 1) hud_text(4, 25, "G");  /* key bits: green, yellow, blue, red */
@@ -714,15 +714,16 @@ static void box_hide(void)
 static char gen_text[48];               /* dialog_text's made-up string */
 
 /* the text of dialog id: the map's string id (glue.c's level_string), or
-   for DLG_CAPTURED "YOU CAPTURED|THE <name>!" */
+   for DLG_CAPTURED TX_CAPTURED <name> TX_CAPTURED_END */
 static const char *dialog_text(u8 id)
 {
     if (id == DLG_CAPTURED) {
-        const char *a = "YOU CAPTURED|THE ", *b = def_name(captured_def);
+        const char *a = gtext(TX_CAPTURED), *b = def_name(captured_def);
         char *d = gen_text;
-        while (*a) *d++ = *a++;
+        while (*a && d < gen_text + 44) *d++ = *a++;
         while (*b && d < gen_text + 44) *d++ = *b++;
-        *d++ = '!';
+        a = gtext(TX_CAPTURED_END);         /* (the "!" after the name) */
+        while (*a && d < gen_text + 47) *d++ = *a++;
         *d = 0;
         return gen_text;
     }
@@ -869,7 +870,7 @@ static void stats_lines(void)
     cat(s, utoa10(tot));
     s = cat(line2, "LEVEL ");
     s = cat(s, utoa10(S.level));
-    s = cat(s, "  CREDITS ");
+    s = cat(s, gtext(TX_CREDITS_MID));
     cat(s, utoa10(G16(S.credits)));
 }
 
@@ -881,7 +882,7 @@ static void end_screens(void)
         music_stop();
         ui = UI_DEAD;
         screen_box("YOU HAVE DIED", "THE DEMONS GOT YOU.", "", "A:TRY AGAIN START:TITLE");
-    } else {                                    /* through an exit door */
+    } else {                                    /* through an exit */
         char *s;
         ui = UI_DONE;
         stats_lines();
@@ -1005,7 +1006,7 @@ static const char * const BUTTON_NAMES[N_BUTTONS] = {"A", "B", "Y", "C", "X", "Z
 static const char * const BUTTON_NAMES[N_BUTTONS] = {"A", "B", "X", "Y", "L", "R", "SELECT"};
 #endif
 static const char * const ACT_NAMES[N_ACTIONS] = {"USE/ATTACK", "PASS TURN", "MEDKIT", "PREV WEAPON",
-                                                  "NEXT WEAPON", "NOTEBOOK"};
+                                                  "NEXT WEAPON", 0};
 
 /* the button tokens in the maps' strings (megadrive/tools/key_text.py):
    KEY_ACT + an action (ACT_*), or KEY_MENU for the pause menu's button */
@@ -1040,7 +1041,7 @@ static void options_draw(u8 cur)
         const char *a, *b;
         char *d = lines[i];
         if (i < N_ACTIONS) {
-            a = ACT_NAMES[i];
+            a = ACT_NAMES[i] ? ACT_NAMES[i] : gtext(TX_NOTEBOOK_ITEM);     /* (0: the game's word) */
             b = BUTTON_NAMES[cfg.key[i]];
         } else {
             a = i == N_ACTIONS ? "DEFAULTS" : "DONE";
@@ -1048,11 +1049,11 @@ static void options_draw(u8 cur)
         }
         for (k = 0; k < 20; k++) d[k] = ' ';
         d[20] = 0;
-        for (k = 0; a[k]; k++) d[k] = a[k];
+        for (k = 0; a[k] && k < 20; k++) d[k] = a[k];
         for (k = 0; b[k]; k++) d[13 + k] = b[k];
         items[i] = d;
     }
-    menu_draw("OPTIONS", items, 8, cur, 3, cur < N_ACTIONS ? "PRESS A BUTTON TO SET" : "A:CHANGE  START:DONE");
+    menu_draw(gtext(TX_OPTIONS_ITEM), items, 8, cur, 3, cur < N_ACTIONS ? "PRESS A BUTTON TO SET" : "A:CHANGE  START:DONE");
 }
 
 /* the options screen (from the title or the pause menu): Up/Down choose a
@@ -1160,13 +1161,23 @@ static void show_title(void)
 #define TITLE_BOX_Y 23
 #endif
 
+/* the title's menu box: the texts items[0..n-1] (TX_*), the cursor on
+   line cur */
+static void title_menu_draw(const u8 *items, u8 n, u8 cur)
+{
+    const char *t[3];
+    u8 i;
+    for (i = 0; i < n; i++) t[i] = gtext(items[i]);
+    menu_draw("", t, n, cur, 1, 0);
+}
+
 /* the title: wait for A or Start, then a menu (CONTINUE if a game is
-   saved, NEW GAME, OPTIONS) in a short box at the bottom -> 1 continue,
-   0 a new game */
+   saved, new-game and options items) in a short box at the bottom -> 1 continue,
+   0 a fresh game */
 static u8 title_screen(void)
 {
-    static const char * const ITEMS_C[3] = {"CONTINUE", "NEW GAME", "OPTIONS"};
-    const char * const *items;
+    static const u8 ITEMS_C[3] = {TX_CONTINUE_ITEM, TX_NEW_GAME, TX_OPTIONS_ITEM};    /* (the menu's texts) */
+    const u8 *items;
     u8 n, cur = 0, has_save;
     ui = UI_TITLE;
     show_title();
@@ -1189,14 +1200,14 @@ static u8 title_screen(void)
     has_save = game_saved();
     items = has_save ? ITEMS_C : ITEMS_C + 1;
     n = has_save ? 3 : 2;
-    menu_draw("", items, n, cur, 1, 0);
+    title_menu_draw(items, n, cur);
     for (;;) {
         u16 e = next_edge();
         if (e & PAD_UP) cur = cur ? cur - 1 : n - 1;
         else if (e & PAD_DOWN) cur = cur + 1 < n ? cur + 1 : 0;
         else if (e & (PAD_A | PAD_START)) {
-            const char *it = items[cur];
-            if (it[0] == 'O') {         /* OPTIONS: the full-size box, then back */
+            u8 it = items[cur];
+            if (it == TX_OPTIONS_ITEM) {         /* OPTIONS: the full-size box, then back */
                 box_hide();
                 box_y = BOX_Y;
                 box_h = DLG_H;
@@ -1210,10 +1221,10 @@ static u8 title_screen(void)
                 box_y = BOX_Y;
                 box_h = DLG_H;
                 sfx(SFX_SELECT);
-                return it[0] == 'C';
+                return it == TX_CONTINUE_ITEM;
             }
         }
-        menu_draw("", items, n, cur, 1, 0);
+        title_menu_draw(items, n, cur);
         eng_turn_seq++;
     }
 }
@@ -1255,7 +1266,7 @@ static void map_started(void)
     start_play(map_title(S.map));
 }
 
-/* a new game from the first map */
+/* a fresh game from the first map */
 static void new_game(void)
 {
     music_play(MUS_INTRO);
@@ -1272,7 +1283,7 @@ static void next_map(void)
     map_started();
 }
 
-/* after death: the saved game (the map's start), or a new game */
+/* after death: the saved game (the map's start), or a fresh game */
 static void try_again(void)
 {
     if (!game_load()) game_init();
@@ -1282,12 +1293,10 @@ static void try_again(void)
 
 /* ---- the vendor ---- */
 /* STORE_LINES (core): per vendor, 16 lines of (name tag, price); a tag 0
-   ends the list. STORE_NAMES: the tag's name ("" for tags not sold). */
-static const char * const STORE_NAMES[17] = {
-    "", "", "SM MEDKIT", "LG MEDKIT", "SOUL SPHERE", "BERSERKER", "", "10 HAL. CANS", "10 BULLETS",
-    "10 SHELLS", "10 CELLS", "3 ROCKETS", "", "+1 ACCURACY", "+1 AGILITY", "+1 STRENGTH", "+1 DEFENSE"};
+   ends the list. A tag's name is the text TX_STORE_0 + tag ("" for tags
+   not sold). */
 static u8 store_cur, store_n;           /* the line chosen; the vendor's lines */
-static const char *store_note;          /* the last purchase's result (the footer), or 0 */
+static u8 store_res;                   /* the last purchase's result (store_buy's), 0xFF none: the footer */
 
 /* the vendor's box: the credits, each line's name and price */
 static void store_draw(void)
@@ -1298,20 +1307,21 @@ static void store_draw(void)
     char *d;
     u8 i, k;
     for (i = 0; i < store_n; i++) {
-        const char *nm = STORE_NAMES[t[i * 2]];
+        const char *nm = gtext(TX_STORE_0 + t[i * 2]);
         char *p;
         d = lines[i];
         for (k = 0; k < 20; k++) d[k] = ' ';
         d[20] = 0;
-        for (k = 0; nm[k]; k++) d[k] = nm[k];
+        for (k = 0; nm[k] && k < 20; k++) d[k] = nm[k];   /* (cut at the line's end) */
         p = utoa10(t[i * 2 + 1]);
         k = 17;
         while (*p) d[k++] = *p++;
         items[i] = d;
     }
-    d = cat(title_buf, "CREDITS ");
+    d = cat(title_buf, gtext(TX_CREDITS_SP));
     cat(d, utoa10(G16(S.credits)));
-    menu_draw(title_buf, items, store_n, store_cur, 2, store_note ? store_note : "A:BUY  B:LEAVE");
+    menu_draw(title_buf, items, store_n, store_cur, 2,
+              store_res == 0xFF ? "A:BUY  B:LEAVE" : store_res ? gtext(TX_NO_CREDITS + store_res - 1) : "BOUGHT");
 }
 
 /* the rules opened a vendor (S.store): its box */
@@ -1321,7 +1331,7 @@ static void store_open(void)
     store_n = 0;
     while (store_n < 16 && t[store_n * 2]) store_n++;
     store_cur = 0;
-    store_note = 0;
+    store_res = 0xFF;
     ui = UI_STORE;
     sfx(SFX_DIALOG);
     store_draw();
@@ -1331,8 +1341,7 @@ static void store_open(void)
    then the turn goes on), Up / Down choose, A buys */
 static void store_input(u16 e)
 {
-    static const char * const RESULT[3] = {"BOUGHT", "NOT ENOUGH CREDITS", "YOU HAVE TOO MANY"};
-    store_note = 0;
+    store_res = 0xFF;
     if (e & (PAD_B | PAD_START)) {
         close_box();
         store_close();
@@ -1343,7 +1352,7 @@ static void store_input(u16 e)
     else if (e & PAD_DOWN) store_cur = store_cur + 1 < store_n ? store_cur + 1 : 0;
     else if (e & PAD_A) {
         u8 r = store_buy(store_cur);    /* 0 bought, 1 too few credits, 2 too many */
-        store_note = RESULT[r];
+        store_res = r;                  /* (the footer: TX_NO_CREDITS, TX_TOO_MANY or "BOUGHT") */
         sfx(r ? SFX_DENIED : SFX_PICKUP);
         hud_update();
         store_draw();
@@ -1353,21 +1362,22 @@ static void store_input(u16 e)
     store_draw();
 }
 
-/* ---- items: the Berserker and the Dog Collar ---- */
-static u8 items_cur;                    /* 0 the Berserker, 1 the Dog Collar */
+/* ---- items: the Berserker and the collar ---- */
+static u8 items_cur;                    /* 0 the Berserker, 1 the collar */
 
 /* the items box: each item and how many (S.inventory[3], [4]) */
 static void items_draw(void)
 {
     static char lines[2][21];
     const char *items[2];
-    static const char * const NM[2] = {"BERSERKER", "DOG COLLAR"};
+    const char *nm;
     u8 i, k;
     for (i = 0; i < 2; i++) {
         char *d = lines[i], *p = utoa10(S.inventory[3 + i]);
         for (k = 0; k < 20; k++) d[k] = ' ';
         d[20] = 0;
-        for (k = 0; NM[i][k]; k++) d[k] = NM[i][k];
+        nm = gtext(TX_BERSERKER_ITEM + i);   /* (the Berserker, the collar) */
+        for (k = 0; nm[k] && k < 20; k++) d[k] = nm[k];   /* (cut at the line's end) */
         k = 15;
         while (*p) d[k++] = *p++;
         items[i] = d;
@@ -1376,8 +1386,8 @@ static void items_draw(void)
 }
 
 /* ---- pause menu ---- */
-static const char * const PAUSE_ITEMS[6] = {"RESUME", "ITEMS", "NOTEBOOK", "SAVE GAME", "OPTIONS",
-                                            "QUIT TO TITLE"};
+static const char * const PAUSE_ITEMS[6] = {"RESUME", "ITEMS", 0, 0, 0, "QUIT TO TITLE"};
+static const u8 PAUSE_TEXTS[6] = {0, 0, TX_NOTEBOOK_ITEM, TX_SAVE_GAME, TX_OPTIONS_ITEM, 0};   /* (for the 0s above: the game's texts) */
 static u8 pause_cur;                    /* the line chosen */
 
 /* the pause menu's box */
@@ -1388,7 +1398,7 @@ static void pause_draw(void)
     box_put(1, (DLG_W - 6) >> 1, "PAUSED");
     for (i = 0; i < 6; i++) {
         box_put(3 + i, 2, pause_cur == i ? ">" : " ");
-        box_put(3 + i, 4, PAUSE_ITEMS[i]);
+        box_put(3 + i, 4, PAUSE_ITEMS[i] ? PAUSE_ITEMS[i] : gtext(PAUSE_TEXTS[i]));
     }
     box_put(11, (DLG_W - 10) >> 1, "MADE BY AI");
     box_put(12, (DLG_W - 23) >> 1, "DIRECTED BY UNFNKNBLVBL");
@@ -1426,7 +1436,7 @@ static u8 pause_menu(u16 e)
         case 3:
             game_save();
             close_box();
-            say("GAME SAVED");
+            say(gtext(TX_GAME_SAVED));
             sfx(SFX_SELECT);
             return 0;
         case 4:
@@ -1561,7 +1571,7 @@ static u8 handle(u16 edge)
 }
 
 /* the program (crt0.s calls it): the machine set up once, then for ever:
-   the title, the game screen, a loaded or new game, and the input loop
+   the title, the game screen, a loaded or fresh game, and the input loop
    until the player quits to the title */
 int main(void)
 {
@@ -1581,7 +1591,7 @@ int main(void)
         if (cont && game_load()) {      /* CONTINUE, and the save is good */
             music_stop();
             update_backdrop(1);
-            start_play("GAME LOADED");
+            start_play(gtext(TX_GAME_LOADED));
         } else
             new_game();
         for (;;) {

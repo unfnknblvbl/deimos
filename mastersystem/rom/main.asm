@@ -1706,8 +1706,17 @@ rom_directory:               ; where the generated parts are (tools/rom_dir.py, 
 .db $40                          ; high nibble region (4 = SMS export; 7 for the Game Gear), low nibble size code (both set by rom_size.py)
 
 ; Bank 2 (HOME_BANK) stays in slot 2 while the game logic runs. Its first
-; 8 KB ($8000-$9FFF) are left empty here.
+; 8 KB ($8000-$9FFF) hold the texts table: the game's texts the code shows
+; (messages, menus, the weapons' names), read from the jar (game/gen/texts.inc
+; says where each text's address is: ld hl, (TX_...)).
 .BANK 2 SLOT 2
+.ORGA $8000
+texts_data:                  ; TEXTS_ADDR (tools/gen_cdata.py, or the editor)
+.IFDEF GAMEGEAR
+.incbin "build/gfx/texts_gg.bin"     ; (the Game Gear's names its buttons)
+.ELSE
+.incbin "build/gfx/texts.bin"
+.ENDIF
 .ORGA $A000                  ; LEVEL_ADDR: the level blob (tools/gen_cdata.py, or the editor)
 .incbin "build/gfx/level.bin"
 

@@ -87,54 +87,56 @@ C5, D5, E5, F5, G5, A5, B5 = 523, 587, 659, 698, 784, 880, 988
 C6, D6, E6, G6, C7 = 1047, 1175, 1319, 1568, 2093
 A4, G4 = 440, 392
 
-# name -> segments.  Order = id (SFX_NONE is 0).
-EFFECTS = [
-    ("NONE", []),
+# id name -> segments.  Order = id (SFX_NONE is 0).
+_EFFECTS = [
+    ("SFX_NONE", []),
     # ---- player weapons ----
-    ("AXE", [seg(8, noise=WHITE_T2, nvol=4, ndec=2, p0=30, p1=180)]),
-    ("EXTINGUISHER", [seg(16, noise=WHITE_HI, nvol=5, ndec=4)]),
-    ("PISTOL", [seg(7, 260, 70, vol=4, tdec=1, noise=WHITE_MID, nvol=1, ndec=1)]),
-    ("SHOTGUN", [seg(14, 160, 45, vol=3, tdec=2, noise=WHITE_LO, nvol=0, ndec=1)]),
-    ("CHAINGUN", [seg(3, 220, 120, vol=5, noise=WHITE_MID, nvol=1, ndec=2), rest(1)] * 3),
-    ("PLASMA", [seg(9, 1400, 300, vol=2, tdec=2), seg(3, 500, 250, vol=6, tdec=1)]),
-    ("ROCKET", [seg(14, noise=WHITE_T2, nvol=2, ndec=3, p0=60, p1=400, vol=OFF)]),
-    ("BFG", [seg(24, 90, 1400, vol=2, noise=WHITE_LO, nvol=8),
+    ("SFX_AXE", [seg(8, noise=WHITE_T2, nvol=4, ndec=2, p0=30, p1=180)]),
+    ("SFX_EXTINGUISHER", [seg(16, noise=WHITE_HI, nvol=5, ndec=4)]),
+    ("SFX_PISTOL", [seg(7, 260, 70, vol=4, tdec=1, noise=WHITE_MID, nvol=1, ndec=1)]),
+    ("SFX_SHOTGUN", [seg(14, 160, 45, vol=3, tdec=2, noise=WHITE_LO, nvol=0, ndec=1)]),
+    ("SFX_CHAINGUN", [seg(3, 220, 120, vol=5, noise=WHITE_MID, nvol=1, ndec=2), rest(1)] * 3),
+    ("SFX_PLASMA", [seg(9, 1400, 300, vol=2, tdec=2), seg(3, 500, 250, vol=6, tdec=1)]),
+    ("SFX_ROCKET", [seg(14, noise=WHITE_T2, nvol=2, ndec=3, p0=60, p1=400, vol=OFF)]),
+    ("SFX_BFG", [seg(24, 90, 1400, vol=2, noise=WHITE_LO, nvol=8),
              seg(12, noise=WHITE_T2, nvol=0, ndec=2, p0=200, p1=900)]),
     # ---- monsters ----
-    ("MON_ATTACK", [note(95, 4, 2), note(80, 4, 2), note(110, 5, 3, tdec=2)]),
-    ("FIREBALL", [seg(12, noise=WHITE_T2, nvol=3, ndec=4, p0=40, p1=220)]),
-    ("RAISE", [seg(30, 150, 900, vol=4, tdec=10)]),
-    ("MON_HURT", [seg(7, 240, 110, vol=3, tdec=2, noise=WHITE_MID, nvol=6, ndec=2)]),
-    ("MON_DIE", [seg(20, 320, 55, vol=2, tdec=4, noise=WHITE_LO, nvol=4, ndec=4)]),
+    ("SFX_MON_ATTACK", [note(95, 4, 2), note(80, 4, 2), note(110, 5, 3, tdec=2)]),
+    ("SFX_FIREBALL", [seg(12, noise=WHITE_T2, nvol=3, ndec=4, p0=40, p1=220)]),
+    ("SFX_RAISE", [seg(30, 150, 900, vol=4, tdec=10)]),
+    ("SFX_MON_HURT", [seg(7, 240, 110, vol=3, tdec=2, noise=WHITE_MID, nvol=6, ndec=2)]),
+    ("SFX_MON_DIE", [seg(20, 320, 55, vol=2, tdec=4, noise=WHITE_LO, nvol=4, ndec=4)]),
     # ---- the player ----
-    ("HURT", [seg(9, 190, 85, vol=1, tdec=2, noise=WHITE_LO, nvol=5, ndec=2)]),
-    ("DODGE", [seg(6, noise=WHITE_T2, nvol=6, ndec=2, p0=20, p1=90)]),
-    ("PLAYER_DIE", [seg(20, 300, 120, vol=1), seg(50, 120, 35, vol=1, tdec=5,
+    ("SFX_HURT", [seg(9, 190, 85, vol=1, tdec=2, noise=WHITE_LO, nvol=5, ndec=2)]),
+    ("SFX_DODGE", [seg(6, noise=WHITE_T2, nvol=6, ndec=2, p0=20, p1=90)]),
+    ("SFX_PLAYER_DIE", [seg(20, 300, 120, vol=1), seg(50, 120, 35, vol=1, tdec=5,
                                                    noise=WHITE_LO, nvol=3, ndec=7)]),
-    ("STEP", [seg(3, noise=WHITE_LO, nvol=9, ndec=1)]),
-    ("BUMP", [seg(6, 90, 55, vol=3, tdec=2, noise=WHITE_LO, nvol=7, ndec=2)]),
+    ("SFX_STEP", [seg(3, noise=WHITE_LO, nvol=9, ndec=1)]),
+    ("SFX_BUMP", [seg(6, 90, 55, vol=3, tdec=2, noise=WHITE_LO, nvol=7, ndec=2)]),
     # ---- items ----
-    ("PICKUP", [note(E5, 4, 3), note(A5, 7, 3, tdec=2)]),
-    ("CREDITS", [note(B5, 3, 3), note(E6, 10, 3, tdec=2)]),
-    ("WEAPON", [note(C5, 4), note(E5, 4), note(G5, 4), note(C6, 10, tdec=2)]),
-    ("KEY", [note(G5, 5, 2), note(C6, 5, 2), note(E6, 14, 2, tdec=3)]),
-    ("HEAL", [seg(12, 300, 1000, vol=3, tdec=4)]),
+    ("SFX_PICKUP", [note(E5, 4, 3), note(A5, 7, 3, tdec=2)]),
+    ("SFX_CREDITS", [note(B5, 3, 3), note(E6, 10, 3, tdec=2)]),
+    ("SFX_WEAPON", [note(C5, 4), note(E5, 4), note(G5, 4), note(C6, 10, tdec=2)]),
+    ("SFX_KEY", [note(G5, 5, 2), note(C6, 5, 2), note(E6, 14, 2, tdec=3)]),
+    ("SFX_HEAL", [seg(12, 300, 1000, vol=3, tdec=4)]),
     # ---- the world ----
-    ("DOOR", [seg(16, 55, 50, vol=4, tdec=4, noise=WHITE_LO, nvol=4, ndec=4)]),
-    ("DENIED", [note(110, 6, 2), rest(3), note(98, 9, 2, tdec=3)]),
-    ("EXPLODE", [seg(4, noise=WHITE_HI, nvol=0),
+    ("SFX_DOOR", [seg(16, 55, 50, vol=4, tdec=4, noise=WHITE_LO, nvol=4, ndec=4)]),
+    ("SFX_DENIED", [note(110, 6, 2), rest(3), note(98, 9, 2, tdec=3)]),
+    ("SFX_EXPLODE", [seg(4, noise=WHITE_HI, nvol=0),
                  seg(34, noise=WHITE_T2, nvol=0, ndec=5, p0=60, p1=900)]),
-    ("BREAK", [seg(6, 130, 70, vol=4, tdec=2, noise=WHITE_MID, nvol=2, ndec=2)]),
-    ("LEVEL_UP", [note(C5, 3), note(E5, 3), note(G5, 3), note(C6, 3), note(E6, 3),
+    ("SFX_BREAK", [seg(6, 130, 70, vol=4, tdec=2, noise=WHITE_MID, nvol=2, ndec=2)]),
+    ("SFX_LEVEL_UP", [note(C5, 3), note(E5, 3), note(G5, 3), note(C6, 3), note(E6, 3),
                   note(G6, 3), note(C7, 16, 3, tdec=3)]),
     # ---- menus ----
-    ("BLIP", [note(1000, 2, 5)]),
-    ("SELECT", [note(660, 3, 4), note(990, 5, 4, tdec=2)]),
-    ("DIALOG", [note(A4, 3, 4), note(A5, 6, 4, tdec=2)]),
-    ("SWITCH", [seg(2, 1500, 1500, vol=6, noise=WHITE_HI, nvol=6), seg(2, 700, 700, vol=7)]),
-    ("COMPLETE", [note(C5, 6, 2), note(E5, 6, 2), note(G5, 6, 2), note(C6, 8, 2), rest(2),
+    ("SFX_BLIP", [note(1000, 2, 5)]),
+    ("SFX_SELECT", [note(660, 3, 4), note(990, 5, 4, tdec=2)]),
+    ("SFX_DIALOG", [note(A4, 3, 4), note(A5, 6, 4, tdec=2)]),
+    ("SFX_SWITCH", [seg(2, 1500, 1500, vol=6, noise=WHITE_HI, nvol=6), seg(2, 700, 700, vol=7)]),
+    ("SFX_COMPLETE", [note(C5, 6, 2), note(E5, 6, 2), note(G5, 6, 2), note(C6, 8, 2), rest(2),
                   note(G5, 5, 2), note(C6, 30, 2, tdec=5)]),
 ]
+# (the table above names each effect by its id, SFX_<name>; here as <name>)
+EFFECTS = [(name[4:], segs) for name, segs in _EFFECTS]
 
 
 def blobs():

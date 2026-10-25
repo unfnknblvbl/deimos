@@ -109,7 +109,7 @@ int main(int argc, char **argv)
     f = fopen(argv[3], "wb");
     for (i = 0; i < nv; i++) {
         const unsigned char *v = list + 6 + 10 * i;
-        game_init();                    /* (as src/viewtest.c: a new game, the map, the place) */
+        game_init();                    /* (as src/viewtest.c: a fresh game, the map, the place) */
         if (v[0]) map_change(v[0]);
         S.px = v[1];
         S.pz = v[2];

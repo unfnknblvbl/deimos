@@ -7,7 +7,7 @@
 ;=======================================================================
 ; Scripted events: each cell may have an event, a list of commands that
 ; run when the player arrives, leaves, faces a way or uses the cell.
-; Commands can stop (a dialog, a door code, a locked door) and carry on
+; Commands can stop (a dialog, a door code, a door that is locked) and carry on
 ; later (resume). Then the monsters take their turn (settle).
 ;
 ; Bank 0. Called by actions.asm (act_move, act_turn, act_use,
@@ -289,7 +289,7 @@ ec_message:
 ; 5: lo damage (to health only; no armour damage)
 ec_pain:
     push af
-    ld hl, str_pain
+    ld hl, (TX_PAIN)
     call say                    ; "PAIN!"
     pop af
     ld l, a
@@ -405,7 +405,7 @@ ec_line:
     jp add_hl_a
 
 ; 6 (toggle), 15 (open), 16 (close), 17 (toggle): door lo, unless locked
-; A locked door, opening an open one or closing a closed one: the
+; A door that is locked, opening an open one or closing a closed one: the
 ; command does not apply (not counted as run, not killed).
 ec_door:
     call ec_line                ; hl = &l_flags[lo]
@@ -523,12 +523,12 @@ ec_require:
     jp nc, _ec_true             ; have >= hi
     ld a, c
     add a, a
-    ld hl, str_insuff
+    ld hl, TX_LOW_HP            ; (the four texts' addresses: health, armour, credits, XP)
     call add_hl_a
     ld a, (hl)
     inc hl
     ld h, (hl)
-    ld l, a                     ; hl = str_insuff[c]
+    ld l, a                     ; hl = the text TX_LOW_HP + c
     call say
     ld a, SFX_DENIED
     call sfx
@@ -598,12 +598,12 @@ ec_key:
     jp nz, _ec_false            ; held
     ld a, c
     add a, a
-    ld hl, str_need_key
+    ld hl, TX_NEED_GREEN        ; (the four texts' addresses, by key)
     call add_hl_a
     ld a, (hl)
     inc hl
     ld h, (hl)
-    ld l, a                     ; hl = str_need_key[key]
+    ld l, a                     ; hl = the text TX_NEED_GREEN + key
     call say
     ld a, SFX_DENIED
     call sfx
@@ -872,8 +872,8 @@ end_player_turn:
 ; Called by ui.asm when a dialog is closed (hl = 0) or a door code is
 ; entered or cancelled. Clears dialog_str (and pw_want for a code). A
 ; dialog: the event goes on after the command that opened it. A code:
-; compared with the wanted string; right: "CORRECT CODE!" and the event
-; goes on; wrong: "INVALID CODE!" (unless nothing was entered); cancelled:
+; compared with the wanted string; right: TX_CODE_GOOD and the event
+; goes on; wrong: TX_CODE_BAD (unless nothing was entered); cancelled:
 ; nothing. Then settle, except after a cancelled or wrong code, which
 ; return straight away. Clobbers every register except IX, IY.
 resume:
@@ -922,11 +922,11 @@ resume:
     ld a, (hl)
     or a
     ret z
-    ld hl, str_invalid_code
+    ld hl, (TX_CODE_BAD)
     call say
     ld a, SFX_DENIED
     jp sfx
-+:  ld hl, str_correct_code
++:  ld hl, (TX_CODE_GOOD)
     call say
     ld a, SFX_SELECT
     call sfx
@@ -955,22 +955,8 @@ str_eq:
     inc de
     jr -
 
-; messages; str_need_key and str_insuff are indexed by key (green,
-; yellow, blue, red) and by stat (health, armour, credits, XP)
+; this file's own messages (the game's are its texts, game/gen/texts.inc:
+; TX_NEED_GREEN.. by key - green, yellow, blue, red - and TX_LOW_HP.. by
+; stat - health, armour, credits, XP)
 str_sealed:       .db "THE WAY BACK IS SEALED", 0
-str_pain:         .db "PAIN!", 0
 str_note_added:   .db "NOTE ADDED", 0
-str_invalid_code: .db "INVALID CODE!", 0
-str_correct_code: .db "CORRECT CODE!", 0
-str_need_key:
-    .dw str_key_g, str_key_y, str_key_b, str_key_r
-str_key_g:        .db "NEED GREEN KEY", 0
-str_key_y:        .db "NEED YELLOW KEY", 0
-str_key_b:        .db "NEED BLUE KEY", 0
-str_key_r:        .db "NEED RED KEY", 0
-str_insuff:
-    .dw str_insuff_hp, str_insuff_ar, str_insuff_cr, str_insuff_xp
-str_insuff_hp:    .db "INSUFFICIENT HEALTH!", 0
-str_insuff_ar:    .db "INSUFFICIENT ARMOR!", 0
-str_insuff_cr:    .db "INSUFFICIENT FUNDS!", 0
-str_insuff_xp:    .db "INSUFFICIENT XP!", 0

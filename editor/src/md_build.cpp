@@ -532,12 +532,14 @@ static void finish_rom(Bytes &out)
 // The campaign: every map in one block (tools/md_campaign.py), the
 // textures and sprites in shared banks.
 //
-// The block ("MDCP"), from its start: u16 version (2) at 4, u16 map count
+// The block ("MDCP"), from its start: u16 version (3) at 4, u16 map count
 // at 6, u32 offsets of the shared textures (8), shared sprites (12), the
-// weapon directory (16), the block's size (20), then two zero u32s (24,
-// 28). Then a 32-byte record per map: u32 offset of its pack, its map id
-// at 4, its title (upper case, up to 25 characters) at 6.
+// weapon directory (16), the block's size (20), the texts table (24) and
+// its size (28). Then a 32-byte record per map: u32 offset of its pack,
+// its map id at 4, its title (upper case, up to 25 characters) at 6.
 // The weapon directory: 4 x (u32 offset, u32 size) of the wp_* tables.
+// The texts table (the game's texts the code shows, gametext::md_blob)
+// comes last.
 // Each map's pack is as above (version 2, the CENTRIES entries); its
 // tex_off and spr_off give offsets into the shared textures and sprites,
 // so a texture or sprite used by several maps is stored once. Offsets
@@ -575,6 +577,7 @@ struct CBlock {
     bool fx = false;           // the SuperFX one (no visibility tables)
     std::vector<CMap> maps;
     Bytes weapons[4];          // wp_frames, wp_sprites, wp_pal, wp_tiles
+    Bytes texts;               // the texts table (gametext::md_blob)
 };
 
 // md_campaign.py vis_lists: 128-byte cell maps -> word lists ($FFFF ends one; map 0, every cell, is $FFFF)
@@ -654,7 +657,7 @@ static bool assemble(Bytes &rom, CBlock &cb, const BuildOptions &opt, BuildStats
     // ---- the block (tools/md_campaign.py)
     Bytes blk(CAMP_HEAD + MAP_REC * n, 0);
     memcpy(blk.data(), "MDCP", 4);
-    blk[5] = 2;
+    blk[5] = 3;
     blk[6] = (u8)(n >> 8);
     blk[7] = (u8)n;
     // append b at the next multiple of 4; returns its offset
@@ -727,6 +730,9 @@ static bool assemble(Bytes &rom, CBlock &cb, const BuildOptions &opt, BuildStats
             if (ch >= 'a' && ch <= 'z') ch -= 32;
         for (size_t k = 0; k < 25 && k < title.size(); k++) blk[r + 6 + k] = (u8)title[k];
     }
+    u32 to = add(cb.texts);   // the game's texts, last
+    put_be32(blk, 24, to);
+    put_be32(blk, 28, (u32)cb.texts.size());
     while (blk.size() % 4) blk.push_back(0);
     put_be32(blk, 20, (u32)blk.size());
     // the Mega Drive's colours per area (tools/md_areas.c), right after the
@@ -768,8 +774,8 @@ static bool assemble(Bytes &rom, CBlock &cb, const BuildOptions &opt, BuildStats
 // see md_build.h. The weapon comes from the first map's project.
 // Progress: 0..80% for the maps.
 bool new_campaign(Bytes &rom, u32 addr, u32 limit, const std::vector<MapInfo> &maps,
-                  const std::vector<Project> &projects, const BuildOptions &opt, BuildStats &stats, std::string &err,
-                  bool snes, bool snes_fx)
+                  const std::vector<Project> &projects, const Bytes &texts, const BuildOptions &opt, BuildStats &stats,
+                  std::string &err, bool snes, bool snes_fx)
 {
     if (maps.empty() || maps.size() != projects.size()) {
         err = "no maps to build";
@@ -780,6 +786,7 @@ bool new_campaign(Bytes &rom, u32 addr, u32 limit, const std::vector<MapInfo> &m
     cb.limit = limit;
     cb.snes = snes || snes_fx;
     cb.fx = snes_fx;
+    cb.texts = texts;
     rom.resize(addr, 0);
     std::vector<std::string> names;
     for (auto &m : maps) names.push_back(m.name);

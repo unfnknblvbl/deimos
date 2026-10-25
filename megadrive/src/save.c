@@ -162,7 +162,7 @@ u8 game_saved(void)
     return block_read(GAME_OFF, 'G', 0, sizeof(struct state), 0);
 }
 
-/* S to save RAM (SAVE GAME, and the start of every map) */
+/* S to save RAM (the save item, and the start of every map) */
 void game_save(void)
 {
     block_write(GAME_OFF, 'G', &S, sizeof(struct state));

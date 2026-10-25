@@ -94,7 +94,7 @@ IWRAM_CODE void vd_words(u32 a, s16 *dst, u8 n)
 u8 sram_rd(u16 i) { return SRAM[i & 0x7FFF]; }
 void sram_wr(u16 i, u8 v) { SRAM[i & 0x7FFF] = v; }
 #ifdef PLAT_SCRIPT
-static void sram_blank(void)            /* (no saved game: the SNES run had none) */
+static void sram_blank(void)            /* (nothing saved: the SNES run had none) */
 {
     u16 i;
     for (i = 0; i < 8192; i++) SRAM[i] = 0xFF;     /* (the first 8 KB: what the SNES's saves use) */
@@ -243,7 +243,7 @@ void irq_dispatch(u16 f)
 /* ------------------------------------------------------------ start */
 void ui_main(void);                     /* the Game Boy Color's ui.c */
 
-/* plat_init: the campaign block; in the script mode, no saved game */
+/* plat_init: the campaign block; in the script mode, nothing saved */
 void plat_init(void)
 {
     campaign_init();

@@ -587,8 +587,8 @@ hud_update:
     ; the weapon, its ammo
     ld a, (S_WEAPON)
     add a, a
-    ld hl, wpn_name
-    call add_hl_a               ; hl = &wpn_name[weapon] (a word)
+    ld hl, TX_WPN_0             ; (the weapons' names: the game's texts)
+    call add_hl_a               ; hl = &the address of its name (a word)
     ld a, (hl)
     inc hl
     ld h, (hl)
@@ -688,8 +688,8 @@ hud_update:
     ; the weapon, its ammo
     ld a, (S_WEAPON)
     add a, a
-    ld hl, wpn_name
-    call add_hl_a               ; hl = &wpn_name[weapon] (a word)
+    ld hl, TX_WPN_0             ; (the weapons' names: the game's texts)
+    call add_hl_a               ; hl = &the address of its name (a word)
     ld a, (hl)
     inc hl
     ld h, (hl)
@@ -730,7 +730,7 @@ hud_update:
     call hud_put_num_here
     ; CREDITS n  KEYS GYBR
     ld bc, $0407
-    ld hl, str_hud_credits
+    ld hl, (TX_CREDITS_WORD)
     call hud_row_text
     ld hl, (S_CREDITS)
     ld bc, $040F
@@ -1323,7 +1323,7 @@ end_screens:
     ld e, a
     ld d, 0
     call num_cat
-    ld de, str_credits_
+    ld de, (TX_CREDITS_MID)
     call str_cat
     ld de, (S_CREDITS)
     call num_cat
@@ -1387,7 +1387,7 @@ close_box:
     inc a
     jp refresh_picture
 
-; a new game: the rules' state (game_init), the play screen, the level's
+; a fresh game: the rules' state (game_init), the play screen, the level's
 ; title as the first message, then the first picture. Clobbers every
 ; register except IX, IY.
 new_game:
@@ -1427,7 +1427,7 @@ pause_draw:
     ld hl, str_resume
     call box_put
     ld bc, $0400 + PAUSE_LABEL_COL
-    ld hl, str_notebook
+    ld hl, (TX_NOTEBOOK_ITEM)
     call box_put
     ld bc, $0600 + PAUSE_LABEL_COL
     ld hl, str_view_size
@@ -1581,7 +1581,7 @@ _pi_changed:                    ; something changed: blip and redraw the menu
 ; ui_edge = buttons just pressed, ui_pad = buttons held
 ; Called by game_main for each frame with a new press. Clears waiting
 ; messages, then by `ui`:
-;   UI_DEAD, UI_DONE  button 1 starts a new game
+;   UI_DEAD, UI_DONE  button 1 starts a fresh game
 ;   UI_PAUSE          pause_input
 ;   UI_NOTES          button 1: next page (closes after the last);
 ;                     button 2: close
@@ -1799,7 +1799,7 @@ password_input:
     jp after_action
 
 ;-----------------------------------------------------------------------
-; the game: title, a new game, then one input at a time
+; the game: title, a fresh game, then one input at a time
 ;-----------------------------------------------------------------------
 ; The entry point (jumped to from $1000, C_ENTRY in rom/main.asm); never
 ; returns. Each frame: ENG_IDLE = 1 and ENG_MODE = ui (for the tests),
@@ -1875,7 +1875,6 @@ str_hud_ar:         .db "AR", 0
 str_hud_ammo:       .db "AMMO", 0
 str_hud_level:      .db "LEVEL", 0
 str_hud_xp:         .db "XP", 0
-str_hud_credits:    .db "CREDITS", 0
 str_hud_keys:       .db "KEYS", 0
 str_hud_medkits:    .db "MEDKITS", 0
 str_hud_soul:       .db "SOUL", 0
@@ -1904,14 +1903,12 @@ str_died_line:      .db "THE DEMONS GOT YOU.", 0
 str_complete:       .db " COMPLETE", 0
 str_kills:          .db "KILLS ", 0
 str_level_:         .db "LEVEL ", 0
-str_credits_:       .db "  CREDITS ", 0
 str_no_notes:       .db "NO NOTES YET", 0
 str_paused:         .db "PAUSED", 0
 str_credit1:        .db "MADE BY AI", 0
 str_credit2:        .db "DIRECTED BY", 0
 str_credit3:        .db "UNFNKNBLVBL", 0
 str_resume:         .db "RESUME", 0
-str_notebook:       .db "NOTEBOOK", 0
 str_view_size:      .db "VIEW SIZE", 0
 str_large:          .db "LARGE", 0
 str_small:          .db "SMALL", 0

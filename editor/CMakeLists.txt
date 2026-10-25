@@ -85,7 +85,7 @@ endforeach()
 
 # ---- the editor's core (no GUI): project, level, renderer, builders ----
 add_library(editor_core STATIC ${ENGINE_SRC} src/engine.cpp
-  src/zx0.cpp src/project.cpp src/projectfile.cpp src/colour.cpp src/geometry.cpp src/levelblob.cpp src/keytext.cpp
+  src/zx0.cpp src/project.cpp src/projectfile.cpp src/colour.cpp src/geometry.cpp src/levelblob.cpp src/keytext.cpp src/gametext.cpp
   src/sms_build.cpp src/sms_model.cpp src/md_build.cpp src/rom.cpp src/n3ds.cpp src/mars.cpp src/gbc.cpp src/gba.cpp src/vb.cpp src/projectio.cpp src/edit.cpp src/cli.cpp
   src/render.cpp src/console_view.cpp src/jar.cpp src/assets.cpp src/md_areas.c)
 # the colour choices must come out the same on every machine (no fused multiply-add)

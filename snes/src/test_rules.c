@@ -22,7 +22,7 @@ void screen_on(void);
 void set_backdrop(u16 c);
 
 /* the mailbox: cmd (1 move, 2 turn, 3 use, 4 pass, 5 cycle, 6 heal,
-   7 item, 8 resume, 9 store close, 10 store buy, 11 map change, 12 new
+   7 item, 8 resume, 9 store close, 10 store buy, 11 map change, 12 a fresh
    game), arg, then seq: the test writes seq last; done = seq when finished */
 struct mailbox {
     u8 magic[4];                /* "MBOX": lets the tester check it found it */
@@ -39,7 +39,7 @@ int main(void)
     u16 f0;
     screen_on();                /* (for the NMI: frame_count, wait_vblank) */
     set_backdrop(0x1084);       /* dark grey: it is running */
-    game_init();                /* a new game, the first map */
+    game_init();                /* a fresh game, the first map */
     mbox.done = 0xEE;           /* ready */
     for (;;) {
         wait_vblank();

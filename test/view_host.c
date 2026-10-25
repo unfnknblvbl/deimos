@@ -11,7 +11,7 @@
  *
  *   view_host <campaign.bin> <map> <out.ppm|out.bin> [x z facing] [couplings]
  *
- * plays nothing: a new game, map_change to <map> (unless 0), the player put
+ * plays nothing: a fresh game, map_change to <map> (unless 0), the player put
  * at (x, z, facing) if given, then one picture. .ppm: the picture in its
  * colours (2x, as the SNES shows it); .bin: the frame buffer as it is.
  *
@@ -101,6 +101,13 @@ const char *level_string(u8 id)
     u32 s = entry(cur_map, 16, 0);
     return (const char *)blk + s + be16(s + 2 * id);
 }
+/* the game's text id: the block's texts table (its offset at byte 24:
+   a big-endian u16 offset per text, then the texts) */
+const char *gtext(u8 id)
+{
+    u32 t = be32(24);
+    return (const char *)blk + t + be16(t + 2 * id);
+}
 /* messages and sounds: ignored */
 void say(const char *s) { (void)s; }
 void say2(const char *a, const char *b) { (void)a; (void)b; }
@@ -178,7 +185,7 @@ int main(int argc, char **argv)
     if (fread(blk, 1, blk_size, f) != (size_t)blk_size) return 1;
     fclose(f);
     map = atoi(argv[2]);
-    game_init();                        /* (the core: a new game, map 0) */
+    game_init();                        /* (the core: a fresh game, map 0) */
     if (map) map_change((u8)map);
     if (argc >= 7) {
         S.px = (u8)atoi(argv[4]);

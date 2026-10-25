@@ -17,7 +17,7 @@ buttons.
 
 Actions are the lockstep's: fwd back left right use pass wnext wprev heal,
 plus 'close' for the vendor's menu (dialogs and codes are answered by the
-caller), 'collar' (use the dog collar item) and 'berserk' (ACTIONS has
+caller), 'collar' (use the collar item) and 'berserk' (ACTIONS has
 both; choose() only returns 'collar').
 Licence: GPL-2.0-or-later.
 
@@ -423,7 +423,7 @@ class Pilot:
                     self.blocked_doors[(c.index, li)] = self.situation(w)
                     return "pass"
                 if w.weapon != 0:
-                    return "wnext"               # the axe for a jammed door
+                    return "wnext"               # the axe for a jammed-shut door
                 return "use"
             ev = w.find_event(nx, nz)
             sit = self.situation(w)

@@ -7,7 +7,7 @@
 
 """
 Demo video of the live-render build: the autopilot plays the whole of
-Sector 1 on the Gearsystem core (health topped up, as in the lockstep
+level01 on the Gearsystem core (health topped up, as in the lockstep
 test), switching the view through the pause menu along the way:
 large + sweep, small, large + black, small, large + sweep. Every frame,
 with the sound and a caption bar.
@@ -131,7 +131,7 @@ def main():
         # lockstep: the ROM's game state must be byte for byte the model's
         assert rom.state() == T.model_bytes(w), f"out of step with the rules model at step {step}"
         step += 1
-    state["caption"] = "Sector 1 complete"
+    state["caption"] = "level01 complete"
     rom.run(240)
     ff.stdin.close()                   # finish the video stream
     ff.wait()

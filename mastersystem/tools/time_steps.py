@@ -6,7 +6,7 @@
 # option) any later version, with NO WARRANTY: see the LICENSE file.
 
 """
-How long a step takes to draw: the autopilot plays the start of Sector 1
+How long a step takes to draw: the autopilot plays the start of level01
 on the Gearsystem core at each view setting and reports, for moves and
 turns, the frames from the button press to the finished picture, and to
 the end of the whole step (the monsters' turn and the status bar follow
