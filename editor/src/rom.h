@@ -5,7 +5,7 @@
  * option) any later version, with NO WARRANTY: see the LICENSE file.
  */
 
-// A ROM the editor has made, for any of the nine consoles, and what the
+// A ROM the editor has made, for any of the ten consoles, and what the
 // editor knows about the consoles (their names, file extensions, families).
 // Licence: GPL-2.0-or-later.
 //

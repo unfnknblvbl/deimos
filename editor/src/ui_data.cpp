@@ -497,20 +497,37 @@ void App::draw_help()
         show_about = false;
     }
     if (ImGui::BeginPopupModal("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        // edit buffers for the two emulator commands, filled from the
-        // settings when the window opens (init is cleared again on Close)
-        static char emu[512], emu_md[512];
-        static bool init = false;
-        if (!init) {
-            snprintf(emu, sizeof(emu), "%s", set.emulator.c_str());
-            snprintf(emu_md, sizeof(emu_md), "%s", set.emulator_md.c_str());
+        // edit buffers for the emulator commands, one per console, filled
+        // from the settings when the window opens or a Browse... picks a
+        // program (reload; init is cleared again on Close)
+        static char emu[Settings::N_EMULATORS][512];
+        static bool init = false, reload = false;
+        if (!init || reload) {
+            for (int c = 0; c < Settings::N_EMULATORS; c++)
+                snprintf(emu[c], sizeof(emu[c]), "%s", set.emulators[c].c_str());
             init = true;
+            reload = false;
         }
         ImGui::Text("Emulator commands (%%f = the ROM file), e.g.  mednafen %%f   or   blastem %%f");
-        ImGui::SetNextItemWidth(500 * g_ui);
-        if (ImGui::InputText("Master System##emu", emu, sizeof(emu))) set.emulator = emu;
-        ImGui::SetNextItemWidth(500 * g_ui);
-        if (ImGui::InputText("Mega Drive##emumd", emu_md, sizeof(emu_md))) set.emulator_md = emu_md;
+        hint("Browse... picks the emulator's program; add any options it needs after it.");
+        for (int c = 0; c < Settings::N_EMULATORS; c++) {
+            ImGui::PushID(c);
+            ImGui::SetNextItemWidth(460 * g_ui);
+            if (ImGui::InputText("##emu", emu[c], sizeof(emu[c]))) set.emulators[c] = emu[c];
+            ImGui::SameLine();
+            if (ImGui::Button("Browse...")) {
+                const std::string name = console_name((Console)c);
+                fd.open("The " + name + " emulator", FileDialog::OPEN, "", set.last_dir,
+                        [this, c](const std::string &f) {
+                            // the program, quoted (its path may have spaces), then the ROM
+                            set.emulators[c] = "\"" + f + "\" %f";
+                            reload = true;
+                        });
+            }
+            ImGui::SameLine();
+            ImGui::TextUnformatted(console_name((Console)c));
+            ImGui::PopID();
+        }
         // the text size: the font is remade (main.cpp setup_fonts) only once
         // the slider is let go, not while it is dragged
         ImGui::SetNextItemWidth(200 * g_ui);
@@ -523,7 +540,8 @@ void App::draw_help()
         para("Deimos Editor %s", EDITOR_VERSION);
         para("Made by AI");
         para("Directed by unfnknblvbl");
-        para("Master System, Game Gear, Mega Drive, SNES, SNES SuperFX, 3DS, 32X, Game Boy Color, Game Boy Advance. "
+        para("Master System, Game Gear, Mega Drive, SNES, SNES SuperFX, 3DS, 32X, Game Boy Color, Game Boy Advance, "
+             "Virtual Boy. "
              "GPL-2.0-or-later. Uses Dear ImGui (MIT), SDL2 (zlib), nlohmann/json (MIT), stb (public domain) "
              "and the DejaVu fonts. An unofficial fan project, not made or endorsed by "
              "id Software, ZeniMax or Microsoft; it needs your own copy of Doom RPG.");
@@ -532,6 +550,7 @@ void App::draw_help()
             init = false;
             ImGui::CloseCurrentPopup();
         }
+        fd.draw();   // (Browse...'s file dialog, over this window)
         ImGui::EndPopup();
     }
 }

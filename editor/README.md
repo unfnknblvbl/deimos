@@ -1,4 +1,4 @@
-# Deimos Editor (Master System, Game Gear, Mega Drive, SNES, 3DS, 32X, Game Boy Color and Game Boy Advance)
+# Deimos Editor (Master System, Game Gear, Mega Drive, SNES, 3DS, 32X, Game Boy Color, Game Boy Advance and Virtual Boy)
 
 Version 0.10.0. Part of **Deimos**: Doom RPG on ten retro consoles. Made by AI. Directed by unfnknblvbl. Licence: GPL-2.0-or-later. Version numbers are 0.x.y: x is the number of consoles the editor makes ROMs for (10: the SNES with the SuperFX counts as its own), y the number of releases since the last console was added.
 
@@ -84,7 +84,7 @@ Everything is sized to your display's scale (KDE, GNOME and Windows display scal
 - **Limits.** What the map uses, against what the games allow, and whether it fits the Master System and the Game Gear.
 - **Build.** Save the project, make ROMs of it, or make one and play it (F5, on the console chosen there). The log shows how much room is left in each ROM.
 
-**F5** makes a ROM and starts your emulator. Set the commands once in **Help > Settings**, for example `mednafen %f` or `blastem %f`.
+**F5** makes a ROM and starts your emulator. Set a command for each console once in **Help > Settings**, for example `mednafen %f` or `blastem %f`, or press **Browse...** beside it to pick the emulator program.
 
 **Undo/redo:** Ctrl+Z / Ctrl+Y (each map's own; switching maps starts afresh). **Save the project:** Ctrl+S.
 

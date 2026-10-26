@@ -88,8 +88,21 @@ void Settings::load()
         std::string k = "files.recent" + std::to_string(n);
         if (kv.count(k) && !kv[k].empty() && fs::path(kv[k]).extension() == PROJECT_EXT) recent.push_back(kv[k]);
     }
-    s("tools.emulator", emulator);
-    s("tools.emulator_md", emulator_md);
+    // the emulators: emulator_<console key> each; an older file's two
+    // commands (emulator: the Master System and Game Gear, emulator_md:
+    // every other console) fill in the consoles it has no line for
+    {
+        static const char *const keys[N_EMULATORS] = {"sms", "gg", "md", "snes", "snesfx",
+                                                      "3ds", "32x", "gbc", "gba", "vb"};
+        std::string old_sms, old_md;
+        s("tools.emulator", old_sms);
+        s("tools.emulator_md", old_md);
+        for (int c = 0; c < N_EMULATORS; c++) {
+            std::string k = std::string("tools.emulator_") + keys[c];
+            if (kv.count(k)) emulators[c] = kv[k];
+            else emulators[c] = c < 2 ? old_sms : old_md;
+        }
+    }
     i("window.width", window_w);
     i("window.height", window_h);
     b("window.maximized", maximized);
@@ -130,9 +143,12 @@ void Settings::save() const
     f << "; Deimos Editor settings. Safe to edit while the editor is closed.\n\n";
     f << "[files]\n; projects (.deimos)\nlast_project=" << last_project << "\nlast_dir=" << last_dir << "\njar=" << jar << "\n";
     for (size_t n = 0; n < recent.size() && n < 8; n++) f << "recent" << n << "=" << recent[n] << "\n";
-    f << "\n[tools]\n; commands that run an emulator; %f is replaced by the ROM file\n";
-    f << "emulator=" << emulator << "\n";
-    f << "emulator_md=" << emulator_md << "\n";
+    f << "\n[tools]\n; each console's emulator command; %f is replaced by the ROM file\n";
+    {
+        static const char *const keys[N_EMULATORS] = {"sms", "gg", "md", "snes", "snesfx",
+                                                      "3ds", "32x", "gbc", "gba", "vb"};
+        for (int c = 0; c < N_EMULATORS; c++) f << "emulator_" << keys[c] << "=" << emulators[c] << "\n";
+    }
     f << "\n[window]\nwidth=" << window_w << "\nheight=" << window_h << "\nmaximized=" << (maximized ? 1 : 0)
       << "\n; text and widget size (0.5 - 3.0)\nui_scale=" << ui_scale << "\n";
     f << "\n[map]\nzoom=" << map_zoom << "\n; right-hand panel width, share of the window (up to 0.333)\npanel=" << map_panel << "\nshow_grid=" << show_grid << "\nshow_things=" << show_things
