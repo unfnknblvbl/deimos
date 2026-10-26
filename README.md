@@ -26,7 +26,7 @@ Made by AI. Directed by unfnknblvbl.
 
 ## You need your own DoomRPG.jar
 
-No part of the original game is included — not its maps, graphics, sounds,
+No part of the original game is included - not its maps, graphics, sounds,
 music or text. The editor and the console builds read them from your own
 copy of the J2ME game, `DoomRPG.jar`: give it to the editor when it asks,
 or put it in `import/` to build ROMs here (`build.sh` asks for its path
@@ -64,7 +64,7 @@ here go to `roms/`.
   then builds the editor. No jar is needed.
 - **editor** builds the Deimos Editor from the engines in `editor/engines/`:
   each console's game code, with nothing of the original game in it. It
-  needs only CMake and a C++ compiler — none of the console toolchains and
+  needs only CMake and a C++ compiler - none of the console toolchains and
   no jar. The editor's users give it their own `DoomRPG.jar`, and it makes
   every console's ROM from it (or from a project of maps edited in it), the
   same bytes as the console builds below.
@@ -109,7 +109,7 @@ Pillow and numpy, `unzip`, a host C compiler and the `zx0` compressor.
 | SNES (and all the ports) | cc65 (`cc65`, `ca65`, `ld65`); WLA-DX (`wla-spc700`, `wlalink`) | cc65 2.19 | cc65.github.io; set `CC65_LIB` if `none.lib` is not found |
 | SNES Super FX | WLA-DX `wla-superfx` | 10.8 | as above |
 | 32X | `m68k-elf-gcc` and `sh-elf-gcc` | GCC 13.3 | set `M68K=`/`SH2=` to their prefixes if not on PATH |
-| 3DS | clang/devkitARM, libctru, citro3d, 3dstools, picasso | — | see `3ds/TOOLCHAIN.md`; set `DKP=` |
+| 3DS | clang/devkitARM, libctru, citro3d, 3dstools, picasso | - | see `3ds/TOOLCHAIN.md`; set `DKP=` |
 | Game Boy Color | GBDK-2020 | 4.5.0 | github.com/gbdk-2020/gbdk-2020; set `GBDK=` |
 | Game Boy Advance | `arm-none-eabi-gcc` | GCC 13.3 | Arm GNU toolchain, or devkitARM; set `ARM=` to its prefix |
 | Virtual Boy | `v810-gcc` (GCC 4.9.4, binutils 2.27, newlib 2.2.0 with VUEngine's V810 patches) | 4.9.4 | `tools/deps.sh` builds it (about 10 minutes); github.com/VUEngine/v810-gcc |
@@ -130,7 +130,7 @@ If you pass on a built ROM or editor, the GPL asks you to make the matching
 source available too (this repository, or a link to it).
 The editor includes third-party code under its own licences (Dear ImGui, MIT;
 nlohmann/json, MIT; stb, MIT / public domain; DejaVu fonts;
-SDL2, zlib) — see `editor/third_party/` and the licences the editor's build
+SDL2, zlib) - see `editor/third_party/` and the licences the editor's build
 puts in `docs/`. The 3DS game links devkitPro's libctru and citro3d (zlib)
 and newlib's C library (BSD-style licences): their notices are in
 `3ds/THIRD_PARTY.md`, which goes with the `.3dsx`. The Game Boy Color game
@@ -142,5 +142,5 @@ This is an unofficial fan project, not affiliated with or endorsed by id
 Software, ZeniMax/Bethesda, Microsoft, Fountainhead Entertainment, EA, Sega,
 Nintendo or anyone else. *Doom* and *Doom RPG* are trademarks of their
 owners. The original game's content belongs to its owners: you need your own
-copy, and the ROMs you build from it are for your own use — please don't
+copy, and the ROMs you build from it are for your own use - please don't
 distribute them.
