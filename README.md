@@ -1,4 +1,4 @@
-# Deimos — Doom RPG on retro consoles
+# Deimos - Doom RPG on retro consoles
 
 **Deimos** ports *Doom RPG* (id Software / Fountainhead, 2005, J2ME) to
 ten retro consoles (the Virtual Boy port is experimental). It includes the **Deimos Editor**, which makes the ROMs
