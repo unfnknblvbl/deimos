@@ -418,13 +418,13 @@ void App::new_map()
     status = "New map: a 4x4 room. Draw with the Floor tool, add things, then File > Save project.";
 }
 
-// Runs the emulator command from the settings (the Master System one for
-// the Master System and Game Gear, the "Mega Drive" one for all the others).
+// Runs console c's emulator command from the settings.
 // "%f" in the command is replaced by the quoted ROM path; without it the path
 // is added at the end. The command runs in the background through the shell.
 void App::run_emulator(const std::string &rom_path, Console c)
 {
-    std::string &emu = sms_family(c) ? set.emulator : set.emulator_md;
+    static_assert(Settings::N_EMULATORS == N_CONSOLES, "one emulator command per console");
+    std::string &emu = set.emulators[(int)c];
     if (emu.empty()) {
         status = std::string("Made ") + rom_path + ". Set the " + console_name(c) +
                  " emulator command in Help > Settings to play it from here.";
@@ -592,7 +592,7 @@ void App::frame()
         // ---- the start page: what the editor does, New project / Open / Make ROMs, recent projects
         ImGui::Spacing();
         para("This editor makes Doom RPG ROMs for the Master System, Game Gear, Mega Drive, SNES (with or without "
-             "the SuperFX), 3DS, 32X, Game Boy Color and Game Boy Advance, and edits the game's maps. It contains "
+             "the SuperFX), 3DS, 32X, Game Boy Color, Game Boy Advance and Virtual Boy, and edits the game's maps. It contains "
              "nothing of the original game: give it your own copy of the phone game, DoomRPG.jar, and it makes "
              "everything from it - the maps, the art, the texts, the music.");
         ImGui::Spacing();
@@ -664,7 +664,7 @@ void App::frame()
         ImGui::TextColored(ImVec4(1, 0.8f, 0.3f, 1), "unsaved changes");   // orange
     }
     // ---- the windows that float over everything (each draws nothing unless open)
-    fd.draw();
+    if (!ImGui::IsPopupOpen("Settings")) fd.draw();   // (the Settings window draws it itself, over it)
     draw_jar_window();
     draw_newrom_window();
     draw_find_jar_window();

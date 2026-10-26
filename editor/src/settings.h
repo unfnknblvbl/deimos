@@ -22,10 +22,11 @@ struct Settings {
     std::vector<std::string> recent;          // projects, most recent first, max 8
     std::string last_dir;                     // file dialog start folder
     std::string jar;                          // the user's copy of DoomRPG.jar
-    std::string emulator = "";                // Master System emulator command, %f = ROM file
-                                              // (also used for the Game Gear)
-    std::string emulator_md = "";             // Mega Drive emulator command
-                                              // (used for every console but the Master System and Game Gear)
+    // each console's emulator command, %f = the ROM file, in the Console
+    // order (rom.h: CONSOLE_KEYS sms gg md snes snesfx 3ds 32x gbc gba vb);
+    // "" = none set
+    static const int N_EMULATORS = 10;
+    std::string emulators[N_EMULATORS];
     int window_w = 1400, window_h = 900;      // the window's size when not maximised (screen units)
     bool maximized = false;                   // the window was maximised (true the first time)
     float ui_scale = 1.0f;                    // the "text size" setting, 0.5..3.0 (times the display's scale)

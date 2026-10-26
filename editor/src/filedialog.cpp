@@ -66,7 +66,12 @@ void FileDialog::draw()
         ImGui::OpenPopup(title_.c_str());   // ImGui modals must be opened before they are begun
         just_opened_ = false;
     }
-    ImGui::SetNextWindowSize(ImVec2(720 * g_ui, 480 * g_ui), ImGuiCond_Appearing);
+    // 720 x 480 at the UI's scale, but never bigger than 95% of the window,
+    // and in its middle (so the buttons are always on screen)
+    const ImGuiViewport *vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowSize(ImVec2(std::min(720 * g_ui, vp->WorkSize.x * 0.95f),
+                                    std::min(480 * g_ui, vp->WorkSize.y * 0.95f)), ImGuiCond_Appearing);
+    ImGui::SetNextWindowPos(vp->GetWorkCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
     bool open = true;   // the popup's close box sets it to false
     if (!ImGui::BeginPopupModal(title_.c_str(), &open)) {
         if (!open) visible_ = false;
@@ -150,14 +155,20 @@ void FileDialog::draw()
     }
     ImGui::EndChild();
     // ---- the bottom row: the name box (not for folders), OK, Cancel, any error
+    // (the buttons' widths: their usual size, or their words' if wider at
+    // this font and scale; the name box takes the rest of the row)
+    const ImGuiStyle &st = ImGui::GetStyle();
+    const char *ok_label = mode_ == SAVE ? "Save" : mode_ == FOLDER ? "Use this folder" : "Open";
+    float ok_w = std::max(110 * g_ui, ImGui::CalcTextSize(ok_label).x + 2 * st.FramePadding.x);
+    float cancel_w = std::max(80 * g_ui, ImGui::CalcTextSize("Cancel").x + 2 * st.FramePadding.x);
     if (mode_ != FOLDER) {
-        ImGui::SetNextItemWidth(-200);   // leaves 200 pixels (not scaled by g_ui) for the buttons
+        ImGui::SetNextItemWidth(-(ok_w + cancel_w + 2 * st.ItemSpacing.x));   // leaves room for both buttons
         ImGui::InputText("##name", name_, sizeof(name_));
         ImGui::SameLine();
     }
-    bool ok = ImGui::Button(mode_ == SAVE ? "Save" : mode_ == FOLDER ? "Use this folder" : "Open", ImVec2(110 * g_ui, 0));
+    bool ok = ImGui::Button(ok_label, ImVec2(ok_w, 0));
     ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(80 * g_ui, 0)) || !open) {   // Cancel or the close box
+    if (ImGui::Button("Cancel", ImVec2(cancel_w, 0)) || !open) {   // Cancel or the close box
         visible_ = false;
         ImGui::CloseCurrentPopup();
     }

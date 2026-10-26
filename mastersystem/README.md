@@ -1,6 +1,6 @@
 # Deimos for the Master System and Game Gear (0.2.16: views drawn live, all assembler)
 
-Part of **Deimos**: Doom RPG on nine retro consoles. Made by AI. Directed by unfnknblvbl. Licence: GPL-2.0-or-later (`../LICENSE`).
+Part of **Deimos**: Doom RPG on ten retro consoles. Made by AI. Directed by unfnknblvbl. Licence: GPL-2.0-or-later (`../LICENSE`).
 
 The Z80 draws every view as you play (0.1.5 stored 1,700 pre-drawn
 pictures in 4 MB). The view comes in two sizes and sits in a border in the

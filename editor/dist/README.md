@@ -69,7 +69,7 @@ Everything is sized to your display's scale (KDE, GNOME and Windows display scal
 - **Limits.** What the map uses, against what the games allow, and whether it fits the Master System.
 - **Build.** Save the project, make ROMs of it, or make one and play it (F5, on the console chosen there). The log shows how much room is left in each ROM.
 
-**F5** makes a ROM and starts your emulator. Set the commands once in **Help > Settings**, for example `mednafen %f` or `blastem %f`.
+**F5** makes a ROM and starts your emulator. Set a command for each console once in **Help > Settings**, for example `mednafen %f` or `blastem %f`, or press **Browse...** beside it to pick the emulator program.
 
 **Undo/redo:** Ctrl+Z / Ctrl+Y (per map). **Save the project:** Ctrl+S.
 
