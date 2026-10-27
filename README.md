@@ -1,5 +1,26 @@
 # Deimos - Doom RPG on retro consoles
 
+It's the age-old question, isn't it? Obviously, *Doom* can't run on the Sega Master System.
+
+Or... can it? I suggest that yes, it _can_ run Doom. Sort of.
+
+Back in the early days of smartphones, before the iPhone even, there was a very interesting 
+J2ME version of Doom that John Carmack himself wrote (or helped write, idk): DoomRPG. 
+This was a turn-based RPG, and on my Nokia 6230i, it was very impressive. 
+There were no animations or transitions, it just showed static pre-rendered 
+views for each location you were on the map. Or so I thought.
+
+Now, for whatever reason, I've been thinking about this a lot over the last few years. 
+This seems like a pretty basic idea that the SMS could absolutely run. Just convert the views to 
+tiles, add some basic logic, and hey presto we have Doom on the SMS. I was convinced that it could 
+happen, but problem is, I'm not a coder, and I honestly didn't think anybody else would be interested in it.
+
+Then, on a whim, I tried out a Claude subscription last weekend. Among the many very silly ideas I threw at it was Doom on the SMS.
+
+Well, turns out it can. Sort of. 
+
+_...presenting..._
+
 **Deimos** ports *Doom RPG* (id Software / Fountainhead, 2005, J2ME) to
 ten retro consoles (the Virtual Boy port is experimental). It includes the **Deimos Editor**, which makes the ROMs
 for all of them from the original game and lets you edit its maps.
