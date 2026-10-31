@@ -1,6 +1,6 @@
 # Deimos Editor (Master System, Game Gear, Mega Drive, SNES, 3DS, 32X, Game Boy Color, Game Boy Advance and Virtual Boy)
 
-Version 0.10.0. Part of **Deimos**: Doom RPG on ten retro consoles. Made by AI. Directed by unfnknblvbl. Licence: GPL-2.0-or-later. Version numbers are 0.x.y: x is the number of consoles the editor makes ROMs for (10: the SNES with the SuperFX counts as its own), y the number of releases since the last console was added.
+Version 0.10.1. Part of **Deimos**: Doom RPG on ten retro consoles. Made by AI. Directed by unfnknblvbl. Licence: GPL-2.0-or-later. Version numbers are 0.x.y: x is the number of consoles the editor makes ROMs for (10: the SNES with the SuperFX counts as its own), y the number of releases since the last console was added.
 
 A ROM maker, level editor and art editor for the console versions of Doom RPG (id Software / Fountainhead, 2005, for mobile phones):
 
