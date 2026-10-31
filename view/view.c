@@ -1542,6 +1542,7 @@ void view_draw(u8 x0, u8 x1)
     strip_x0 = x0;
     strip_x1 = x1;
     draw_walls();
+    PROF(5);
     for (i = 0; i < n_pt; i++) {
         struct pthing *p = &pt[pt_order[i]];
         if (p->decal) draw_decal(p);

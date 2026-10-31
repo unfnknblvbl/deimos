@@ -473,56 +473,393 @@ static void src_at(u32 a, u8 n)
     }
 }
 
+/* draw_walls' state for dw_cols (globals: the routine is __naked):
+   dw_x, dw_x1 the columns left (dw_x .. dw_x1 - 1); dw_ph, dw_pt, dw_ptex,
+   dw_rm the addresses of VR.col_h, col_t, col_tex and tex_rm (bank 3);
+   dw_b the ROM bank to put back; dw_h the column's height, dw_q its
+   (7 h + 8) >> 4, dw_k0 the rows above the view's top, dw_y0 / dw_y1 the
+   view rows the wall covers, dw_tex its texture column's block offset */
+static u8 dw_x, dw_x1, dw_b, dw_y0, dw_y1;
+static u16 dw_ph, dw_pt, dw_ptex, dw_rm, dw_h, dw_q, dw_k0;
+static u32 dw_tex;
+
+/* the texture column hv_tex when its 64 bytes cross into the next bank:
+   copied (src_at), and its ROM bank mapped otherwise. Called by dw_cols */
+static void dw_far(void)
+{
+    src_at(hv_tex, 64);
+}
+
+/* the columns dw_x .. dw_x1 - 1 into the picture: as the C this replaced
+   (kept in the comments), a column at a time:
+     h = col_h[x]; no wall: the whole column 0
+     t = col_t[x]; another texture: its remap into HR (and HV forgotten)
+     another texture column: its 64 texels remapped into HV (lut64)
+     y0 = 44 - (7 h + 8) / 16, dv = 16384 / h, k0 = -y0 if y0 < 0 (the
+     rows above the view skipped), y1 = min(y0 + h, 88), v = dv / 2 + k0 dv;
+     rows 0 .. y0 - 1 and y1 .. 87 the backdrop (0), the rest scaled
+   Entered with bank 3 (VR) mapped; leaves it so, the ROM bank dw_b. */
+static void dw_cols(void) __naked
+{
+    __asm
+00$:
+    ld  a, (_dw_x)
+    ld  c, a                            ; (c = x)
+    ld  a, (_dw_x1)
+    cp  c
+    jp  z, 99$                          ; (every column done)
+    ld  a, (_dw_ph)                     ; h = col_h[x]
+    ld  l, a
+    ld  a, (_dw_ph + 1)
+    ld  h, a
+    ld  e, c
+    ld  d, #0
+    add hl, de
+    add hl, de
+    ld  a, (hl+)
+    ld  (_dw_h), a
+    ld  b, a
+    ld  a, (hl)
+    ld  (_dw_h + 1), a
+    or  b
+    jp  z, 50$                          ; (no wall)
+    ld  a, (_dw_pt)                     ; t = col_t[x]
+    ld  l, a
+    ld  a, (_dw_pt + 1)
+    ld  h, a
+    add hl, de
+    ld  b, (hl)
+    ld  a, (_hr_is)
+    cp  b
+    jr  z, 10$
+    ld  a, b                            ; another texture: HR = tex_rm[t]
+    ld  (_hr_is), a
+    ld  l, b
+    ld  h, #0
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    ld  a, (_dw_rm)
+    ld  e, a
+    ld  a, (_dw_rm + 1)
+    ld  d, a
+    add hl, de
+    ld  de, #0xFF93
+    ld  b, #32
+1$:
+    ld  a, (hl+)
+    ld  (de), a
+    inc e
+    dec b
+    jr  nz, 1$
+    ld  a, #0xFF                        ; (HV's texture column: none)
+    ld  (_hv_tex), a
+    ld  (_hv_tex + 1), a
+    ld  (_hv_tex + 2), a
+    ld  (_hv_tex + 3), a
+10$:
+    ld  a, (_dw_ptex)                   ; dw_tex = col_tex[x]
+    ld  l, a
+    ld  a, (_dw_ptex + 1)
+    ld  h, a
+    ld  e, c
+    ld  d, #0
+    sla e
+    rl  d
+    sla e
+    rl  d
+    add hl, de
+    ld  de, #_dw_tex
+    ld  b, #4
+2$:
+    ld  a, (hl+)
+    ld  (de), a
+    inc de
+    dec b
+    jr  nz, 2$
+    ld  hl, #_dw_tex                    ; the same as HV holds?
+    ld  de, #_hv_tex
+    ld  b, #4
+3$:
+    ld  a, (de)
+    cp  (hl)
+    jr  nz, 4$
+    inc hl
+    inc de
+    dec b
+    jr  nz, 3$
+    jr  20$                             ; (yes: HV kept)
+4$:
+    ld  hl, #_dw_tex                    ; hv_tex = dw_tex
+    ld  de, #_hv_tex
+    ld  b, #4
+5$:
+    ld  a, (hl+)
+    ld  (de), a
+    inc de
+    dec b
+    jr  nz, 5$
+    ld  a, (_dw_tex + 1)                ; its 64 bytes cross a bank? ((a & $3FFF) > $3FC0)
+    and #0x3F
+    cp  #0x3F
+    jr  nz, 6$
+    ld  a, (_dw_tex)
+    cp  #0xC1
+    jr  c, 6$
+    call _dw_far                        ; (yes: copied)
+    jr  7$
+6$:
+    ld  a, (_dw_tex + 1)                ; the bank: data_bank0 + (a >> 14)
+    rlca
+    rlca
+    and #3
+    ld  b, a
+    ld  a, (_dw_tex + 2)
+    add a, a
+    add a, a
+    or  b
+    ld  b, a
+    ld  a, (_data_bank0)
+    add a, b
+    ldh (__current_bank), a
+    ld  (#_rROMB0), a
+    ld  a, (_dw_tex)                    ; vs_src = $4000 + (a & $3FFF)
+    ld  (_vs_src), a
+    ld  a, (_dw_tex + 1)
+    and #0x3F
+    or  #0x40
+    ld  (_vs_src + 1), a
+7$:
+    call _lut64                         ; (the 64 texels remapped into HV)
+    ld  a, (_dw_b)                      ; (the ROM bank back)
+    ldh (__current_bank), a
+    ld  (#_rROMB0), a
+20$:
+    ld  a, (_dw_h)                      ; q = (7 h + 8) >> 4
+    ld  l, a
+    ld  a, (_dw_h + 1)
+    ld  h, a
+    ld  d, h
+    ld  e, l
+    add hl, hl
+    add hl, hl
+    add hl, hl
+    ld  a, l
+    sub e
+    ld  l, a
+    ld  a, h
+    sbc a, d
+    ld  h, a
+    ld  de, #8
+    add hl, de
+    srl h
+    rr  l
+    srl h
+    rr  l
+    srl h
+    rr  l
+    srl h
+    rr  l
+    ld  a, l
+    ld  (_dw_q), a
+    ld  a, h
+    ld  (_dw_q + 1), a
+    or  a                               ; q <= 44: y0 = 44 - q, k0 = 0
+    jr  nz, 21$
+    ld  a, l
+    cp  #45
+    jr  nc, 21$
+    ld  b, a
+    ld  a, #44
+    sub b
+    ld  (_dw_y0), a
+    xor a
+    ld  (_dw_k0), a
+    ld  (_dw_k0 + 1), a
+    jr  22$
+21$:
+    ld  a, l                            ; else y0 = 0, k0 = q - 44
+    sub #44
+    ld  (_dw_k0), a
+    ld  a, h
+    sbc a, #0
+    ld  (_dw_k0 + 1), a
+    xor a
+    ld  (_dw_y0), a
+22$:
+    ld  a, (_dw_h)                      ; y1 = min(h - q + 44, 88)
+    ld  l, a
+    ld  a, (_dw_h + 1)
+    ld  h, a
+    ld  a, (_dw_q)
+    ld  e, a
+    ld  a, (_dw_q + 1)
+    ld  d, a
+    ld  a, l
+    sub e
+    ld  l, a
+    ld  a, h
+    sbc a, d
+    ld  h, a
+    ld  de, #44
+    add hl, de
+    ld  a, h
+    or  a
+    jr  nz, 23$
+    ld  a, l
+    cp  #89
+    jr  c, 24$
+23$:
+    ld  a, #88
+24$:
+    ld  (_dw_y1), a
+    xor a                               ; dv = 16384 / h (div_u32_u16: gd_lo)
+    ld  (_gd_hi), a
+    ld  (_gd_hi + 1), a
+    ld  (_gd_lo), a
+    ld  a, #0x40
+    ld  (_gd_lo + 1), a
+    ld  a, (_dw_h)
+    ld  (_gd_d), a
+    ld  a, (_dw_h + 1)
+    ld  (_gd_d + 1), a
+    call _div_u32_u16
+    ld  a, (_gd_lo)
+    ld  (_vs_dv), a
+    ld  a, (_gd_lo + 1)
+    ld  (_vs_dv + 1), a
+    ld  a, (_dw_k0)                     ; v = dv / 2 + k0 dv
+    ld  b, a
+    ld  a, (_dw_k0 + 1)
+    or  b
+    jr  nz, 25$
+    ld  hl, #0
+    jr  26$
+25$:
+    ld  a, (_dw_k0)
+    ld  (_gm_a), a
+    ld  a, (_dw_k0 + 1)
+    ld  (_gm_a + 1), a
+    ld  a, (_vs_dv)
+    ld  (_gm_b), a
+    ld  a, (_vs_dv + 1)
+    ld  (_gm_b + 1), a
+    call _mul_u16
+    ld  a, (_gm_lo)
+    ld  l, a
+    ld  a, (_gm_lo + 1)
+    ld  h, a
+26$:
+    ld  a, (_vs_dv + 1)
+    srl a
+    ld  d, a
+    ld  a, (_vs_dv)
+    rra
+    ld  e, a
+    add hl, de
+    ld  a, l
+    ld  (_vs_v), a
+    ld  a, h
+    ld  (_vs_v + 1), a
+    call 60$                            ; (the picture's bank; hl = the column's row 0)
+    ld  a, (_dw_y0)                     ; rows 0 .. y0 - 1: the backdrop
+    or  a
+    jr  z, 28$
+    ld  b, a
+    xor a
+27$:
+    ld  (hl+), a
+    dec b
+    jr  nz, 27$
+28$:
+    ld  a, l                            ; vs_dst = row y0 (hl)
+    ld  (_vs_dst), a
+    ld  a, h
+    ld  (_vs_dst + 1), a
+    ld  a, (_dw_y0)
+    ld  b, a
+    ld  a, (_dw_y1)
+    sub b                               ; vs_n = y1 - y0
+    ld  (_vs_n), a
+    ld  e, a                            ; (rows y1 .. 87: the backdrop, after the wall)
+    ld  d, #0
+    add hl, de
+    ld  a, (_dw_y1)
+    ld  b, a
+    ld  a, #88
+    sub b
+    jr  z, 30$
+    ld  b, a
+    xor a
+29$:
+    ld  (hl+), a
+    dec b
+    jr  nz, 29$
+30$:
+    ld  a, (_vs_n)
+    or  a
+    call nz, _scale_wall                ; (the wall's pixels)
+    jr  51$
+50$:                                    ; no wall: the whole column 0
+    call 60$
+    ld  b, #88
+    xor a
+52$:
+    ld  (hl+), a
+    dec b
+    jr  nz, 52$
+51$:
+    ld  a, #3                           ; (VR back for the next column)
+    ld  (#_rRAMB), a
+    ld  hl, #_dw_x
+    inc (hl)
+    jp  00$
+60$:                                    ; the picture's bank 4 + x / 64 mapped; hl = column x's row 0
+    ld  a, (_dw_x)
+    ld  c, a
+    rlca
+    rlca
+    and #1
+    add a, #4
+    ld  (#_rRAMB), a
+    ld  a, c
+    and #63
+    srl a                               ; (x & 63) * 128 + $A004
+    ld  h, a
+    ld  a, #0
+    rra
+    or  #4
+    ld  l, a
+    ld  a, h
+    add a, #0xA0
+    ld  h, a
+    ret
+99$:
+    ret
+    __endasm;
+}
+
 /* view.h's hook: the walls of view_draw's columns (VR.strip_x0 ..
    strip_x1 - 1; VR.col_h, col_t, col_tex, computed by view.c) into the
-   picture, the rest of each column the backdrop (0). A new map's remaps
-   are made into pixel values first. Runs with bank 3 mapped and leaves it
-   so; the ROM bank is restored */
+   picture, the rest of each column the backdrop (0) (dw_cols). A new
+   map's remaps are made into pixel values first. Runs with bank 3 mapped
+   and leaves it so; the ROM bank is restored */
 void draw_walls(void)
 {
-    u8 x, b = _current_bank, x1 = VR.strip_x1;
     if (vd_conv_map != (u8)VR.cur_map_loaded) {
         vd_conv_remaps();               /* (vdraw_map.c: the remaps -> pixel values) */
         hr_is = 0xFF;                   /* (HR's copy is stale) */
     }
-    for (x = VR.strip_x0; x < x1; x++) {
-        u16 h = VR.col_h[x], dv;
-        s16 y0, y1, k0;
-        u8 *col, t;
-        if (!h) {                       /* (no wall: the whole column backdrop) */
-            col = col_at(x);
-            memset(col, 0, VIEW_H);
-            SWITCH_RAM(VIEW_BANK);
-            continue;
-        }
-        t = VR.col_t[x];
-        if (hr_is != t) {               /* (another texture's remap: into HR) */
-            memcpy(HR, VR.tex_rm[t], 32);
-            hr_is = t;
-            hv_tex = 0xFFFFFFFFUL;
-        }
-        if (VR.col_tex[x] != hv_tex) {  /* (the texture column already in HV: kept) */
-            hv_tex = VR.col_tex[x];
-            src_at(hv_tex, 64);         /* (its 64 texels, its ROM bank mapped) */
-            lut64();                    /* (remapped into HV) */
-            SWITCH_ROM(b);
-        }
-        y0 = VIEW_HALF_H - (s16)((h * 7 + 8) >> 4);      /* (= 44 - (28 h + 32) / 64) */
-        dv = gb_div_u16(16384, h);      /* (64 rows over h pixels, 8.8: 64 * 256 / h) */
-        k0 = y0 < 0 ? -y0 : 0;          /* (pixels above the view's top skipped) */
-        y1 = y0 + (s16)h;
-        if (y1 > VIEW_H) y1 = VIEW_H;
-        vs_v = (dv >> 1) + (u16)k0 * dv;    /* (each pixel samples its middle) */
-        vs_dv = dv;
-        y0 += k0;
-        col = col_at(x);
-        if (y0 > 0) memset(col, 0, y0);
-        if (y1 < VIEW_H) memset(col + y1, 0, VIEW_H - y1);
-        vs_dst = (u16)(col + y0);
-        vs_n = (u8)(y1 - y0);
-        if (vs_n) scale_wall();         /* (the wall's pixels) */
-        SWITCH_RAM(VIEW_BANK);          /* (VR back for the next column) */
-    }
+    dw_x = VR.strip_x0;
+    dw_x1 = VR.strip_x1;
+    dw_b = _current_bank;
+    dw_ph = (u16)VR.col_h;
+    dw_pt = (u16)VR.col_t;
+    dw_ptex = (u16)VR.col_tex;
+    dw_rm = (u16)VR.tex_rm;
+    dw_cols();
 }
 
 /* view.h's hook: one sprite column (VR.ds_*: screen column ds_x, height
