@@ -51,7 +51,10 @@ Right adds a digit, Left deletes, button 1 enters, button 2 cancels.
 **Pause** (the console's pause button; on most flash carts in a Mega
 Drive, Start) opens the pause menu: Up/Down choose, button 1 selects or
 changes, button 2 or pause again resumes. It has Resume, the Notebook,
-and four settings:
+the Map (the cells you have seen around you: `#` walls, `+` doors, `.`
+floor, an arrow for you), four settings and Cheats (god mode, infinite
+ammunition, all weapons, all keycards; off until chosen, not saved).
+The settings:
 
 | Setting | | |
 |---|---|---|

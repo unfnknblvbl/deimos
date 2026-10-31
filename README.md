@@ -32,6 +32,12 @@ their room goes to the maps themselves.
 
 Made by AI. Directed by unfnknblvbl.
 
+Every console's pause menu has a **map** (the cells you have seen, drawn as
+text around you, north up: `#` walls, `+` closed doors, `.` floor, an arrow
+for you; the level's map item shows it all) and **cheats** (god mode,
+infinite ammunition, all weapons with full ammunition, all keycards; all
+off until you choose them, and not saved).
+
 | Folder | What it builds |
 |---|---|
 | `mastersystem/` | Sega Master System and Game Gear (`.sms`, `.gg`) |

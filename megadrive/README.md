@@ -31,7 +31,7 @@ the full layout.)
 | X / Z | previous / next weapon |
 | Y | notebook (the notes the story gives you) |
 | Mode (hold) | full detail, in smooth movement |
-| Start | pause menu: resume, items, notebook, save, options, quit to title |
+| Start | pause menu: resume, map, items, notebook, save, options, cheats, quit to title |
 
 Every button except Start can be changed on the **options** screen (from
 the title or the pause menu): go to an action and press the button you
