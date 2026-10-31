@@ -315,8 +315,17 @@ static s16 vx, vz, fwd_x, fwd_z, rgt_x, rgt_z;
 static void to_view(s16 wx, s16 wz, s16 *d, s16 *l)
 {
     s16 rx = wx - vx, rz = wz - vz;
+#ifdef VIEW_FX
     *d = rx * fwd_x + rz * fwd_z;
     *l = rx * rgt_x + rz * rgt_z;
+#else
+    /* (the fixed camera faces along an axis: forward is (+-1, 0) or
+       (0, +-1) and right is forward turned clockwise, so no products) */
+    if (fwd_x > 0) { *d = rx; *l = rz; }
+    else if (fwd_x < 0) { *d = -rx; *l = -rz; }
+    else if (fwd_z > 0) { *d = rz; *l = -rx; }
+    else { *d = -rz; *l = rx; }
+#endif
 }
 
 /* screen x of a view-space point, 8.8
@@ -347,8 +356,12 @@ static u8 t8_of(s16 m2, s16 num2)
         m >>= 1;
     }
     if (!n) return 0;
+#ifdef DIV_T8
+    return DIV_T8((u8)m, (u8)n);        /* (the platform's: m < n here, so the quotient fits 8 bits) */
+#else
     q = DIV_U16(m << 8, n);
     return q > 255 ? 255 : (u8)q;
+#endif
 }
 
 /* m2 at column x, to 16 bits (k da - VIEW_W la, k = 2x + 1 - VIEW_W) */
@@ -455,6 +468,25 @@ static void hq_ramp(void)
 }
 
 #ifndef __CC65__
+/* behind: 1 when the camera is behind (or in line with) the wall from A
+   to B: the cross product (A - camera) x (B - A) <= 0. Its sign alone,
+   without products, for a wall along an axis (as nearly all are) */
+static u8 behind(s16 ax, s16 az, s16 bx, s16 bz)
+{
+    s16 p, q;
+    if (bz == az) {                     /* (along x: cross = -(az - vz)(bx - ax)) */
+        p = az - vz;
+        q = bx - ax;
+        return !p || !q || ((p < 0) == (q < 0));
+    }
+    if (bx == ax) {                     /* (along z: cross = (ax - vx)(bz - az)) */
+        p = ax - vx;
+        q = bz - az;
+        return !p || !q || ((p < 0) != (q < 0));
+    }
+    return (s32)(ax - vx) * (bz - az) - (s32)(az - vz) * (bx - ax) <= 0;
+}
+
 /* project_walls: the fixed camera's wall pass. pvs: the word offset of
  * this view's list in the pvs table (a count, then wall indices). Each
  * wall: 8 big-endian words in the pack's wall table (16 bytes): ax, az,
@@ -487,7 +519,7 @@ static void project_walls(u16 pvs)
         ub = w[7];
         /* one-sided unless flagged */
         /* (the cross product: <= 0 when the camera is behind the wall) */
-        if ((s32)(ax - vx) * (bz - az) - (s32)(az - vz) * (bx - ax) <= 0) {
+        if (behind(ax, az, bx, bz)) {
             if (!(w[6] & 0x100)) continue;
             t = ax; ax = bx; bx = t;
             t = az; az = bz; bz = t;
@@ -552,7 +584,7 @@ static void column_params(void)
             else {
                 u8 t8 = t8_of((s16)m2, (s16)n2);
                 u8 u = (u8)((w->ua + (((s16)t8 * w->du) >> 8)) & 63);
-                col_h[x] = (u16)(((u32)hq + 8) >> 4);
+                col_h[x] = (hq >> 4) + ((hq & 15) >= 8);     /* ((u32)hq + 8) >> 4 */
                 col_t[x] = t;
                 col_tex[x] = base + (u16)u * 64;
             }

@@ -21,4 +21,6 @@ u16 gb_div_u16(u16 a, u16 b);           /* a / b; b non-zero, at most $8000 */
 #define DIV_U16(a, b) gb_div_u16((a), (b))
 s32 gb_mul_w(s16 a, s16 b);             /* a * b, the full 32-bit product */
 #define MUL_W(a, b) gb_mul_w((a), (b))
+u8 gb_div8(u8 m, u8 n);                 /* (m << 8) / n for m < n <= 255: view.c's t8_of */
+#define DIV_T8(m, n) gb_div8((m), (n))
 #endif

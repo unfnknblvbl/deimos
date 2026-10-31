@@ -377,6 +377,103 @@ s32 gb_div_l16(s32 n, s16 d)
     return neg ? (s32)((u32)0 - un) : (s32)un;
 }
 
+/* view_plat.h's DIV_T8: (m << 8) / n for m < n (the quotient fits 8
+   bits): 8 steps of restoring division, the remainder in a (its ninth
+   bit in the carry), the quotient shifted into e */
+static u8 d8_m, d8_n, d8_q;
+static void div8(void) __naked
+{
+    __asm
+    ld  a, (_d8_n)
+    ld  b, a
+    ld  a, (_d8_m)
+    ld  e, #0
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 1$
+    cp  b
+    jr  c, 2$
+1$:
+    sub b
+    inc e
+2$:
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 3$
+    cp  b
+    jr  c, 4$
+3$:
+    sub b
+    inc e
+4$:
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 5$
+    cp  b
+    jr  c, 6$
+5$:
+    sub b
+    inc e
+6$:
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 7$
+    cp  b
+    jr  c, 8$
+7$:
+    sub b
+    inc e
+8$:
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 9$
+    cp  b
+    jr  c, 10$
+9$:
+    sub b
+    inc e
+10$:
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 11$
+    cp  b
+    jr  c, 12$
+11$:
+    sub b
+    inc e
+12$:
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 13$
+    cp  b
+    jr  c, 14$
+13$:
+    sub b
+    inc e
+14$:
+    sla e
+    add a, a                            ; (r = 2 r: a carry means r >= 256 > n)
+    jr  c, 15$
+    cp  b
+    jr  c, 16$
+15$:
+    sub b
+    inc e
+16$:
+    ld  a, e
+    ld  (_d8_q), a
+    ret
+    __endasm;
+}
+
+u8 gb_div8(u8 m, u8 n)
+{
+    d8_m = m;
+    d8_n = n;
+    div8();
+    return d8_q;
+}
+
 /* view_plat.h's DIV_U16: a / b */
 u16 gb_div_u16(u16 a, u16 b)          /* (b at most $8000) */
 {
