@@ -173,6 +173,9 @@ extern u32 vc_vis, vc_scenery, vc_def_spr, vc_spr_cols, vc_spr_coff;
 extern u16 vc_nscen, vc_nents;
 extern u8 *vc_hidden, *vc_eflags, *vc_edef, *vc_ex, *vc_ez;
 void vc_things(void);
+void vc_things_list(void);              /* (vc_things in two: listed and sorted, then drawn ...) */
+void vc_things_draw(void);              /* (... the columns vc_sx0 .. vc_sx1 - 1, as draw_walls) */
+extern u16 vc_sx0, vc_sx1;
 #else
 static u16 col_hq[VIEW_W];              /* the nearest wall's hq (0: none) */
 static u8 col_w[VIEW_W];                /* its index in vw[] (0xFF: none) */
@@ -1473,11 +1476,7 @@ void view_render_cam(void)
  * away and every linked entity with a def, those in the view's vis
  * cells, sorted far to near and drawn (vcore.s's vc_things on the
  * SNES). PROF(n) mark the stages for profiling builds. */
-#ifdef __CC65__
-void view_render(void)
-#else
 void view_prepare(void)                 /* (everything but the drawing: view_draw draws) */
-#endif
 {
     u8 f = S.facing & 3, i;
     u16 view = (((u16)S.pz << 5) + S.px) * 4 + f, k;    /* this (cell, facing) */
@@ -1507,9 +1506,6 @@ void view_prepare(void)                 /* (everything but the drawing: view_dra
     vc_lflags = S.l_flags;
     vc_walls();                         /* vcore.s: col_hq ... col_tex */
     PROF(1);
-    PROF(2);
-    draw_walls();                       /* the platform draws the columns */
-    PROF(3);
     {
         u16 at = vd_u16(P.vis_index + 2 * (u32)view);
         vc_vis = at == 0xFFFF ? 0xFFFFFFFFUL : P.vis + 2 * (u32)at;
@@ -1525,9 +1521,8 @@ void view_prepare(void)                 /* (everything but the drawing: view_dra
     vc_ex = S.e_x;
     vc_ez = S.e_z;
     vc_nents = n_ents;
-    PROF(4);
-    vc_things();                        /* vcore.s: lists, sorts and draws them */
-    PROF(5);
+    vc_things_list();                   /* vcore.s: lists and sorts them */
+    PROF(2);
 #else
     project_walls(vd_u16(P.pvs_index + 2 * (u32)view));     /* this view's pvs list */
     PROF(1);
@@ -1563,7 +1558,25 @@ void view_prepare(void)                 /* (everything but the drawing: view_dra
 #endif
 }
 
-#ifndef __CC65__
+#ifdef __CC65__
+/* view_draw (the SNES): the columns x0 .. x1 - 1 of the view
+   view_prepare worked out: draw.s's walls, then vcore.s's things */
+void view_draw(u8 x0, u8 x1)
+{
+    vc_sx0 = x0;
+    vc_sx1 = x1;
+    draw_walls();
+    PROF(3);
+    vc_things_draw();
+    PROF(4);
+}
+
+void view_render(void)
+{
+    view_prepare();
+    view_draw(0, VIEW_W);
+}
+#else
 /* view_draw: the prepared view's columns x0 .. x1 - 1 (VIEW_W at most):
  * the walls (the platform's draw_walls, which draws strip_x0 ..
  * strip_x1 - 1), then the things far to near. Drawing the strips of a

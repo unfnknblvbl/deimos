@@ -39,7 +39,7 @@
 .export _draw_walls, _draw_spr, _fb_clear
 .import _col_h, _col_tex, _col_t, _tex_rm, _spr_rm
 .import _ds_x, _ds_top, _ds_len, _ds_s, _ds_h, _ds_data
-.import _block_bank
+.import _block_bank, _vc_sx0, _vc_sx1
 
 FB       = $7F0000              ; the frame buffer (FB_BYTES, view/view.h's FB_OFF order)
 TABLES   = $C20000              ; per h: first row, rows, v0, dv (8 bytes)
@@ -134,6 +134,58 @@ _fb_clear:
 
 zero:     .byte 0               ; (in the ROM: DMA can't copy work RAM to work RAM)
 
+; fb_clear_cols: the frame buffer's columns vc_sx0 .. vc_sx1 - 1 colour 0
+; (both multiples of 8: whole strips, which lie one after another in it,
+; FB_ROWS bytes a column: bytes sx0 FB_ROWS .. sx1 FB_ROWS). One DMA from
+; the zero byte, as _fb_clear. Clobbers A, X; DMA channel 7. (a16 i16 in
+; and out.) Called by draw_walls.
+.a16
+.i16
+fb_clear_cols:
+    sep #$20
+    .a8
+    lda _vc_sx0                 ; sx0 x FB_ROWS (the multiplier: 8 x 8 bits)
+    sta f:$004202
+    lda #FB_ROWS
+    sta f:$004203
+    nop                         ; (8 cycles for the product)
+    nop
+    nop
+    nop
+    rep #$20
+    .a16
+    lda f:$004216
+    sta f:$002181               ; work RAM $7F0000 + it
+    sep #$20
+    .a8
+    lda #1
+    sta f:$002183
+    lda _vc_sx1                 ; (sx1 - sx0) x FB_ROWS bytes
+    sec
+    sbc _vc_sx0
+    sta f:$004202
+    lda #FB_ROWS
+    sta f:$004203
+    lda #$08                    ; A -> B, fixed source
+    sta f:$004370
+    lda #$80                    ; $2180
+    sta f:$004371
+    rep #$20
+    .a16
+    lda #.loword(zero)
+    sta f:$004372
+    lda f:$004216
+    sta f:$004375
+    sep #$20
+    .a8
+    lda #CODE_BANK
+    sta f:$004374
+    lda #$80
+    sta f:$00420B               ; run channel 7
+    rep #$20
+    .a16
+    rts
+
 ; jsl here: jml [scaler]
 ; (the 65816 has no indirect long call: the scaler's rtl returns to the jsl)
 call_scaler:
@@ -175,11 +227,25 @@ col_setup:
 .i8
 _draw_walls:
     php
-    jsr _fb_clear               ; everything colour 0
     rep #$30
     .a16
     .i16
-    stz cx
+    lda _vc_sx0                 ; the whole view: everything colour 0
+    bne :+
+    lda _vc_sx1
+    cmp #VIEW_W
+    bne :+
+    sep #$30
+    .a8
+    .i8
+    jsr _fb_clear
+    bra :++
+:   jsr fb_clear_cols           ; (a strip: its columns colour 0)
+:   rep #$30
+    .a16
+    .i16
+    lda _vc_sx0
+    sta cx
 @col:                           ; per screen column:
     lda cx
     asl
@@ -226,7 +292,7 @@ _draw_walls:
 @next:
     inc cx
     lda cx
-    cmp #VIEW_W
+    cmp _vc_sx1
     bcs :+
     jmp @col
 :   plp

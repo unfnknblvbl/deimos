@@ -58,6 +58,9 @@
 .include "view.inc"
 .export _video_init, _video_game, _video_full, _screen_on, _screen_off
 .export _view_upload, _view_busy, nmi_video, _grad_hdma, _cgram_load, _flash
+.ifndef SUPERFX
+.export _view_upload_strip
+.endif
 .import _view_cgram, _view_n_colours
 .import _vq_add, _vq_src, _vq_dst, _vq_len, _vq_mode, _vq_busy, nmi_gfx
 .ifdef SUPERFX
@@ -481,6 +484,49 @@ _view_upload:
     .a8
     .i8
     jsr _vq_add                 ; queue it (gfx.s)
+    plp
+    rts
+.endif
+
+.ifndef SUPERFX
+; void view_upload_strip(u8 s): strip s (8 columns: FB_ROWS x 8 bytes, one
+; after another in the frame buffer and in VRAM's high bytes) queued as
+; view_upload queues the whole picture (the outward drawing, ui.c).
+; Clobbers A, X, Y.
+.a8
+.i8
+_view_upload_strip:
+    php
+    sta f:$004202               ; s x 8 FB_ROWS (the multiplier: 8 x 8 bits)
+    lda #8 * FB_ROWS / 4        ; (8 FB_ROWS / 4 fits 8 bits: 192 at most)
+    sta f:$004203
+    rep #$30
+    .a16
+    .i16
+    nop                         ; (8 cycles for the product)
+    nop
+    nop
+    lda f:$004216
+    asl
+    asl                         ; (x 4)
+    sta _vq_dst
+    clc
+    adc #FB_ADDR
+    sta _vq_src
+    lda #FB_BANK
+    sta _vq_src + 2
+    lda #8 * FB_ROWS
+    sta _vq_len
+.if FB_TILED
+    lda #$8001                  ; (as view_upload)
+.else
+    lda #$8401
+.endif
+    sta _vq_mode
+    sep #$30
+    .a8
+    .i8
+    jsr _vq_add
     plp
     rts
 .endif

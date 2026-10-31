@@ -1201,7 +1201,8 @@ t8_of:
 ; vc_things(): view.c's props, decals and things: the ones in the cells
 ; that can be seen, projected, sorted far to near and drawn column by
 ; column over the walls (draw.s's draw_spr).
-.export _vc_things, _vc_vis, _vc_scenery, _vc_nscen, _vc_def_spr, _vc_spr_cols, _vc_spr_coff
+.export _vc_things, _vc_things_list, _vc_things_draw, _vc_sx0, _vc_sx1
+.export _vc_vis, _vc_scenery, _vc_nscen, _vc_def_spr, _vc_spr_cols, _vc_spr_coff
 .export _vc_hidden, _vc_eflags, _vc_edef, _vc_ex, _vc_ez, _vc_nents
 .import _spr_addr, _draw_spr, _ds_x, _ds_top, _ds_len, _ds_s, _ds_h, _ds_data
 
@@ -1210,6 +1211,8 @@ V_MAX_SPR = 64
 
 .segment "BSS"
 _vc_vis:      .res 4            ; block address of the visible cells' list ($FFFFFFFF: all)
+_vc_sx0:      .res 2            ; vc_things_draw (and draw.s's draw_walls): the columns
+_vc_sx1:      .res 2            ; sx0 .. sx1 - 1 drawn (view.c's view_draw strip)
 _vc_scenery:  .res 4            ; the props: x, z, sprite, info, cell (words)
 _vc_nscen:    .res 2
 _vc_def_spr:  .res 4
@@ -1275,9 +1278,32 @@ set_sp:
     .a16
     rts
 
+; vc_things: the whole view's things (sx0 = 0, sx1 = VIEW_W, then the two
+; below). vc_things_list: the things listed and sorted (far first; a
+; decal's projection worked out once, kept in its pt_*). vc_things_draw:
+; them drawn, the columns vc_sx0 .. vc_sx1 - 1 (a strip at a time, if
+; view.c's view_draw wants that).
 .a8
 .i8
 _vc_things:
+    php
+    rep #$30
+    .a16
+    .i16
+    stz _vc_sx0
+    lda #VIEW_W
+    sta _vc_sx1
+    sep #$30
+    .a8
+    .i8
+    jsr _vc_things_list
+    jsr _vc_things_draw
+    plp
+    rts
+
+.a8
+.i8
+_vc_things_list:
     php
     rep #$30
     .a16
@@ -1425,6 +1451,16 @@ _vc_things:
     jmp @ent
 @sort:
     jsr sort_things
+    plp
+    rts
+
+.a8
+.i8
+_vc_things_draw:
+    php
+    rep #$30
+    .a16
+    .i16
     ; far to near
     stz s_k
 @draw:
@@ -1879,6 +1915,42 @@ add_decal:
     lda dn
     sta pt_hq,x
 @hq:
+    ; projected now, once (the picture may be drawn a strip at a time):
+    ; the view-space ends into pt_ax .. pt_bz, the columns into pt_x0 /
+    ; pt_x1 (none: both 0), c into pt_d (low word) and pt_l (high)
+    lda pt_ax,x
+    sta ax_
+    lda pt_az,x
+    sta az_
+    lda pt_bx,x
+    sta bx_
+    lda pt_bz,x
+    sta bz_
+    phx
+    jsr project
+    plx
+    bcc @pj
+    stz pt_x0,x
+    stz pt_x1,x
+    bra @pd
+@pj:
+    lda q_da
+    sta pt_ax,x
+    lda q_la
+    sta pt_az,x
+    lda q_db
+    sta pt_bx,x
+    lda q_lb
+    sta pt_bz,x
+    lda q_x0
+    sta pt_x0,x
+    lda q_x1
+    sta pt_x1,x
+    lda q_c
+    sta pt_d,x
+    lda q_c + 2
+    sta pt_l,x
+@pd:
     inc npt
     rts
 
@@ -1942,11 +2014,17 @@ draw_billboard:
     ldx s_p
     lda pt_hq,x
     sta s_hq
-    lda pt_x0,x
-    sta cx
+    lda pt_x0,x                 ; cx = max(x0, sx0): its columns in the strip
+    cmp _vc_sx0
+    bcs :+
+    lda _vc_sx0
+:   sta cx
 @x: ldx s_p
     lda cx
     cmp pt_x1,x
+    bcc :+
+    rts
+:   cmp _vc_sx1                 ; (the strip's end)
     bcc :+
     rts
 :   asl
@@ -1992,8 +2070,11 @@ draw_billboard:
     ldx s_p
     lda pt_hq,x
     sta s_hq
-    lda pt_x0,x
-    sta cx
+    lda pt_x0,x                 ; cx = max(x0, sx0): its columns in the strip
+    cmp _vc_sx0
+    bcs :+
+    lda _vc_sx0
+:   sta cx
     ; N = k d at the first column, signed
     asl
     inc
@@ -2048,6 +2129,9 @@ draw_billboard:
     cmp pt_x1,x
     bcc :+
     rts
+:   cmp _vc_sx1                 ; (the strip's end)
+    bcc :+
+    rts
 :   asl
     tay
     lda s_hq
@@ -2083,24 +2167,47 @@ draw_billboard:
 ; the thing s_p (a decal): a quad like a wall's
 draw_decal:
     ldx s_p
-    lda pt_ax,x
-    sta ax_
-    lda pt_az,x
-    sta az_
-    lda pt_bx,x
-    sta bx_
-    lda pt_bz,x
-    sta bz_
-    jsr project
+    lda pt_x0,x                 ; nothing on screen, or nothing in the strip
+    cmp pt_x1,x
     bcc :+
     rts
-:   jsr hq_ramp
+:   cmp _vc_sx1
+    bcc :+
+    rts
+:   lda pt_x1,x
+    cmp _vc_sx0
+    beq :+
+    bcs :++
+:   rts
+:   lda pt_ax,x                 ; the projection add_decal kept
+    sta q_da
+    lda pt_az,x
+    sta q_la
+    lda pt_bx,x
+    sta q_db
+    lda pt_bz,x
+    sta q_lb
+    lda pt_x0,x
+    sta q_x0
+    lda pt_x1,x
+    sta q_x1
+    lda pt_d,x
+    sta q_c
+    lda pt_l,x
+    sta q_c + 2
+    jsr hq_ramp
     lda q_x0
     sta cx
 @x: lda cx
     cmp q_x1
     bcc :+
     rts
+:   cmp _vc_sx1                 ; (past the strip: done)
+    bcc :+
+    rts
+:   cmp _vc_sx0                 ; (before it: stepped past)
+    bcs :+
+    jmp @next
 :   lda acc + 1
     beq @next
     sta s_hq
@@ -2164,7 +2271,7 @@ draw_decal:
     adc step + 2
     sta acc + 2
     inc cx
-    bra @x
+    jmp @x
 
 ; canvas column Y of the thing s_p's sprite at column cx, hq in A
 sprite_col:

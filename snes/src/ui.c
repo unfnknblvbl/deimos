@@ -593,8 +593,23 @@ static void refresh_picture(void)
 /* the plain SNES build: draw the view into the frame buffer, queue it (and
    a new map's colours) and wait until it is in VRAM, since the next
    picture is drawn into the same buffer */
+void view_upload_strip(u8 s);           /* (video.s: strip s of the picture queued) */
 static void refresh_picture(void)
 {
+    u8 k, n = VIEW_W / 8, mid = (VIEW_W / 8 - 1) / 2;    /* (the strips; the middle one) */
+    if (cfg.outward && shown_map == S.map) {
+        /* drawn outward (the option, as the Master System's): a strip of
+           8 columns at a time from the middle out, each sent up as soon as
+           it is drawn (not for a new map: its colours change) */
+        view_prepare();                 /* view/view.c: the walls and the things worked out */
+        for (k = 0; k < n; k++) {
+            u8 st = (k & 1) ? mid + (k + 1) / 2 : mid - k / 2;     /* (the middle, its right, its left, ...) */
+            view_draw(st * 8, st * 8 + 8);
+            view_upload_strip(st);
+        }
+        while (view_busy()) wait_vblank();
+        return;
+    }
     view_render();                      /* view/view.c (draw.s for the pixels) */
     if (shown_map != S.map) {
         shown_map = S.map;
@@ -1040,20 +1055,34 @@ static u16 action_bits(u8 a)
     return BUTTON_BITS[cfg.key[a]];
 }
 
-/* the options box: each action and its button, then DEFAULTS and DONE */
+/* the options box: each action and its button, then (the plain SNES:
+   the others draw their view their own way) DRAW VIEW, OUTWARD or AT
+   ONCE, then DEFAULTS and DONE */
+#if defined(SUPERFX) || defined(__3DS__) || defined(__MARS__)
+#define OPT_DRAW 0xFF                   /* (no DRAW VIEW line) */
+#define OPT_DEFAULTS N_ACTIONS
+#else
+#define OPT_DRAW N_ACTIONS
+#define OPT_DEFAULTS (N_ACTIONS + 1)
+#endif
+#define OPT_DONE (OPT_DEFAULTS + 1)
+#define N_OPT (OPT_DONE + 1)
 static void options_draw(u8 cur)
 {
-    static char lines[8][21];
-    const char *items[8];
+    static char lines[N_OPT][21];
+    const char *items[N_OPT];
     u8 i, k;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < N_OPT; i++) {
         const char *a, *b;
         char *d = lines[i];
         if (i < N_ACTIONS) {
             a = ACT_NAMES[i] ? ACT_NAMES[i] : gtext(TX_NOTEBOOK_ITEM);     /* (0: the game's word) */
             b = BUTTON_NAMES[cfg.key[i]];
+        } else if (i == OPT_DRAW) {
+            a = "DRAW VIEW";
+            b = cfg.outward ? "OUTWARD" : "AT ONCE";
         } else {
-            a = i == N_ACTIONS ? "DEFAULTS" : "DONE";
+            a = i == OPT_DEFAULTS ? "DEFAULTS" : "DONE";
             b = "";
         }
         for (k = 0; k < 20; k++) d[k] = ' ';
@@ -1062,7 +1091,7 @@ static void options_draw(u8 cur)
         for (k = 0; b[k]; k++) d[13 + k] = b[k];
         items[i] = d;
     }
-    menu_draw(gtext(TX_OPTIONS_ITEM), items, 8, cur, 3, cur < N_ACTIONS ? "PRESS A BUTTON TO SET" : "A:CHANGE  START:DONE");
+    menu_draw(gtext(TX_OPTIONS_ITEM), items, N_OPT, cur, 3, cur < N_ACTIONS ? "PRESS A BUTTON TO SET" : "A:CHANGE  START:DONE");
 }
 
 /* the options screen (from the title or the pause menu): Up/Down choose a
@@ -1079,8 +1108,8 @@ static void options_screen(void)
     for (;;) {
         u16 e = next_edge();
         if (e & PAD_START) break;
-        if (e & PAD_UP) cur = cur ? cur - 1 : 7;
-        else if (e & PAD_DOWN) cur = cur < 7 ? cur + 1 : 0;
+        if (e & PAD_UP) cur = cur ? cur - 1 : N_OPT - 1;
+        else if (e & PAD_DOWN) cur = cur < N_OPT - 1 ? cur + 1 : 0;
         else if (cur < N_ACTIONS) {
             for (b = 0; b < N_BUTTONS; b++)
                 if (e & BUTTON_BITS[b]) {
@@ -1094,8 +1123,9 @@ static void options_screen(void)
                 eng_turn_seq++;
                 continue;
             }
-        } else if (cur == N_ACTIONS && (e & PAD_A)) settings_defaults();
-        else if (cur == N_ACTIONS + 1 && (e & PAD_A)) break;
+        } else if (cur == OPT_DRAW && (e & (PAD_A | PAD_LEFT | PAD_RIGHT))) cfg.outward ^= 1;
+        else if (cur == OPT_DEFAULTS && (e & PAD_A)) settings_defaults();
+        else if (cur == OPT_DONE && (e & PAD_A)) break;
         else {
             eng_turn_seq++;
             continue;

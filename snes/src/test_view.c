@@ -44,7 +44,18 @@ static void picture(void)
 {
     u16 f0 = frame_count;
     dbg = 1;
+#ifdef TEST_STRIPS                              /* (VIEWDEF=-DTEST_STRIPS: drawn a strip at a time, from the middle out) */
+    {
+        u8 k, n = VIEW_W / 8, mid = (VIEW_W / 8 - 1) / 2;
+        view_prepare();
+        for (k = 0; k < n; k++) {
+            u8 st = (k & 1) ? mid + (k + 1) / 2 : mid - k / 2;
+            view_draw(st * 8, st * 8 + 8);
+        }
+    }
+#else
     view_render();                              /* draw (view/view.c) */
+#endif
     dbg = 2;
     if (shown_map != S.map) {
         shown_map = S.map;
