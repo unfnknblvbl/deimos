@@ -267,6 +267,18 @@ keep_mode:  .space  1                   | render_core: 0 choose a palette, 1 kee
                                         | (only 2 is tested now: 0 and 1
                                         | draw alike)
 both_mode:  .space  1                   | draw_sprite_col's "both" for this detail
+ow_req:     .space  1                   | render_view's R_OUTWARD: draw outward if it can
+    .even
+wx0:        .space  2                   | the columns drawn: wx0 .. wx1 - 1 (the whole view,
+wx1:        .space  2                   | or one strip of the outward drawing)
+bb_x1:      .space  2                   | db_full: min(PT_X1, wx1)
+dd_slot:    .space  2                   | draw_decal: the thing's index in pt
+dec_x0:     .space  2*MAX_PT            | per thing (a decal): its columns, once worked out
+dec_x1:     .space  2*MAX_PT            | ($FFFF in dec_x0: not yet)
+shown_pal:  .space  96                  | the palettes of the picture on screen (its flip's)
+ow_t:       .space  2                   | the outward drawing: the strip (tile column)
+ow_r0:      .space  2                   | ow_column: its first tile row with pixels
+ow_r1:      .space  2                   |   and the row after its last
     .even
 
     .text
@@ -1280,7 +1292,7 @@ draw_walls:
     cmpi.b  #2, cstep
     beq     dw_mid
     | ---- full detail: a byte (two columns, a and b) at a time
-    moveq   #0, d7                      | x
+    move.w  wx0, d7                     | x (wx0: the strip's first column, or 0)
 dwf_loop:
     lea     cp, a2
     move.w  d7, d0
@@ -1452,7 +1464,7 @@ dwf_split:
     addq.l  #4, sp                      | drop c0, c1
 dwf_next:
     addq.w  #2, d7                      | next pair of columns
-    cmpi.w  #VIEW_W, d7
+    cmp.w   wx1, d7                     | (the strip's end, or VIEW_W)
     bcs     dwf_loop
     rts
 
@@ -2211,8 +2223,16 @@ draw_billboard:
 | one are drawn as one byte when both are visible and show the same
 | sprite column (common when the sprite is magnified)
 db_full:
-    move.w  PT_X0(a3), d6               | x
-1:  cmp.w   PT_X1(a3), d6
+    move.w  PT_X1(a3), d0               | bb_x1 = min(PT_X1, wx1)
+    cmp.w   wx1, d0
+    ble.s   0f
+    move.w  wx1, d0
+0:  move.w  d0, bb_x1
+    move.w  PT_X0(a3), d6               | x = max(PT_X0, wx0)
+    cmp.w   wx0, d6
+    bge.s   1f
+    move.w  wx0, d6
+1:  cmp.w   bb_x1, d6
     bge     9f
     move.w  d6, d0
     bsr   bb_col                        | sprite column at x
@@ -2232,7 +2252,7 @@ db_full:
     bne.s   3f
     move.w  d6, d0
     addq.w  #1, d0
-    cmp.w   PT_X1(a3), d0
+    cmp.w   bb_x1, d0
     bge.s   3f
     tst.b   d5
     beq.s   3f
@@ -2284,7 +2304,23 @@ dc_diz:     .space  4                   |   iz step per drawn column
 | hidden when the wall's iz there beats the decal's iz plus 1/64 (so a
 | decal lying on a wall wins the tie). Keeps a3. Clobbers d0-d7, a0-a2.
 draw_decal:
-    move.l  a3, -(sp)                   | (the pthing, at (sp) throughout)
+    move.w  dd_slot, d0                 | its columns already worked out (a strip before)?
+    add.w   d0, d0
+    lea     dec_x0, a0
+    move.w  0(a0,d0.w), d1
+    bmi.s   0f                          | not yet
+    cmp.w   wx1, d1
+    bge     dd_skip                     | starts past the strip
+    lea     dec_x1, a0
+    move.w  0(a0,d0.w), d1
+    cmp.w   wx0, d1
+    ble     dd_skip                     | ends before it (or no columns at all)
+    bra.s   8f
+0:  lea     dec_x0, a0                  | (until worked out below: no columns)
+    clr.w   0(a0,d0.w)
+    lea     dec_x1, a0
+    clr.w   0(a0,d0.w)
+8:  move.l  a3, -(sp)                   | (the pthing, at (sp) throughout)
     move.w  PT_AX(a3), d0
     move.w  PT_AZ(a3), d1
     bsr     to_view                     | A in view space
@@ -2334,6 +2370,12 @@ draw_decal:
     sub.l   d2, d3
     move.l  d3, VW_C(a3)
     beq     dd_out                      | edge-on
+    move.w  dd_slot, d0                 | (its columns, for the next strips)
+    add.w   d0, d0
+    lea     dec_x0, a0
+    move.w  d6, 0(a0,d0.w)
+    lea     dec_x1, a0
+    move.w  d7, 0(a0,d0.w)
     cmp.w   d6, d7
     ble     dd_out                      | no columns
     move.w  d6, dc_x
@@ -2380,6 +2422,10 @@ dd_loop:
     move.w  dc_x, d6
     cmp.w   dc_x1, d6
     bge     dd_out                      | past the end
+    cmp.w   wx1, d6
+    bge     dd_out                      | past the strip
+    cmp.w   wx0, d6
+    blt     dd_next                     | before it
     move.l  dc_iz, d5
     ble     dd_next                     | behind
     move.l  d5, d0                      | iz + iz >> 6 < col_iz: hidden (decals win ties)
@@ -2440,6 +2486,7 @@ dd_next:
     bra     dd_loop
 dd_out:
     movea.l (sp)+, a3
+dd_skip:
     rts
 
 | ======================================================================
@@ -2512,6 +2559,12 @@ render_core:
     bne.s   3f
     moveq   #1, d1                      | low detail: whole bytes
 3:  move.b  d1, both_mode
+    clr.w   wx0                         | the whole view's columns (the outward
+    move.w  #VIEW_W, wx1                | drawing sets one strip at a time)
+    lea     dec_x0, a0                  | no decal's columns worked out yet
+    moveq   #MAX_PT - 1, d0
+4:  move.w  #-1, (a0)+
+    dbra    d0, 4b
     movea.l rc_flags, a0
     movea.l rc_pvs_a, a1
     movea.l rc_pvs_b, a2
@@ -2577,6 +2630,20 @@ render_core:
     bsr     tile_pals                   | each tile's palette
     moveq   #1, d7
     bsr     prof_mark
+    | drawn outward (R_OUTWARD, at full detail, with the palettes already
+    | on screen): a strip at a time into the picture shown (ow_draw)
+    tst.b   ow_req
+    beq.s   ow_skip
+    cmpi.b  #1, cstep
+    bne.s   ow_skip
+    lea     area_pal, a0                | the same palettes as on screen?
+    lea     shown_pal, a1
+    moveq   #47, d0
+0:  cmp.w   (a0)+, (a1)+
+    dbne    d0, 0b
+    bne.s   ow_skip
+    bra     ow_draw
+ow_skip:
     jsr     vdp_dma_wait                | (the last picture's upload: done by now?)
                                         | (fb is the upload's source, so
                                         | it must be sent before clearing)
@@ -2587,24 +2654,7 @@ render_core:
     bsr     draw_walls
     moveq   #3, d7
     bsr     prof_mark
-    moveq   #0, d7                      | things, far to near
-16: cmp.b   n_pt, d7
-    bcc.s   18f
-    lea     pt_order, a0
-    moveq   #0, d0
-    move.b  0(a0,d7.w), d0
-    mulu.w  #PT_SIZE, d0
-    lea     pt, a3
-    adda.w  d0, a3                      | a3 = the next thing
-    move.w  d7, -(sp)
-    tst.b   PT_DECAL(a3)
-    beq.s   17f
-    bsr     draw_decal
-    bra.s   171f
-17: bsr     draw_billboard
-171: move.w (sp)+, d7
-    addq.w  #1, d7
-    bra.s   16b
+    bsr     draw_things                 | things, far to near
 18: moveq   #4, d7
     bsr     prof_mark
     bsr     scan_cols                   | which tile rows hold pixels
@@ -2619,8 +2669,10 @@ render_core:
     bne.s   19b                         | wait for the frame interrupt
     lea     area_pal, a0                | the area's 3 palettes (area.c)
     lea     pending_cram, a1            | applied with the flip (vdp.c)
+    lea     shown_pal, a2               | (and kept: the outward drawing compares)
     moveq   #47, d0                     | 48 colours
-21: move.w  (a0)+, (a1)+
+21: move.w  (a0), (a1)+
+    move.w  (a0)+, (a2)+
     dbra    d0, 21b
     st      dq_hold                     | (all of it queued first)
 | one DMA per tile column: its tiles r0 .. r1-1 (tiles are column-major
@@ -2686,6 +2738,190 @@ render_core:
     sub.w   frame0, d0
     move.w  d0, render_frames           | frames this picture took
 99: rts
+
+| draw_things: the things, far to near (pt_order), between wx0 and wx1
+| (dd_slot tells draw_decal which thing it is). Clobbers d0-d7, a0-a3.
+draw_things:
+    moveq   #0, d7
+1:  cmp.b   n_pt, d7
+    bcc.s   9f
+    lea     pt_order, a0
+    moveq   #0, d0
+    move.b  0(a0,d7.w), d0
+    move.w  d0, dd_slot
+    mulu.w  #PT_SIZE, d0
+    lea     pt, a3
+    adda.w  d0, a3                      | a3 = the next thing
+    move.w  d7, -(sp)
+    tst.b   PT_DECAL(a3)
+    beq.s   2f
+    bsr     draw_decal
+    bra.s   3f
+2:  bsr     draw_billboard
+3:  move.w  (sp)+, d7
+    addq.w  #1, d7
+    bra.s   1b
+9:  rts
+
+| ow_draw: render_core's outward drawing (as the Master System's): the 26
+| tile columns from the middle out (ow_order), each cleared, its walls
+| and things drawn (wx0 .. wx1: its 8 columns; a strip gets the same
+| pixels as the whole picture would), then put into the picture on
+| screen at once (ow_column): no flip. Used when the palettes on screen
+| are this picture's (the same area), so only tiles and name table
+| entries change. Returns from render_core.
+ow_draw:
+    jsr     vdp_dma_wait                | (fb is the last upload's source)
+1:  cmpi.b  #0xFF, pending_view_buf     | (and the last flip done: the
+    bne.s   1b                          | buffer on screen is settled)
+    moveq   #0, d5                      | the strip's place in the order
+2:  lea     ow_order, a0
+    moveq   #0, d0
+    move.b  0(a0,d5.w), d0
+    move.w  d0, ow_t
+    move.w  d5, -(sp)
+    lsl.w   #3, d0
+    move.w  d0, wx0                     | its columns
+    addq.w  #8, d0
+    move.w  d0, wx1
+    move.w  ow_t, d0                    | its part of fb cleared
+    mulu.w  #COLBYTES, d0
+    lea     fb, a0
+    adda.l  d0, a0
+    lea     COLBYTES(a0), a0
+    moveq   #0, d1
+    move.w  #COLBYTES / 4 - 1, d0
+3:  move.l  d1, -(a0)
+    dbra    d0, 3b
+    bsr     draw_walls
+    bsr     draw_things
+    bsr     ow_column
+    move.w  (sp)+, d5
+    addq.w  #1, d5
+    cmpi.w  #VIEW_TW, d5
+    bcs.s   2b
+    clr.w   wx0
+    move.w  #VIEW_W, wx1
+    moveq   #5, d7
+    bsr     prof_mark
+    move.w  frame_count, d0
+    sub.w   frame0, d0
+    move.w  d0, render_frames           | frames this picture took
+    rts
+
+| the strips from the middle out: 12, 13, 11, 14, ... 0, 25
+ow_order:
+    .byte   12, 13, 11, 14, 10, 15, 9, 16, 8, 17, 7, 18, 6, 19, 5, 20, 4, 21, 3, 22, 2, 23, 1, 24, 0, 25
+    .even
+
+| ow_column: tile column ow_t of fb into the picture on screen (the
+| buffer back_buf is not): its rows with pixels (r0 .. r1 - 1, as
+| scan_cols) queued to that buffer's tiles, and its name table entries
+| (as build_nt: the tile with its palette, the blank tile above r0 and
+| from r1) written now (vdp_put_nt). Clobbers d0-d7, a0-a3.
+ow_column:
+    move.w  ow_t, d0
+    mulu.w  #COLBYTES, d0
+    lea     fb, a0
+    adda.l  d0, a0                      | the column
+    movea.l a0, a3                      | r0: the first tile row not all 0
+    moveq   #0, d6
+1:  movem.l (a3)+, d0-d3
+    or.l    d1, d0
+    or.l    d2, d0
+    or.l    d3, d0
+    movem.l (a3)+, d1-d4
+    or.l    d1, d0
+    or.l    d2, d0
+    or.l    d3, d0
+    or.l    d4, d0
+    bne.s   2f
+    addq.w  #1, d6
+    cmpi.w  #VIEW_TH, d6
+    bcs.s   1b
+    clr.w   ow_r0                       | nothing drawn
+    clr.w   ow_r1
+    bra     5f
+2:  move.w  d6, ow_r0
+    lea     VIEW_H * 4(a0), a3          | r1: from the bottom
+    moveq   #VIEW_TH, d6
+3:  subq.w  #1, d6
+    lea     -32(a3), a3
+    movem.l (a3), d0-d3
+    or.l    d1, d0
+    or.l    d2, d0
+    or.l    d3, d0
+    movem.l 16(a3), d1-d4
+    or.l    d1, d0
+    or.l    d2, d0
+    or.l    d3, d0
+    or.l    d4, d0
+    beq.s   3b
+    addq.w  #1, d6
+    move.w  d6, ow_r1
+    | the tiles r0 .. r1 - 1 queued to the buffer on screen
+    move.w  ow_r1, d1
+    move.w  ow_r0, d0
+    sub.w   d0, d1
+    lsl.w   #4, d1                      | words
+    move.l  d1, -(sp)
+    move.w  ow_t, d2                    | VRAM: (t * VIEW_TH + r0) * 32 of that buffer
+    mulu.w  #VIEW_TH, d2
+    add.w   d0, d2
+    lsl.l   #5, d2
+    tst.b   back_buf
+    bne.s   4f                          | (back_buf 1: buffer 0 on screen)
+    addi.l  #VRAM_BUF1, d2
+4:  move.l  d2, -(sp)
+    move.w  ow_t, d2                    | fb + t * COLBYTES + r0 * 32
+    mulu.w  #COLBYTES, d2
+    lsl.w   #5, d0
+    add.w   d0, d2
+    lea     fb, a0
+    adda.l  d2, a0
+    move.l  a0, -(sp)
+    jsr     vdp_dma_queue
+    lea     12(sp), sp
+5:  | the name table entries: rows 0 .. VIEW_TH - 1 of column VIEW_COL0 + t
+    moveq   #0, d7                      | y
+6:  move.l  #TILE_BLANK, d0             | blank above r0 and from r1
+    cmp.w   ow_r0, d7
+    bcs.s   7f
+    cmp.w   ow_r1, d7
+    bcc.s   7f
+    moveq   #0, d0
+    move.w  ow_t, d0                    | the tile (t * VIEW_TH + y) | palette << 13
+    mulu.w  #VIEW_TH, d0
+    add.w   d7, d0
+    lea     tpal, a0
+    move.w  d0, d1
+    add.w   d1, d1
+    move.w  0(a0,d1.w), d1              | (palette << 8)
+    lsl.w   #5, d1
+    tst.b   back_buf
+    bne.s   61f
+    addi.w  #BUF1_TILE, d0
+61: or.w    d1, d0
+7:  move.l  d0, -(sp)                   | vdp_put_nt(nt, x, y, entry)
+    moveq   #0, d0
+    move.w  d7, d0
+    addi.w  #VIEW_ROW0, d0
+    move.l  d0, -(sp)
+    moveq   #0, d0
+    move.w  ow_t, d0
+    addi.w  #VIEW_COL0, d0
+    move.l  d0, -(sp)
+    move.l  #VRAM_PLANE_A0, d0
+    tst.b   back_buf
+    bne.s   8f
+    move.l  #VRAM_PLANE_A1, d0
+8:  move.l  d0, -(sp)
+    jsr     vdp_put_nt
+    lea     16(sp), sp
+    addq.w  #1, d7
+    cmpi.w  #VIEW_TH, d7
+    bcs     6b
+    rts
 
 | ======================================================================
 | the tiles' palettes
@@ -3145,7 +3381,9 @@ render_view:
 2:  btst    #2, 75(sp)                  | R_PALETTE_ONLY
     beq.s   3f
     move.b  #2, keep_mode
-3:  move.l  60(sp), rc_flags
+3:  btst    #3, 75(sp)                  | R_OUTWARD
+    sne     ow_req
+    move.l  60(sp), rc_flags
     move.l  64(sp), rc_objs
     moveq   #0, d0
     move.b  71(sp), d0
@@ -3187,6 +3425,7 @@ render_view:
     .global render_between
 render_between:
     movem.l d2-d7/a2-a6, -(sp)
+    clr.b   ow_req                      | (in-between pictures: never outward)
     moveq   #0, d0                      | the area's palettes: where it ends
     move.b  71(sp), d0                  | (bf, bz, bx: each push moves sp)
     move.l  d0, -(sp)

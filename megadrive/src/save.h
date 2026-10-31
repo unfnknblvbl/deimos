@@ -27,6 +27,7 @@ extern const char * const button_names[N_BUTTONS];  /* each button's name, for t
 
 struct settings {
     u8 smooth;                      /* 0 step, 1 smooth movement */
+    u8 outward;                     /* 1: in step movement the view drawn from the middle out */
     u8 key[N_ACTIONS];              /* button index (0..6) of each action */
 };
 extern struct settings cfg;         /* the settings in force */

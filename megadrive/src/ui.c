@@ -478,7 +478,8 @@ static void refresh_picture(void)
 {
     u8 n = collect_things(S.px, S.pz, S.facing);
     u8 low = !want_detail();
-    pack_portal(S.couplings >= 2), render_view(S.px, S.pz, S.facing, S.l_flags, objs, n, low ? R_LOW : 0);
+    pack_portal(S.couplings >= 2), render_view(S.px, S.pz, S.facing, S.l_flags, objs, n,
+                                               low ? R_LOW : (cfg.outward && !cfg.smooth ? R_OUTWARD : 0));
     view_low = low;
 }
 
@@ -1057,10 +1058,10 @@ static const char *key_label(u8 tok)
    actions' buttons, 8 DEFAULTS, 9 DONE (name at column 0, value at 13) */
 static void options_draw(u8 cur)
 {
-    static char lines[10][21];
-    const char *items[10];
+    static char lines[11][21];
+    const char *items[11];
     u8 i, k;
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 11; i++) {
         const char *a, *b;
         char *d = lines[i];
         if (i == 0) {
@@ -1069,8 +1070,11 @@ static void options_draw(u8 cur)
         } else if (i <= N_ACTIONS) {
             a = ACT_NAMES[i - 1] ? ACT_NAMES[i - 1] : gtext(TX_NOTEBOOK_ITEM);   /* (0: the game's word) */
             b = pad_six ? button_names[cfg.key[i - 1]] : ACT_3BUTTON[i - 1];
+        } else if (i == 8) {
+            a = "DRAW VIEW";                    /* (step movement: from the middle out, or at once) */
+            b = cfg.outward ? "OUTWARD" : "AT ONCE";
         } else {
-            a = i == 8 ? "DEFAULTS" : "DONE";
+            a = i == 9 ? "DEFAULTS" : "DONE";
             b = "";
         }
         for (k = 0; k < 20; k++) d[k] = ' ';
@@ -1079,7 +1083,7 @@ static void options_draw(u8 cur)
         for (k = 0; b[k]; k++) d[13 + k] = b[k];
         items[i] = d;
     }
-    menu_draw(gtext(TX_OPTIONS_ITEM), items, 10, cur, 3,
+    menu_draw(gtext(TX_OPTIONS_ITEM), items, 11, cur, 3,
               cur >= 1 && cur <= N_ACTIONS ? (pad_six ? "PRESS A BUTTON TO SET" : "3-BUTTON PAD: FIXED")
                                            : "A:CHANGE  START:DONE");
 }
@@ -1099,9 +1103,10 @@ static void options_screen(void)
         u16 e = next_edge();
         u8 b;
         if (e & PAD_START) break;
-        if (e & PAD_UP) cur = cur ? cur - 1 : 9;
-        else if (e & PAD_DOWN) cur = cur < 9 ? cur + 1 : 0;
+        if (e & PAD_UP) cur = cur ? cur - 1 : 10;
+        else if (e & PAD_DOWN) cur = cur < 10 ? cur + 1 : 0;
         else if (cur == 0 && (e & (PAD_LEFT | PAD_RIGHT | PAD_A))) cfg.smooth ^= 1;
+        else if (cur == 8 && (e & (PAD_LEFT | PAD_RIGHT | PAD_A))) cfg.outward ^= 1;
         else if (cur >= 1 && cur <= N_ACTIONS && pad_six) {
             for (b = 0; b < N_BUTTONS; b++)
                 if (e & button_bits[b]) {
@@ -1111,8 +1116,8 @@ static void options_screen(void)
                     cfg.key[a] = b;
                     break;
                 }
-        } else if (cur == 8 && (e & PAD_A)) settings_defaults();
-        else if (cur == 9 && (e & PAD_A)) break;
+        } else if (cur == 9 && (e & PAD_A)) settings_defaults();
+        else if (cur == 10 && (e & PAD_A)) break;
         else {                                  /* a button that does nothing here */
             eng_turn_seq++;
             continue;

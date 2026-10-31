@@ -36,6 +36,8 @@ struct robj {
 #define R_LOW 1            /* low detail: every second column, two pixels wide */
 #define R_KEEP 2           /* keep the current palette */
 #define R_PALETTE_ONLY 4   /* just choose the palette for this view (no picture) */
+#define R_OUTWARD 8        /* drawn outward, a tile column at a time into the picture on
+                              screen, when it can (full detail, the palettes on screen) */
 void render_view(u8 gx, u8 gz, u8 facing, const u8 *line_flags, const struct robj *objs, u8 n_objs, u8 mode);
 
 /* an in-between picture of a step or turn (t = 0..256): half the
