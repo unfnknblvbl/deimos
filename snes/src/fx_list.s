@@ -26,6 +26,7 @@
 .export _fx_list
 .export _fxl_flags, _fxl_def, _fxl_x, _fxl_z, _fxl_defspr, _fxl_hidden
 .import _fx_th, _fx_nth, _fx_scen, _fx_scen_hid, _fx_nscen, _n_ents
+.import _fxl_px, _fxl_pz, _fxl_lim, _fxl_over   ; (view/view.c: the reach, and "full")
 
 F_LINKED = $04                  ; core/rules.h: the entity is on the map
 MAX_TH   = 255                  ; fx_th's size (FX_MAX_TH)
@@ -46,9 +47,12 @@ bits: .byte 1, 2, 4, 8, 16, 32, 64, 128 ; bit n's mask
 ; void fx_list(void): fx_th / fx_nth
 ; In: the _fxl_ pointers (direct page, so (dp),y reaches the arrays in
 ; bank $7E); fx_scen, fx_scen_hid, fx_nscen; n_ents (the entity count).
+; fxl_px, fxl_pz (the player's cell) and fxl_lim: only the things whose
+; cell is less than fxl_lim cells away on x and on z (256: all).
 ; Out: fx_th[0..fx_nth-1]: first every prop not hidden, then every linked
-; entity with a def (at most 255 things in all; the props are not counted
-; against the limit).
+; entity with a def, those within reach (at most 255 things in all; the
+; props are not counted against the limit); fxl_over 1 if a linked entity
+; within reach found fx_th full (view_render_cam then tries nearer).
 ; Clobbers A, X, Y, cnt.
 .a8
 .i8
@@ -58,6 +62,7 @@ _fx_list:
     .a16
     .i16
     ldx #0                      ; fx_th offset
+    stz _fxl_over
     ; scenery
     ldy #0                      ; its offset (8 a thing)
     lda _fx_nscen
@@ -99,7 +104,26 @@ _fx_list:
     rep #$20
     .a16
     bne @hidden                 ; taken away: skip it
-@shown:                         ; copy its 8 bytes to fx_th
+@shown:                         ; within reach? (its cell: world / 64)
+    lda _fx_scen,y
+    lsr
+    lsr
+    lsr
+    lsr
+    lsr
+    lsr
+    jsr dist
+    bcs @hidden                 ; too far on x
+    lda _fx_scen + 2,y
+    lsr
+    lsr
+    lsr
+    lsr
+    lsr
+    lsr
+    jsr distz
+    bcs @hidden                 ; too far on z
+    ; copy its 8 bytes to fx_th
     lda _fx_scen,y
     sta _fx_th,x
     lda _fx_scen + 2,y
@@ -128,8 +152,6 @@ _fx_list:
 @ent:
     cpy _n_ents
     bcs @done                   ; every entity seen
-    cpx #MAX_TH * 8
-    bcs @done                   ; fx_th is full
     sep #$20
     .a8
     lda (_fxl_flags),y
@@ -138,6 +160,25 @@ _fx_list:
     lda (_fxl_def),y
     cmp #$FF
     beq @next                   ; no def ($FF): nothing to draw
+    rep #$20
+    .a16
+    lda (_fxl_x),y
+    and #$00FF
+    jsr dist
+    bcs @next                   ; too far on x
+    lda (_fxl_z),y
+    and #$00FF
+    jsr distz
+    bcs @next                   ; too far on z
+    cpx #MAX_TH * 8
+    bcc @room
+    lda #1                      ; fx_th is full: say so, and stop
+    sta _fxl_over
+    bra @done
+@room:
+    sep #$20
+    .a8
+    lda (_fxl_def),y
     phy
     rep #$20
     .a16
@@ -184,4 +225,22 @@ _fx_list:
     .a8
     sta _fx_nth
     plp
+    rts
+
+; dist / distz: A (16-bit) = a cell's x / z -> carry set if |A - fxl_px|
+; (|A - fxl_pz|) >= fxl_lim: out of reach. Clobbers A.
+.a16
+.i16
+dist:
+    sec
+    sbc _fxl_px
+    bra absd
+distz:
+    sec
+    sbc _fxl_pz
+absd:
+    bpl :+
+    eor #$FFFF
+    inc
+:   cmp _fxl_lim
     rts

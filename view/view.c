@@ -847,6 +847,57 @@ static u8 fx_swapped = 0xFF;    /* the portal's swaps applied (1), not (0), unkn
    entity at its cell's centre (fx_nth of them) */
 struct fx_th fx_th[FX_MAX_TH];
 u8 fx_nth;
+/* the list's rules (the same in snes/src/fx_list.s): a thing is kept only
+   within fxl_lim - 1 cells (on x and on z) of the player's cell (fxl_px,
+   fxl_pz); fxl_lim 256 keeps all. A linked entity that finds fx_th full
+   sets fxl_over, and view_render_cam makes the list again nearer
+   (FX_NEAR). Until 0.1.1 the list simply stopped when full: on the maps
+   with more than 255 things (the UAC Base, levels 2, 4 and 5) the last
+   entities were never drawn, however near. */
+u16 fxl_px, fxl_pz, fxl_lim, fxl_over;
+static const u8 FX_NEAR[4] = {12, 8, 5, 3};     /* the nearer lists' reach, in cells */
+
+#ifdef __CC65__
+void fx_list(void);                     /* snes/src/fx_list.s: fx_th / fx_nth by these rules */
+#else
+/* fx_dist_ok: world (x, z)'s cell within the list's reach */
+static u8 fx_dist_ok(u16 cx, u16 cz)
+{
+    u16 dx = cx > fxl_px ? cx - fxl_px : fxl_px - cx, dz = cz > fxl_pz ? cz - fxl_pz : fxl_pz - cz;
+    return dx < fxl_lim && dz < fxl_lim;
+}
+
+/* fx_list_c: fx_th / fx_nth as fx_list.s makes them on the SuperFX: the
+   scenery not taken away, then each linked entity with a def, those
+   within reach */
+static void fx_list_c(void)
+{
+    u16 k;
+    fxl_over = 0;
+    fx_nth = 0;
+    for (k = 0; k < fx_nscen; k++) {
+        s16 h = fx_scen_hid[k];
+        if (h >= 0 && (S.static_hidden[(u16)h >> 3] & (1 << (h & 7)))) continue;   /* taken away */
+        if (!fx_dist_ok((u16)fx_scen[k].x >> 6, (u16)fx_scen[k].z >> 6)) continue;
+        fx_th[fx_nth++] = fx_scen[k];
+    }
+    for (k = 0; k < n_ents; k++) {
+        u8 d = S.e_def[k];
+        struct fx_th *t;
+        if (!(S.e_flags[k] & F_LINKED) || d == 0xFF) continue;
+        if (!fx_dist_ok(S.e_x[k], S.e_z[k])) continue;
+        if (fx_nth >= FX_MAX_TH) {
+            fxl_over = 1;               /* (full: view_render_cam tries nearer) */
+            break;
+        }
+        t = &fx_th[fx_nth++];
+        t->x = (s16)S.e_x[k] * 64 + 32;
+        t->z = (s16)S.e_z[k] * 64 + 32;
+        t->spr = fx_def_spr[d];
+        t->info = 0;
+    }
+}
+#endif
 
 /* sin(a * 2 pi / 256) * 256 */
 /* (a quarter turn, 0..64; fx_sin folds the other quarters onto it) */
@@ -1241,9 +1292,7 @@ void view_render(void)
  * fx_draw. */
 void view_render_cam(void)
 {
-    u16 k;
     u8 i;
-    s16 s[5];
 #ifdef __CC65__
     extern u16 fx_prof[4];
     u16 ticks(void);
@@ -1263,33 +1312,27 @@ void view_render_cam(void)
 #ifdef __CC65__
     {
         extern u8 *fxl_flags, *fxl_def, *fxl_x, *fxl_z, *fxl_defspr, *fxl_hidden;
-        void fx_list(void);
         fxl_flags = S.e_flags;
         fxl_def = S.e_def;
         fxl_x = S.e_x;
         fxl_z = S.e_z;
         fxl_defspr = fx_def_spr;
         fxl_hidden = S.static_hidden;
-        fx_list();                      /* fills fx_th / fx_nth (snes/src/fx_list.s) */
-    }
-#else
-    fx_nth = 0;
-    for (k = 0; k < fx_nscen; k++) {
-        s16 h = fx_scen_hid[k];
-        if (h >= 0 && (S.static_hidden[(u16)h >> 3] & (1 << (h & 7)))) continue;   /* taken away */
-        fx_th[fx_nth++] = fx_scen[k];
-    }
-    for (k = 0; k < n_ents && fx_nth < FX_MAX_TH; k++) {
-        u8 d = S.e_def[k];
-        struct fx_th *t;
-        if (!(S.e_flags[k] & F_LINKED) || d == 0xFF) continue;
-        t = &fx_th[fx_nth++];
-        t->x = (s16)S.e_x[k] * 64 + 32;
-        t->z = (s16)S.e_z[k] * 64 + 32;
-        t->spr = fx_def_spr[d];
-        t->info = 0;
     }
 #endif
+    /* the things: all of them, or (more than fx_th holds) the nearest */
+    fxl_px = S.px;
+    fxl_pz = S.pz;
+    fxl_lim = 256;
+    for (i = 0;; i++) {
+#ifdef __CC65__
+        fx_list();                      /* fills fx_th / fx_nth (snes/src/fx_list.s) */
+#else
+        fx_list_c();
+#endif
+        if (!fxl_over || i == sizeof FX_NEAR) break;
+        fxl_lim = FX_NEAR[i] + 1;
+    }
     fx_draw();
 }
 #else
