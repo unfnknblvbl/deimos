@@ -27,8 +27,11 @@ say). It needs a Game Boy Color: it does not run on the original Game Boy.
 | Select + Left / Right | previous / next weapon |
 | Select + Start | the SNES's Select |
 
-A step takes the Game Boy Color about two thirds of a second to draw (its
-CPU runs at 8 MHz); the game is turn by turn, so nothing is missed.
+A step takes the Game Boy Color about 0.7 seconds (its CPU runs at
+8 MHz); the game is turn by turn, so nothing is missed. The view is drawn
+from the middle out, a column of tiles at a time, so its middle shows
+after about a third of that (options: DRAW VIEW OUTWARD, the default, or
+AT ONCE).
 
 ## How it is made
 

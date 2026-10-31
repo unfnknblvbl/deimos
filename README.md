@@ -38,6 +38,12 @@ for you; the level's map item shows it all) and **cheats** (god mode,
 infinite ammunition, all weapons with full ammunition, all keycards; all
 off until you choose them, and not saved).
 
+The consoles that move a step at a time (the SNES, the Game Boy Color and
+the Mega Drive in step movement) draw each new view from the middle
+outwards, a strip at a time, as the Master System does, so the middle of
+the picture shows sooner; Options: DRAW VIEW OUTWARD (the default) or AT
+ONCE.
+
 | Folder | What it builds |
 |---|---|
 | `mastersystem/` | Sega Master System and Game Gear (`.sms`, `.gg`) |

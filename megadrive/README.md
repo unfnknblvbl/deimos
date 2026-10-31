@@ -42,7 +42,9 @@ them all back.
 game, and always draws in full detail. **SMOOTH** glides to the next cell
 and turns smoothly (18 frames, 0.3 s), drawn in low detail (4-pixel-wide
 columns) so the 68000 can keep up; hold **Mode** to see the full-detail
-picture whenever you stop.
+picture whenever you stop. **Draw view** (options): in step movement the
+new view is drawn from the middle out, a tile column at a time, as the
+Master System does (**OUTWARD**, the default), or all at once.
 
 **Saving**: the pause menu saves the game; the title screen's first item continues it
 loads it, even after the console has been switched off. The options are
