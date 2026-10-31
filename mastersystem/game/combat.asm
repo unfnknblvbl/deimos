@@ -850,8 +850,11 @@ add_xp:
 ; 26/256 or 78/256 of maxhp, or TX_ARMOR_GONE; then health drops, and at
 ; 0 the player is dead (S_DEAD). Clobbers every register except IX, IY.
 ; Called by monster_attack, hurt_at (explosions), touch (fires) and
-; ec_pain.
+; ec_pain. With the god mode cheat (CHEAT_GOD) nothing happens.
 player_pain:
+    ld a, (cheats)
+    and CHEAT_GOD
+    ret nz                      ; the god mode cheat: nothing at all
     ld (pp_dmg), hl
     ld (pp_arm), de
     add hl, de

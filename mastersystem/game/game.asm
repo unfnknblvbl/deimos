@@ -208,6 +208,13 @@
 .define UI_NOTES        5           ; the notebook
 .define UI_PAUSE        6
 .define UI_MAP          7           ; the automap (from the pause menu)
+.define UI_CHEATS       8           ; the cheats (from the pause menu)
+
+; the pause menu's cheats (bits of cheats): nothing hurts the player
+; (combat.asm player_pain), attacks use no ammunition (actions.asm
+; player_attack). Not part of the game state; off at power-on.
+.define CHEAT_GOD       1
+.define CHEAT_AMMO      2
 
 .define MSGQ            8           ; status messages waiting to be shown (a power of 2: indexes wrap with MSGQ-1)
 .define BOX_LINES       13          ; text lines in a dialog box
@@ -300,8 +307,10 @@ code_len        db                  ; digits entered (0..3)
 code_digit      db                  ; the digit being chosen (0..9)
 line1           dsb 25              ; text built for a box (and hud_same's scratch)
 line2           dsb 25
-pause_cur       db                  ; pause menu row (0..5)
+pause_cur       db                  ; pause menu row (0..7)
 pad_prev        db                  ; the buttons held last frame
+cheats          db                  ; the cheats on (CHEAT_* bits)
+cheat_cur       db                  ; the cheats box's line (0..3)
 game_ram_end    db
 .ENDE
 

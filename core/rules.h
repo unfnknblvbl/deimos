@@ -130,8 +130,15 @@ extern u8 pend_valid, pend_ev, pend_k, pend_why;
 extern u32 pend_flags;
 extern char status_msg[33];
 extern u8 status_new, player_hurt, player_fired;
+/* the pause menu's cheats (not part of the game state, not saved; all off
+   at power-on): CHEAT_GOD nothing hurts the player, CHEAT_AMMO attacks use
+   no ammunition */
+#define CHEAT_GOD 1
+#define CHEAT_AMMO 2
+extern u8 cheats;
 extern u8 hit_n, hit_kind[9];
 extern u16 hit_val[9];
+void cheat_give(u8 keys);          /* cheats: keys 0 every weapon (0..8) and full ammunition, 1 every keycard */
 extern const u8 STORE_LINES[];     /* per vendor 16 x (name tag, price), tag 0 ends */
 extern const u8 STORE_ITEMS[];     /* per name tag: kind (1 item, 2 ammo, 3 stat), what */
 

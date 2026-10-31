@@ -17,7 +17,7 @@
 ;   Button 2 + Up      use a medkit (smallest first)
 ;   Button 2 + Down    pass the turn
 ;   Button 2 + 1       notebook (also in the pause menu)
-;   Pause              pause menu: resume, notebook, map, view settings
+;   Pause              pause menu: resume, notebook, map, view settings, cheats
 ;
 ; Bank 0. game_main (the entry point: rom/main.asm jumps to it at $1000)
 ; runs the whole game: the title, then one frame at a time, reading the
@@ -1668,13 +1668,151 @@ am_draw:
     jp svc_dialog_show
 
 ;-----------------------------------------------------------------------
+; the cheats (the pause menu's last item): god mode and infinite
+; ammunition (CHEAT_* bits of cheats, checked by player_pain and
+; player_attack), every weapon with full ammunition, every keycard
+;-----------------------------------------------------------------------
+.IFDEF GAMEGEAR
+.define CHEAT_VALUE_COL 16          ; the ON / OFF column
+.ELSE
+.define CHEAT_VALUE_COL 18
+.ENDIF
+
+; draws the cheats box: the four lines, god mode's and infinite
+; ammunition's ON / OFF, the cursor, the footer; then shows it. Clobbers
+; every register except IX, IY.
+cheats_draw:
+    call box_clear
+    ld bc, $0100 + (DLG_W - 6) / 2
+    ld hl, str_cheats
+    call box_put
+    ld bc, $0300 + PAUSE_LABEL_COL
+    ld hl, str_god_mode
+    call box_put
+    ld bc, $0400 + PAUSE_LABEL_COL
+    ld hl, str_inf_ammo
+    call box_put
+    ld bc, $0500 + PAUSE_LABEL_COL
+    ld hl, str_all_weapons
+    call box_put
+    ld bc, $0600 + PAUSE_LABEL_COL
+    ld hl, str_all_keys
+    call box_put
+    ld a, (cheats)
+    and CHEAT_GOD
+    ld hl, str_on
+    jr nz, +
+    ld hl, str_off
++:  ld bc, $0300 + CHEAT_VALUE_COL
+    call box_put
+    ld a, (cheats)
+    and CHEAT_AMMO
+    ld hl, str_on
+    jr nz, +
+    ld hl, str_off
++:  ld bc, $0400 + CHEAT_VALUE_COL
+    call box_put
+    ld a, (cheat_cur)
+    add a, 3
+    ld b, a
+    ld c, PAUSE_LABEL_COL - 2
+    ld hl, str_cursor
+    call box_put
+    ld hl, str_cheats_footer
+    call box_footer
+    jp svc_dialog_show
+
+; a = the new input (edge bits): Up / Down move the cursor (round the 4
+; lines), button 1 picks (god mode and infinite ammunition switch on or
+; off - god mode also fills the health; all weapons gives weapons 0..8
+; and ammunition 0..4 at 99; all keycards the four), button 2 goes back to
+; the pause menu. Clobbers every register except IX, IY.
+cheats_input:
+    ld e, a
+    ld hl, cheat_cur
+    bit 0, e                    ; up
+    jr z, +
+    ld a, (hl)
+    or a
+    ld a, 3                     ; from the top to the bottom
+    jr z, ++
+    ld a, (hl)
+    dec a
+++: ld (hl), a
+    jr _ci_moved
++:  bit 1, e                    ; down
+    jr z, +
+    ld a, (hl)
+    cp 3
+    ld a, 0                     ; from the bottom to the top
+    jr nc, ++
+    ld a, (hl)
+    inc a
+++: ld (hl), a
+    jr _ci_moved
++:  bit 5, e                    ; button 2: back to the pause menu
+    jr z, +
+    ld a, UI_PAUSE
+    ld (ui), a
+    ld a, SFX_BLIP
+    call sfx
+    jp pause_draw
++:  bit 4, e                    ; button 1
+    ret z
+    ld a, (hl)
+    or a
+    jr nz, +
+    ld a, (cheats)              ; 0: god mode
+    xor CHEAT_GOD
+    ld (cheats), a
+    and CHEAT_GOD
+    jr z, _ci_done
+    ld a, (S_MAXHP)             ; (on: the health full)
+    ld (S_HP), a
+    jr _ci_done
++:  dec a
+    jr nz, +
+    ld a, (cheats)              ; 1: infinite ammunition
+    xor CHEAT_AMMO
+    ld (cheats), a
+    jr _ci_done
++:  dec a
+    jr nz, +
+    ld hl, (S_WEAPONS)          ; 2: weapons 0..8 ...
+    ld a, l
+    or $FF
+    ld l, a
+    ld a, h
+    or 1
+    ld h, a
+    ld (S_WEAPONS), hl
+    ld hl, S_AMMO               ; ... and ammunition 0..4 full
+    ld b, 5
+-:  ld (hl), 99
+    inc hl
+    djnz -
+    jr _ci_done
++:  ld a, (S_KEYS)              ; 3: every keycard
+    or $0F
+    ld (S_KEYS), a
+_ci_done:
+    ld a, SFX_SELECT
+    call sfx
+    call hud_update
+    jp cheats_draw
+_ci_moved:
+    ld a, SFX_BLIP
+    call sfx
+    jp cheats_draw
+
+;-----------------------------------------------------------------------
 ; the pause menu: resume, notebook, map, view size, how the view is
 ; drawn, detail, walls
 ;-----------------------------------------------------------------------
-; the box row of each menu item (pause_cur 0..6): resume, notebook, map,
-; view size, draw view, detail, walls
+; the box row of each menu item (pause_cur 0..7): resume, notebook, map,
+; view size, draw view, detail, walls, cheats
 pause_rows:
-    .db 3, 4, 5, 6, 7, 8, 9
+    .db 3, 4, 5, 6, 7, 8, 9, 10
 
 ; draws the pause menu: the labels, each setting's current value (read
 ; from the engine variables), the credits, the '>' cursor on row
@@ -1734,6 +1872,9 @@ pause_draw:
     ld hl, str_solid
 +:  ld bc, $0900 + PAUSE_VALUE_COL
     call box_put
+    ld bc, $0A00 + PAUSE_LABEL_COL
+    ld hl, str_cheats
+    call box_put
     ld bc, $0B00 + (DLG_W - 10) / 2     ; the credits
     ld hl, str_credit1
     call box_put
@@ -1755,9 +1896,10 @@ pause_draw:
     jp svc_dialog_show          ; the engine shows the box
 
 ; a = the new input (edge bits)
-; Up / Down move the cursor (wrapping round the 7 items). On Resume,
-; Notebook or Map only button 1 acts: Resume closes the menu, Notebook
-; opens the notes (or says there are none), Map shows the automap. On a setting, button 1, Left or Right
+; Up / Down move the cursor (wrapping round the 8 items). On Resume,
+; Notebook, Map or Cheats only button 1 acts: Resume closes the menu,
+; Notebook opens the notes (or says there are none), Map shows the
+; automap, Cheats the cheats box. On a setting, button 1, Left or Right
 ; flips it (the engine uses the new value for the next picture). Button 2
 ; closes the menu. Clobbers every register except IX, IY.
 pause_input:
@@ -1767,7 +1909,7 @@ pause_input:
     jr z, +
     ld a, (hl)
     or a
-    ld a, 6                     ; from the top to the bottom
+    ld a, 7                     ; from the top to the bottom
     jr z, ++
     ld a, (hl)
     dec a
@@ -1776,7 +1918,7 @@ pause_input:
 +:  bit 1, e                    ; down
     jr z, +
     ld a, (hl)
-    cp 6
+    cp 7
     ld a, 0                     ; from the bottom to the top
     jr nc, ++
     ld a, (hl)
@@ -1787,7 +1929,18 @@ pause_input:
     and PAD_B1 | PAD_LEFT | PAD_RIGHT
     jr z, _pi_b2
     ld a, (hl)
-    cp 3
+    cp 7
+    jr nz, +
+    bit 4, e                    ; 7: the cheats (button 1 only)
+    ret z
+    ld a, UI_CHEATS
+    ld (ui), a
+    xor a
+    ld (cheat_cur), a
+    ld a, SFX_BLIP
+    call sfx
+    jp cheats_draw
++:  cp 3
     jr nc, _pi_setting          ; items 3..6 are settings
     bit 4, e                    ; resume / notebook / map: button 1 only
     ret z
@@ -1856,6 +2009,7 @@ _pi_changed:                    ; something changed: blip and redraw the menu
 ;   UI_DEAD, UI_DONE  button 1 starts a fresh game
 ;   UI_PAUSE          pause_input
 ;   UI_MAP            button 1 or 2: back to the pause menu
+;   UI_CHEATS         cheats_input
 ;   UI_NOTES          button 1: next page (closes after the last);
 ;                     button 2: close
 ;   UI_DIALOG         button 1: next page; after the last, close and
@@ -1880,6 +2034,10 @@ handle:
     jr nz, +
     ld a, e
     jp pause_input
++:  cp UI_CHEATS
+    jr nz, +
+    ld a, e
+    jp cheats_input
 +:  cp UI_MAP
     jr nz, +
     ld a, e
@@ -2193,6 +2351,14 @@ str_credit2:        .db "DIRECTED BY", 0
 str_credit3:        .db "UNFNKNBLVBL", 0
 str_resume:         .db "RESUME", 0
 str_map:            .db "MAP", 0
+str_cheats:         .db "CHEATS", 0
+str_god_mode:       .db "GOD MODE", 0
+str_inf_ammo:       .db "INFINITE AMMO", 0
+str_all_weapons:    .db "ALL WEAPONS", 0
+str_all_keys:       .db "ALL KEYCARDS", 0
+str_on:             .db "ON", 0
+str_off:            .db "OFF", 0
+str_cheats_footer:  .db "1:SELECT  2:BACK", 0
 str_map_footer:     .db "1/2:BACK", 0
 str_view_size:      .db "VIEW SIZE", 0
 str_large:          .db "LARGE", 0

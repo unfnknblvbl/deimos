@@ -251,6 +251,7 @@ u8 pend_valid, pend_ev, pend_k, pend_why;
 u32 pend_flags;
 char status_msg[33];
 u8 status_new, player_hurt, player_fired;
+u8 cheats;                              /* the pause menu's cheats: CHEAT_* bits (rules.h) */
 u8 hit_n, hit_kind[9];
 u16 hit_val[9];
 
@@ -904,8 +905,22 @@ static void restore_weapons(void)
     if (!((SG16(weapons) >> S.weapon) & 1)) select_next_weapon();
 }
 
+/* cheat_give: the pause menu's cheats. keys 0: every weapon (0..8, not
+ * the dogs) and each ammunition (0..4) full (99); keys 1: every keycard
+ * (green, yellow, blue, red). */
+void cheat_give(u8 keys)
+{
+    u8 i;
+    if (keys) {
+        S.keys |= 0x0F;
+        return;
+    }
+    SP16(weapons, SG16(weapons) | 0x1FF);
+    for (i = 0; i < 5; i++) S.ammo[i] = 99;
+}
+
 /* player_pain: the player takes dmg8 health damage and arm armour damage.
- * Nothing in god mode. With a dog (weapons 9..11) out and alive (its
+ * Nothing in god mode (or with the god mode cheat). With a dog (weapons 9..11) out and alive (its
  * health is S.ammo[5]), the dog takes it all, and may die (the dog
  * weapons are lost). Otherwise armour absorbs arm (what it cannot goes to
  * health), a warning is said when health falls below about 10% or 30%
@@ -915,7 +930,7 @@ static void player_pain(u8 dmg8, u8 arm)
 {
     s16 dmg = dmg8, h1, h2, v;
     u8 a;
-    if (S.god) return;
+    if (S.god || (cheats & CHEAT_GOD)) return;
     if (S.weapon >= 9 && S.weapon <= 11 && S.ammo[5]) {     /* a dog fighting for you takes it all */
         v = (s16)S.ammo[5] - (dmg + arm);
         S.ammo[5] = v > 0 ? (u8)v : 0;
@@ -2245,12 +2260,14 @@ static u8 player_attack(void)
     u16 j = sel_idx, tot = 0, tarm = 0, mult;
     s16 left, thr;
     if (SG16(disabled_weapons) && !((SG16(weapons) >> w) & 1)) return 0;
-    if (wpn_use[w] && S.ammo[wpn_ammo[w]] < wpn_use[w]) {
-        say(gtext(TX_NO_AMMO));
-        sfx(SFX_DENIED);
-        return 0;
+    if (!(cheats & CHEAT_AMMO)) {               /* (the infinite ammunition cheat: none used, none needed) */
+        if (wpn_use[w] && S.ammo[wpn_ammo[w]] < wpn_use[w]) {
+            say(gtext(TX_NO_AMMO));
+            sfx(SFX_DENIED);
+            return 0;
+        }
+        S.ammo[wpn_ammo[w]] -= wpn_use[w];
     }
-    S.ammo[wpn_ammo[w]] -= wpn_use[w];
     sfx(wpn_sfx[w]);
     player_fired = 1;
     if (sel_kind == T_LINE) {

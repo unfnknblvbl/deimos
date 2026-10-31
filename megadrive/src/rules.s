@@ -1639,6 +1639,9 @@ add_xp:
 | Called by monster_attack, hurt_at (fire, explosions) and got.
 player_pain:
     tst.b   S_GOD(a5)                   | (Player_pain)
+    beq.s   0f
+    rts
+0:  btst    #0, cheats                  | the god mode cheat (ui.c's cheats, CHEAT_GOD)
     beq.s   1f
     rts
 1:  movem.l d2-d5, -(sp)
@@ -4791,7 +4794,10 @@ player_attack:
     move.b  0(a0,d7.w), d1
     lea     S_AMMO(a5), a0
     adda.w  d0, a0
-    tst.b   d1                          | no ammunition needed
+    btst    #1, cheats                  | the infinite ammunition cheat (CHEAT_AMMO): none used
+    beq.s   0f
+    moveq   #0, d1
+0:  tst.b   d1                          | no ammunition needed
     beq.s   1f
     cmp.b   (a0), d1
     bls.s   1f                          | enough

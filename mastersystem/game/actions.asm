@@ -395,6 +395,11 @@ player_attack:
     ld a, (pa_w)
     call add_hl_a_read
     ld b, a                     ; b = ammo per attack
+    ld a, (cheats)
+    and CHEAT_AMMO
+    jr z, +
+    ld b, 0                     ; (the infinite ammunition cheat: none)
++:
     ld hl, wpn_ammo
     ld a, (pa_w)
     call add_hl_a_read

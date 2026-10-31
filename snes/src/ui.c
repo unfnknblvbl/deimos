@@ -18,7 +18,7 @@
  *   Y                  use a medkit (smallest first)
  *   L / R              previous / next weapon
  *   X                  notebook
- *   Start              pause menu (resume, map, items, notebook, save, options, title)
+ *   Start              pause menu (resume, map, items, notebook, save, options, cheats, title)
  *
  * Screen (video.s): line 0..7 messages, 8..183 the 3D view, 184..223 the
  * status bar; boxes of text are sprites (gfx.s's text layer). (The SNES
@@ -629,6 +629,7 @@ static void refresh_picture(void)
 #define UI_OPTIONS 10
 #define UI_TITLE 11
 #define UI_MAP 12
+#define UI_CHEATS 13
 #define MAX_NOTES 16                    /* strings a pager can hold */
 
 static void next_map(void);
@@ -1412,10 +1413,71 @@ static void map_draw(void)
     box_show();
 }
 
+/* ---- the cheats (the pause menu's CHEATS): god mode and infinite
+   ammunition (CHEAT_* bits of cheats, checked by the rules), every weapon
+   with full ammunition, every keycard. Off at power-on and after QUIT TO
+   TITLE; not saved. ---- */
+#define N_CHEATS 4
+static const char * const CHEAT_ITEMS[N_CHEATS] = {"GOD MODE", "INFINITE AMMO", "ALL WEAPONS", "ALL KEYCARDS"};
+static u8 cheat_cur;                    /* the line chosen */
+static void cheats_draw(void)
+{
+    u8 i;
+    box_clear();
+    box_put(1, (DLG_W - 6) >> 1, "CHEATS");
+    for (i = 0; i < N_CHEATS; i++) {
+        box_put(3 + i, 2, cheat_cur == i ? ">" : " ");
+        box_put(3 + i, 4, CHEAT_ITEMS[i]);
+    }
+    box_put(3, 19, (cheats & CHEAT_GOD) ? "ON" : "OFF");
+    box_put(4, 19, (cheats & CHEAT_AMMO) ? "ON" : "OFF");
+    box_footer("A:SELECT  B:BACK");
+    box_show();
+}
+
+static void pause_draw(void);
+
+/* a press in the cheats box: Up / Down move, A picks, B / Start back to
+   the pause menu */
+static void cheats_input(u16 e)
+{
+    if (e & (PAD_B | PAD_START)) {
+        ui = UI_PAUSE;
+        sfx(SFX_BLIP);
+        pause_draw();
+        return;
+    }
+    if (e & PAD_UP) cheat_cur = cheat_cur ? cheat_cur - 1 : N_CHEATS - 1;
+    else if (e & PAD_DOWN) cheat_cur = cheat_cur < N_CHEATS - 1 ? cheat_cur + 1 : 0;
+    else if (e & PAD_A) {
+        switch (cheat_cur) {
+        case 0:
+            cheats ^= CHEAT_GOD;
+            if (cheats & CHEAT_GOD) S.hp = S.maxhp;     /* (and the health topped up) */
+            break;
+        case 1:
+            cheats ^= CHEAT_AMMO;
+            break;
+        case 2:
+            cheat_give(0);
+            break;
+        default:
+            cheat_give(1);
+            break;
+        }
+        sfx(SFX_ITEM);
+        hud_update();
+        cheats_draw();
+        return;
+    }
+    sfx(SFX_BLIP);
+    cheats_draw();
+}
+
 /* ---- pause menu ---- */
-#define N_PAUSE 7
-static const char * const PAUSE_ITEMS[N_PAUSE] = {"RESUME", "MAP", "ITEMS", 0, 0, 0, "QUIT TO TITLE"};
-static const u8 PAUSE_TEXTS[N_PAUSE] = {0, 0, 0, TX_NOTEBOOK_ITEM, TX_SAVE_GAME, TX_OPTIONS_ITEM, 0};   /* (for the 0s above: the game's texts) */
+#define N_PAUSE 8
+static const char * const PAUSE_ITEMS[N_PAUSE] = {"RESUME", "MAP", "ITEMS", 0, 0, 0, "CHEATS", "QUIT TO TITLE"};
+static const u8 PAUSE_TEXTS[N_PAUSE] = {0, 0, 0, TX_NOTEBOOK_ITEM, TX_SAVE_GAME, TX_OPTIONS_ITEM, 0, 0};   /* (for the 0s above: the game's texts) */
 static u8 pause_cur;                    /* the line chosen */
 
 /* the pause menu's box */
@@ -1428,8 +1490,8 @@ static void pause_draw(void)
         box_put(3 + i, 2, pause_cur == i ? ">" : " ");
         box_put(3 + i, 4, PAUSE_ITEMS[i] ? PAUSE_ITEMS[i] : gtext(PAUSE_TEXTS[i]));
     }
-    box_put(11, (DLG_W - 10) >> 1, "MADE BY AI");
-    box_put(12, (DLG_W - 23) >> 1, "DIRECTED BY UNFNKNBLVBL");
+    box_put(12, (DLG_W - 10) >> 1, "MADE BY AI");      /* (row 11 blank, after the 8 items) */
+    box_put(13, (DLG_W - 23) >> 1, "DIRECTED BY UNFNKNBLVBL");
     box_footer("A:SELECT  START:RESUME");
     box_show();
 }
@@ -1478,7 +1540,14 @@ static u8 pause_menu(u16 e)
             ui = UI_PAUSE;
             pause_draw();
             return 0;
-        default:
+        case 6:
+            ui = UI_CHEATS;
+            cheat_cur = 0;
+            sfx(SFX_BLIP);
+            cheats_draw();
+            return 0;
+        default:                        /* QUIT TO TITLE (the cheats off) */
+            cheats = 0;
             box_hide();
             return 1;
         }
@@ -1539,6 +1608,9 @@ static u8 handle(u16 edge)
         return 0;
     case UI_PAUSE:
         return pause_menu(edge);
+    case UI_CHEATS:
+        cheats_input(edge);
+        return 0;
     case UI_MAP:
         if (edge & (PAD_A | PAD_B | PAD_START)) {
             ui = UI_PAUSE;
