@@ -34,8 +34,8 @@ UI_DONE, UI_END = 4, 11  # values of the ROM's eng_mode: the sector's statistics
 BUTTONS = {"fwd": [("up",)], "back": [("down",)], "left": [("left",)], "right": [("right",)],
            "use": [("a",)], "pass": [("b",)], "wnext": [("z",)], "wprev": [("x",)], "heal": [("c",)],
            "close": [("b",)],
-           "berserk": [("start",), ("down",), ("a",), ("a",)],
-           "collar": [("start",), ("down",), ("a",), ("down",), ("a",)]}
+           "berserk": [("start",), ("down",), ("down",), ("a",), ("a",)],   # (pause -> MAP -> ITEMS -> the item)
+           "collar": [("start",), ("down",), ("down",), ("a",), ("down",), ("a",)]}
 
 
 def map_param(c, w, a1):

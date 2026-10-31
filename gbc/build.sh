@@ -71,6 +71,7 @@ cc obj/core_const.c core_const
 cc ../core/gen/data.c data
 cc obj/save_gb.c save
 cc obj/view_gb.c view
+cc ../core/automap.c automap -Wf-bo255 -DAM_GB    # (the automap: banked, with the core API and campaign of plat.h)
 # bank 0 (no #pragma bank): the code that switches ROM banks itself
 for f in plat main vdraw snd; do cc src/$f.c $f; done
 cc obj/snd_tab.c snd_tab

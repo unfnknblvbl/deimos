@@ -207,6 +207,7 @@
 .define UI_DONE         4           ; the sector is complete
 .define UI_NOTES        5           ; the notebook
 .define UI_PAUSE        6
+.define UI_MAP          7           ; the automap (from the pause menu)
 
 .define MSGQ            8           ; status messages waiting to be shown (a power of 2: indexes wrap with MSGQ-1)
 .define BOX_LINES       13          ; text lines in a dialog box

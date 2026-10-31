@@ -61,6 +61,7 @@ OBJS="obj/view_shbin.o"
 # extra FLAGS, and add that object to the link list OBJS.
 build() { $CC $CFLAGS "${@:3}" -c "$1" -o "obj/$2.o"; OBJS="$OBJS obj/$2.o"; }
 build ../core/rules.c rules
+build ../core/automap.c automap
 build ../core/gen/data.c data
 build ../snes/src/ui.c ui -Dmain=ui_main     # (the SNES UI's main() becomes ui_main(), called by src/plat.c)
 build ../snes/src/glue.c glue

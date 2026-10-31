@@ -221,8 +221,9 @@ def main():
                 act = f"code {code}"
             else:
                 act = pilot.choose(c)
-                if act in ("berserk", "collar"):  # (pause menu -> ITEMS -> the item)
+                if act in ("berserk", "collar"):  # (pause menu -> ITEMS (after MAP) -> the item)
                     g.press("start")
+                    g.press("down")
                     g.press("down")
                     g.press("a")
                     if act == "collar":

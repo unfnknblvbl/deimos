@@ -113,7 +113,8 @@ def screen_view(rom, size, pal):
 
 
 def set_size(rom, size):
-    """the pause menu: VIEW SIZE is the second line
+    """the pause menu: VIEW SIZE is the fourth line (after resume,
+    notebook and map)
 
     Opens the pause menu, moves to VIEW SIZE, toggles it and resumes, if
     the ROM is not already at size."""
@@ -121,6 +122,7 @@ def set_size(rom, size):
     if rom.ram()[ENG_VSIZE - 0xC000] == want:
         return
     rom.press(("start",))
+    rom.press(("down",))
     rom.press(("down",))
     rom.press(("down",))
     rom.press(("a",))
@@ -146,8 +148,8 @@ class Checker:
 
     def set_size(self, size, black, detail=0, solid=0):
         # black: drawing the view, 0 outward (in place), 1 at once
-        """the pause menu: resume, notebook, view size, drawing the view,
-        detail, walls
+        """the pause menu: resume, notebook, map, view size, drawing the
+        view, detail, walls
 
         Sets the view size, black (drawing at once), detail and solid walls
         through the menu, pressing button 1 on a line (at most twice) until
@@ -161,7 +163,8 @@ class Checker:
             return
         rom.press(("start",))
         rom.press(("down",))                    # notebook
-        for a in (ENG_VSIZE, ENG_VMODE, ENG_DETAIL, ENG_SOLID):   # menu lines 3..6
+        rom.press(("down",))                    # map
+        for a in (ENG_VSIZE, ENG_VMODE, ENG_DETAIL, ENG_SOLID):   # menu lines 4..7
             rom.press(("down",))
             for _ in range(2):
                 if rom.ram()[a - 0xC000] == want[a]:

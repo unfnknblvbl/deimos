@@ -53,6 +53,7 @@ OBJS="obj/crt0.o obj/div.o"
 sed -e 's|"SEL+LEFT", "SEL+RIGHT"|"L", "R"|' ../gbc/src/ui.c > obj/ui.c
 build obj/ui.c ui -DVIEW_FX       # (VIEW_FX: the 3D view's free camera, as the SNES SuperFX build)
 build ../core/rules.c rules
+build ../core/automap.c automap
 build ../core/gen/data.c data
 build ../snes/src/glue.c glue
 build ../snes/src/campaign.c campaign

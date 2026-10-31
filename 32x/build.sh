@@ -65,6 +65,7 @@ $S-gcc $CF -c sh2/crt0.s -o obj/crt0.o
 build() { $S-gcc $CF "${@:3}" -c "$1" -o "obj/$2.o"; OBJS="$OBJS obj/$2.o"; }
 build ../core/rules.c rules
 build ../core/gen/data.c data
+build ../core/automap.c automap
 build ../snes/src/ui.c ui -Dmain=ui_main     # (the SNES UI's main() becomes ui_main(), called by sh2/plat.c)
 build ../snes/src/glue.c glue
 build ../snes/src/campaign.c campaign

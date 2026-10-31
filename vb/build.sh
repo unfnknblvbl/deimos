@@ -64,6 +64,7 @@ OBJS="obj/crt0.o"
 python3 tools/vb_ui.py ../gbc/src/ui.c obj/ui.c
 build obj/ui.c ui -DVIEW_FX
 build ../core/rules.c rules
+build ../core/automap.c automap
 build ../core/gen/data.c data
 build ../snes/src/glue.c glue
 # (glue.c's variables: the level's data and strings, 24 KB, into the VIP's memory)

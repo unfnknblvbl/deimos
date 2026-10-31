@@ -70,10 +70,11 @@ build_code() {
     $CC --code-name RULES -o $d/rules.s ../core/rules.c
     $CC --code-name RULES -o $d/data.s ../core/gen/data.c
     $CC -o $d/view.s ../view/view.c
+    $CC -o $d/automap.s ../core/automap.c
     for c in glue campaign vdata video save ui; do $CC -o $d/$c.s src/$c.c; done
     # assemble the compiled C
     local OBJS="" f o
-    for f in rules data view glue campaign vdata video save ui; do
+    for f in rules data view automap glue campaign vdata video save ui; do
         ca65 --cpu 65816 -o $d/$f.o $d/$f.s
         OBJS="$OBJS $d/$f.o"
     done

@@ -21,7 +21,7 @@
  *   X / Z              previous / next weapon
  *   Y                  notebook
  *   Mode (hold)        full detail, in smooth movement
- *   Start              pause menu (resume, notebook, save, options, title)
+ *   Start              pause menu (resume, map, items, notebook, save, options, title)
  *
  * Screen (256x224, H32): row 0 = messages (plane B), rows 3..18 and
  * columns 3..28 = the 3D view (208x128 pixels, plane A, double-buffered;
@@ -58,6 +58,8 @@
 #include "backdrop.h"
 #include "music.h"
 #include "pack.h"
+#define AM_MD                           /* the automap (../../core/automap.c, included below the picture's code) */
+#include "../../core/automap.h"
 
 void sound_init(void);                      /* sound.c */
 void sfx_flush(void);                       /* sound.c */
@@ -359,6 +361,43 @@ static void add_vis(u8 *bits, u8 gx, u8 gz, u8 facing)
     for (p = r_vis + o; !((c = *p) & 0x8000); p++) bits[c >> 3] |= (u8)(1 << (c & 7));
 }
 
+/* ---- the automap: core/automap.c, with this port's map tables ---- */
+#include "../../core/automap.c"
+static u8 am_map = 0xFF;                /* the map seen[] is for (0xFF: none) */
+
+/* a solid wall at (x, z) (outside the map is): wall_bits, as rules.s's wall_at */
+u8 am_wall(u8 x, u8 z)
+{
+    u16 c;
+    if (x >= 32 || z >= 32) return 1;
+    c = ((u16)z << 5) + x;
+    return (u8)((wall_bits[c >> 3] >> (c & 7)) & 1);
+}
+
+/* a closed line (door) at (x, z): as rules.s's line_at */
+u8 am_door(u8 x, u8 z)
+{
+    u16 c;
+    u8 i;
+    if (x >= 32 || z >= 32) return 0;
+    c = ((u16)z << 5) + x;
+    if (!((line_cells[c >> 3] >> (c & 7)) & 1)) return 0;
+    for (i = 0; i < n_lines; i++)
+        if (line_x[i] == x && line_z[i] == z && !(S.l_flags[i] & L_OPEN)) return 1;
+    return 0;
+}
+
+/* the view's cells seen (after each action) */
+static void am_update(void)
+{
+    if (am_map != S.map) {
+        am_clear();
+        am_map = S.map;
+    }
+    add_vis(seen, S.px, S.pz, S.facing);
+    am_mark(((u16)S.pz << 5) + S.px);
+}
+
 /* the renderer's list of things: the entities on the map (linked into
    their cell, with a definition) in a cell whose things can show from
    view a or view b (the same view twice for a still picture; both ends
@@ -501,6 +540,7 @@ static u8 animate_move(void)
 #define UI_STORE 9
 #define UI_ITEMS 10
 #define UI_END 11
+#define UI_MAP 12
 
 static void next_map(void);
 
@@ -830,6 +870,7 @@ static void after_action(void)
     } else
         hurt_face = 0;
     update_backdrop(0);                         /* if the floor / ceiling colours changed */
+    am_update();                                /* the automap's seen cells */
     if (!animate_move()) refresh_picture();     /* the new view */
     hud_update();
     if (S.dead || S.exit_set) {
@@ -1214,6 +1255,7 @@ static void game_screen(void)
    status bar (after_action, with no move to animate) */
 static void start_play(const char *msg)
 {
+    am_map = 0xFF;                              /* (a game begun or loaded: the automap starts empty) */
     old_x = S.px;
     old_z = S.pz;
     old_f = S.facing;
@@ -1353,9 +1395,28 @@ static void items_draw(void)
     menu_draw("ITEMS", items, 2, items_cur, 4, "A:USE  B:BACK");
 }
 
+/* ---- the automap's box: the map around the player, a character a
+   cell, north up (core/automap.c) ---- */
+#define MAP_W (DLG_W - 2)               /* cells across (columns 1..22) */
+#define MAP_H (DLG_H - 4)               /* cells down (rows 2..13) */
+static void map_draw(void)
+{
+    static char row[MAP_W + 1];
+    u8 r;
+    box_clear();
+    box_put(1, (DLG_W - 3) >> 1, "MAP");
+    for (r = 0; r < MAP_H; r++) {
+        am_row(row, r, MAP_W, MAP_H, S.px, S.pz, S.facing);
+        box_put(2 + r, 1, row);
+    }
+    box_footer("B:BACK");
+    box_show();
+}
+
 /* ---- pause menu ---- */
-static const char * const PAUSE_ITEMS[6] = {"RESUME", "ITEMS", 0, 0, 0, "QUIT TO TITLE"};
-static const u8 PAUSE_TEXTS[6] = {0, 0, TX_NOTEBOOK_ITEM, TX_SAVE_GAME, TX_OPTIONS_ITEM, 0};   /* (for the 0s above: the game's texts) */
+#define N_PAUSE 7
+static const char * const PAUSE_ITEMS[N_PAUSE] = {"RESUME", "MAP", "ITEMS", 0, 0, 0, "QUIT TO TITLE"};
+static const u8 PAUSE_TEXTS[N_PAUSE] = {0, 0, 0, TX_NOTEBOOK_ITEM, TX_SAVE_GAME, TX_OPTIONS_ITEM, 0};   /* (for the 0s above: the game's texts) */
 static u8 pause_cur;                    /* cursor: index in PAUSE_ITEMS */
 
 /* the pause box: the items, the authors' line, the footer */
@@ -1364,7 +1425,7 @@ static void pause_draw(void)
     u8 i;
     box_clear();
     box_put(1, (DLG_W - 6) >> 1, "PAUSED");
-    for (i = 0; i < 6; i++) {
+    for (i = 0; i < N_PAUSE; i++) {
         box_put(3 + i, 2, pause_cur == i ? ">" : " ");
         box_put(3 + i, 4, PAUSE_ITEMS[i] ? PAUSE_ITEMS[i] : gtext(PAUSE_TEXTS[i]));
     }
@@ -1382,20 +1443,25 @@ static u8 pause_menu(u16 e)
         close_box();
         return 0;
     }
-    if (e & PAD_UP) pause_cur = pause_cur ? pause_cur - 1 : 5;
-    else if (e & PAD_DOWN) pause_cur = pause_cur < 5 ? pause_cur + 1 : 0;
+    if (e & PAD_UP) pause_cur = pause_cur ? pause_cur - 1 : N_PAUSE - 1;
+    else if (e & PAD_DOWN) pause_cur = pause_cur < N_PAUSE - 1 ? pause_cur + 1 : 0;
     else if (e & PAD_A) {
         switch (pause_cur) {
         case 0:
             close_box();
             return 0;
-        case 1:                         /* ITEMS */
+        case 1:                         /* MAP */
+            ui = UI_MAP;
+            sfx(SFX_BLIP);
+            map_draw();
+            return 0;
+        case 2:                         /* ITEMS */
             ui = UI_ITEMS;
             items_cur = 0;
             sfx(SFX_BLIP);
             items_draw();
             return 0;
-        case 2:                         /* NOTEBOOK: the notes' string ids */
+        case 3:                         /* NOTEBOOK: the notes' string ids */
             box_hide();
             if (S.n_notes) open_pager(UI_NOTES, S.notes, S.n_notes);
             else {
@@ -1403,13 +1469,13 @@ static u8 pause_menu(u16 e)
                 say("NO NOTES YET");
             }
             return 0;
-        case 3:                         /* the save item */
+        case 4:                         /* the save item */
             game_save();
             close_box();
             say(gtext(TX_GAME_SAVED));
             sfx(SFX_SELECT);
             return 0;
-        case 4:                         /* OPTIONS */
+        case 5:                         /* OPTIONS */
             box_hide();
             options_screen();
             ui = UI_PLAY;
@@ -1484,6 +1550,13 @@ static u8 handle(u16 edge)
         return 0;
     case UI_PAUSE:
         return pause_menu(edge);
+    case UI_MAP:
+        if (edge & (PAD_A | PAD_B | PAD_START)) {
+            ui = UI_PAUSE;
+            sfx(SFX_BLIP);
+            pause_draw();
+        }
+        return 0;
     case UI_NOTES:
         if (((edge & PAD_A) && pager_next()) || (edge & (PAD_B | PAD_START))) close_box();
         return 0;

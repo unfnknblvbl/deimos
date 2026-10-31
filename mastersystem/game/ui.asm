@@ -17,7 +17,7 @@
 ;   Button 2 + Up      use a medkit (smallest first)
 ;   Button 2 + Down    pass the turn
 ;   Button 2 + 1       notebook (also in the pause menu)
-;   Pause              pause menu: resume, notebook, view settings
+;   Pause              pause menu: resume, notebook, map, view settings
 ;
 ; Bank 0. game_main (the entry point: rom/main.asm jumps to it at $1000)
 ; runs the whole game: the title, then one frame at a time, reading the
@@ -1358,7 +1358,8 @@ after_action:
     ld (player_hurt), a
     ld a, 6
     ld (ENG_FLASH), a           ; the engine tints the view red for 6 frames
-+:  xor a
++:  call am_look                ; the automap: the cells this view shows
+    xor a
     call refresh_picture        ; not forced: only what changed
     call hud_update
     ld a, (S_DEAD)
@@ -1392,6 +1393,7 @@ close_box:
 ; register except IX, IY.
 new_game:
     call game_init              ; the level, the player, the monsters (actions.asm)
+    call am_clear               ; the automap: nothing seen yet
     call msg_clear
     xor a
     ld (ui), a
@@ -1406,13 +1408,273 @@ new_game:
     jp after_action
 
 ;-----------------------------------------------------------------------
-; the pause menu: resume, notebook, view size, how the view is drawn,
-; detail, walls
+; the automap: the map around the player in the box, a character a cell,
+; north up: '#' a wall and '+' a closed door next to a seen cell, '.' a
+; seen floor cell, ^ > v < the player facing north, east, south, west.
+; (core/automap.c is the same for the C ports; this one keeps a bit per
+; two cells side by side, x and x+1 with x even, as only 72 bytes of RAM
+; are free here.) A view "sees" the cells straight ahead up to the first
+; wall or closed door (8 at most) and the cell on each side of each; the
+; level's map (S_MAP_GIVEN) shows every cell.
 ;-----------------------------------------------------------------------
-; the box row of each menu item (pause_cur 0..5): resume, notebook, view
-; size, draw view, detail, walls
+.define AM_W    DLG_W - 2           ; cells across (box columns 1..)
+.define AM_H    12                  ; cells down (box rows 2..13)
+.ENUM $D3B8                         ; (free RAM after math32's, below the renderer's at $D400)
+am_seen         dsb 64              ; bit (x / 2) & 7 of byte z * 2 + x / 16: seen
+amap_dx           db                  ; am_look: the facing's step in x, z (-1, 0, 1)
+amap_dz           db
+am_k            db                  ; am_look: steps left; am_draw: columns left
+am_ch           db                  ; am_char: the wall's or door's character
+am_z            db                  ; am_draw: the row's cell z
+am_dst          dw                  ; am_draw: where the next character goes in DLG_TEXT
+am_ram_end      db
+.ENDE
+.IF am_ram_end > $D400
+.FAIL "the automap's RAM runs into the renderer's at $D400"
+.ENDIF
+
+am_steps_x:     .db 0, 1, 0, $FF    ; per facing (north, east, south, west)
+am_steps_z:     .db $FF, 0, 1, 0
+am_arrows:      .db "^>v<"
+
+; nothing seen (a new game). Clobbers bc, de, hl.
+am_clear:
+    ld hl, am_seen
+    ld de, am_seen+1
+    ld bc, 63
+    ld (hl), 0
+    ldir
+    ret
+
+; b = x, c = z (both < 32) -> hl = the byte of am_seen, a = the cell's bit
+; in it; keeps bc; clobbers de
+am_bit:
+    ld a, c
+    add a, a                    ; z * 2
+    ld l, a
+    ld a, b
+    rrca
+    rrca
+    rrca
+    rrca
+    and 1                       ; x / 16
+    add a, l
+    ld l, a
+    ld h, 0
+    ld de, am_seen
+    add hl, de
+    ld a, b
+    rrca
+    and 7                       ; (x / 2) & 7
+    ld e, a
+    ld a, 1
+    ret z
+-:  add a, a
+    dec e
+    jr nz, -
+    ret
+
+; b = x, c = z: the cell seen (nothing off the map); keeps bc; clobbers
+; a, de, hl
+am_mark:
+    ld a, b
+    or c
+    and $E0
+    ret nz
+    call am_bit
+    or (hl)
+    ld (hl), a
+    ret
+
+; b = x, c = z -> a nonzero (NZ) if the cell was seen (or the map was
+; given), 0 (Z) if not or off the map; keeps bc; clobbers de, hl
+am_is_seen:
+    ld a, b
+    or c
+    and $E0
+    jr nz, +
+    ld a, (S_MAP_GIVEN)
+    or a
+    ret nz
+    call am_bit
+    and (hl)
+    ret
++:  xor a
+    ret
+
+; b = x, c = z: the cell and the one on each side of it (across the
+; facing amap_dx / amap_dz) seen; keeps bc
+am_mark3:
+    call am_mark
+    ld a, (amap_dx)
+    or a
+    jr nz, +
+    dec b                       ; facing north or south: x - 1 and x + 1
+    call am_mark
+    inc b
+    inc b
+    call am_mark
+    dec b
+    ret
++:  dec c                       ; east or west: z - 1 and z + 1
+    call am_mark
+    inc c
+    inc c
+    call am_mark
+    dec c
+    ret
+
+; the player's view: its cells seen (after every action). Clobbers every
+; register except IX, IY.
+am_look:
+    ld a, (S_FACING)
+    and 3
+    ld e, a
+    ld hl, am_steps_x
+    call add_hl_a_read
+    ld (amap_dx), a
+    ld a, e
+    ld hl, am_steps_z
+    call add_hl_a_read
+    ld (amap_dz), a
+    ld a, (S_PX)
+    ld b, a
+    ld a, (S_PZ)
+    ld c, a
+    call am_mark3               ; where the player stands
+    ld a, 8
+    ld (am_k), a
+-:  ld a, (amap_dx)               ; the next cell ahead
+    add a, b
+    ld b, a
+    ld a, (amap_dz)
+    add a, c
+    ld c, a
+    ld a, b
+    or c
+    and $E0
+    ret nz                      ; off the map
+    call am_mark3
+    call wall_at
+    ret nz                      ; a wall: the view ends
+    call line_at
+    cp $FF
+    ret nz                      ; a closed door: the same
+    ld hl, am_k
+    dec (hl)
+    jr nz, -
+    ret
+
+; b = x, c = z -> a = the cell's character on the map; keeps bc; clobbers
+; de, hl
+am_char:
+    ld a, b
+    or c
+    and $E0
+    ld a, ' '
+    ret nz                      ; off the map: blank
+    call wall_at
+    ld a, '#'
+    jr nz, +
+    call line_at
+    cp $FF
+    ld a, '+'
+    jr nz, +
+    call am_is_seen             ; a floor cell: '.' once seen
+    ld a, ' '
+    ret z
+    ld a, '.'
+    ret
++:  ld (am_ch), a               ; a wall or door: shown next to a seen cell
+    call am_is_seen
+    jr nz, ++
+    dec b
+    call am_is_seen
+    inc b
+    or a
+    jr nz, ++
+    inc b
+    call am_is_seen
+    dec b
+    or a
+    jr nz, ++
+    dec c
+    call am_is_seen
+    inc c
+    or a
+    jr nz, ++
+    inc c
+    call am_is_seen
+    dec c
+    or a
+    jr nz, ++
+    ld a, ' '
+    ret
+++: ld a, (am_ch)
+    ret
+
+; the map box: "MAP", AM_H rows of AM_W cells centred on the player, the
+; footer; then shows it. Clobbers every register except IX, IY.
+am_draw:
+    call box_clear
+    ld bc, $0100 + (DLG_W - 3) / 2
+    ld hl, str_map
+    call box_put
+    ld hl, DLG_TEXT + 2 * DLG_W + 1     ; row 2, column 1
+    ld (am_dst), hl
+    ld a, (S_PZ)
+    sub AM_H / 2
+    ld (am_z), a
+--: ld a, (S_PX)                ; a row: from the window's left cell
+    sub AM_W / 2
+    ld b, a
+    ld a, (am_z)
+    ld c, a
+    ld a, AM_W
+    ld (am_k), a
+-:  ld a, (S_PX)
+    cp b
+    jr nz, +
+    ld a, (S_PZ)
+    cp c
+    jr nz, +
+    ld a, (S_FACING)            ; the player
+    and 3
+    ld hl, am_arrows
+    call add_hl_a_read
+    jr ++
++:  call am_char
+++: ld hl, (am_dst)
+    ld (hl), a
+    inc hl
+    ld (am_dst), hl
+    inc b
+    ld hl, am_k
+    dec (hl)
+    jr nz, -
+    ld hl, (am_dst)             ; the next row
+    ld de, DLG_W - AM_W
+    add hl, de
+    ld (am_dst), hl
+    ld hl, am_z
+    inc (hl)
+    ld a, (am_z)
+    ld hl, S_PZ
+    sub (hl)
+    cp AM_H - AM_H / 2
+    jr nz, --                   ; (rows from pz - AM_H/2 to pz + AM_H/2 - 1)
+    ld hl, str_map_footer
+    call box_footer
+    jp svc_dialog_show
+
+;-----------------------------------------------------------------------
+; the pause menu: resume, notebook, map, view size, how the view is
+; drawn, detail, walls
+;-----------------------------------------------------------------------
+; the box row of each menu item (pause_cur 0..6): resume, notebook, map,
+; view size, draw view, detail, walls
 pause_rows:
-    .db 3, 4, 6, 7, 8, 9
+    .db 3, 4, 5, 6, 7, 8, 9
 
 ; draws the pause menu: the labels, each setting's current value (read
 ; from the engine variables), the credits, the '>' cursor on row
@@ -1428,6 +1690,9 @@ pause_draw:
     call box_put
     ld bc, $0400 + PAUSE_LABEL_COL
     ld hl, (TX_NOTEBOOK_ITEM)
+    call box_put
+    ld bc, $0500 + PAUSE_LABEL_COL
+    ld hl, str_map
     call box_put
     ld bc, $0600 + PAUSE_LABEL_COL
     ld hl, str_view_size
@@ -1490,9 +1755,9 @@ pause_draw:
     jp svc_dialog_show          ; the engine shows the box
 
 ; a = the new input (edge bits)
-; Up / Down move the cursor (wrapping round the 6 items). On Resume or
-; Notebook only button 1 acts: Resume closes the menu, Notebook opens the
-; notes (or says there are none). On a setting, button 1, Left or Right
+; Up / Down move the cursor (wrapping round the 7 items). On Resume,
+; Notebook or Map only button 1 acts: Resume closes the menu, Notebook
+; opens the notes (or says there are none), Map shows the automap. On a setting, button 1, Left or Right
 ; flips it (the engine uses the new value for the next picture). Button 2
 ; closes the menu. Clobbers every register except IX, IY.
 pause_input:
@@ -1502,7 +1767,7 @@ pause_input:
     jr z, +
     ld a, (hl)
     or a
-    ld a, 5                     ; from the top to the bottom
+    ld a, 6                     ; from the top to the bottom
     jr z, ++
     ld a, (hl)
     dec a
@@ -1511,7 +1776,7 @@ pause_input:
 +:  bit 1, e                    ; down
     jr z, +
     ld a, (hl)
-    cp 5
+    cp 6
     ld a, 0                     ; from the bottom to the top
     jr nc, ++
     ld a, (hl)
@@ -1522,13 +1787,20 @@ pause_input:
     and PAD_B1 | PAD_LEFT | PAD_RIGHT
     jr z, _pi_b2
     ld a, (hl)
-    cp 2
-    jr nc, _pi_setting          ; items 2..5 are settings
-    bit 4, e                    ; resume / notebook: button 1 only
+    cp 3
+    jr nc, _pi_setting          ; items 3..6 are settings
+    bit 4, e                    ; resume / notebook / map: button 1 only
     ret z
     or a
     jp z, close_box             ; 0: resume
-    ld a, (S_N_NOTES)           ; 1: the notebook
+    cp 2
+    jr nz, +
+    ld a, UI_MAP                ; 2: the automap
+    ld (ui), a
+    ld a, SFX_BLIP
+    call sfx
+    jp am_draw
++:  ld a, (S_N_NOTES)           ; 1: the notebook
     or a
     jr z, +
     ld b, a
@@ -1539,14 +1811,14 @@ pause_input:
     ld hl, str_no_notes
     jp say
 _pi_setting:
-    cp 2
+    cp 3
     jr nz, +
     ld hl, ENG_VSIZE            ; LARGE (0) <-> SMALL (1)
     ld a, (hl)
     xor 1
     ld (hl), a
     jr _pi_changed
-+:  cp 3
++:  cp 4
     jr nz, ++
     ld hl, ENG_VMODE            ; OUTWARD (0) <-> AT ONCE (1)
     ld a, (hl)
@@ -1554,7 +1826,7 @@ _pi_setting:
     and 1
     ld (hl), a
     jr _pi_changed
-++: cp 4
+++: cp 5
     jr nz, +
     ld hl, ENG_DETAIL           ; HIGH (0) <-> LOW (1)
     ld a, (hl)
@@ -1583,6 +1855,7 @@ _pi_changed:                    ; something changed: blip and redraw the menu
 ; messages, then by `ui`:
 ;   UI_DEAD, UI_DONE  button 1 starts a fresh game
 ;   UI_PAUSE          pause_input
+;   UI_MAP            button 1 or 2: back to the pause menu
 ;   UI_NOTES          button 1: next page (closes after the last);
 ;                     button 2: close
 ;   UI_DIALOG         button 1: next page; after the last, close and
@@ -1607,6 +1880,16 @@ handle:
     jr nz, +
     ld a, e
     jp pause_input
++:  cp UI_MAP
+    jr nz, +
+    ld a, e
+    and PAD_B1 | PAD_B2
+    ret z
+    ld a, UI_PAUSE              ; back to the pause menu
+    ld (ui), a
+    ld a, SFX_BLIP
+    call sfx
+    jp pause_draw
 +:  cp UI_NOTES
     jr nz, ++
     bit 4, e                    ; button 1: the next page
@@ -1909,6 +2192,8 @@ str_credit1:        .db "MADE BY AI", 0
 str_credit2:        .db "DIRECTED BY", 0
 str_credit3:        .db "UNFNKNBLVBL", 0
 str_resume:         .db "RESUME", 0
+str_map:            .db "MAP", 0
+str_map_footer:     .db "1/2:BACK", 0
 str_view_size:      .db "VIEW SIZE", 0
 str_large:          .db "LARGE", 0
 str_small:          .db "SMALL", 0

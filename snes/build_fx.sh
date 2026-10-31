@@ -56,10 +56,11 @@ CC="cc65 -O --cpu 65816 -t none -I ../core -D SUPERFX -D VIEW_FX $VIEW ${CFLAGS_
 $CC --code-name RULES -o objfx/rules.s ../core/rules.c
 $CC --code-name RULES -o objfx/data.s ../core/gen/data.c
 $CC -o objfx/view.s ../view/view.c
+$CC -o objfx/automap.s ../core/automap.c
 for c in glue campaign vdata video save fx ui; do $CC -o objfx/$c.s src/$c.c; done
 # assemble the compiled C
 OBJS=""
-for c in rules data view glue campaign vdata video save fx ui; do
+for c in rules data view automap glue campaign vdata video save fx ui; do
     ca65 --cpu 65816 -o objfx/$c.o objfx/$c.s
     OBJS="$OBJS objfx/$c.o"
 done
