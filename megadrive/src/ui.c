@@ -343,22 +343,66 @@ static void hud_init(void)
 /* ------------------------------------------------------------ the picture */
 static struct robj objs[MAX_ROBJ];      /* the things to draw (collect_things) */
 
-/* the renderer's list of things: every entity on the map (linked into its
-   cell) with a definition, at its cell's centre, with its def's sprite
-   slot. At most MAX_ROBJ. Returns how many. */
-static u8 collect_things(void)
+/* the cells whose things can show from view (gx, gz, facing), ORed into
+   bits (bit (cell & 7) of byte cell >> 3): the map's list for the view
+   (r_vis_index / r_vis: a word offset, or $FFFF for every cell, then cell
+   numbers ended by a negative word), as the renderer reads it (vis_of) */
+static void add_vis(u8 *bits, u8 gx, u8 gz, u8 facing)
 {
+    u16 o = r_vis_index[(((u16)gz << 5) + gx) * 4 + (facing & 3)], c;
+    const u16 *p;
+    u8 i = 0;
+    if (o == 0xFFFF) {
+        do bits[i] = 0xFF; while (++i < 128);
+        return;
+    }
+    for (p = r_vis + o; !((c = *p) & 0x8000); p++) bits[c >> 3] |= (u8)(1 << (c & 7));
+}
+
+/* the renderer's list of things: the entities on the map (linked into
+   their cell, with a definition) in a cell whose things can show from
+   view a or view b (the same view twice for a still picture; both ends
+   of a step or turn), at the cell's centre, with the def's sprite slot.
+   When more than MAX_ROBJ can show, the nearest to view b's cell are
+   kept. Returns how many.
+   (Until 0.1.1 it took the first MAX_ROBJ entities of the whole map,
+   seen or not: on a map with more than that, most were never drawn.) */
+static u8 robj_d[MAX_ROBJ];             /* each kept thing's distance from view b (cells, squared, capped) */
+static u8 collect_things2(u8 ax, u8 az, u8 af, u8 bx, u8 bz, u8 bf)
+{
+    static u8 bits[128];
     u16 i;
-    u8 n = 0;
-    for (i = 0; i < n_ents && n < MAX_ROBJ; i++) {
-        u8 f = S.e_flags[i];
+    u8 n = 0, k;
+    for (k = 0; k < 128; k++) bits[k] = 0;
+    add_vis(bits, ax, az, af);
+    if (ax != bx || az != bz || af != bf) add_vis(bits, bx, bz, bf);
+    for (i = 0; i < n_ents; i++) {
+        u8 f = S.e_flags[i], ex = S.e_x[i], ez = S.e_z[i], d, slot;
+        u16 cell = ((u16)ez << 5) + ex, dd;
+        s8 dx = (s8)(ex - bx), dz = (s8)(ez - bz);
         if (!(f & F_LINKED) || S.e_def[i] == NO_DEF) continue;
-        objs[n].x = S.e_x[i] * 64 + 32;
-        objs[n].z = S.e_z[i] * 64 + 32;
-        objs[n].spr = r_def_spr[S.e_def[i]];
-        n++;
+        if (!(bits[cell >> 3] & (1 << (cell & 7)))) continue;
+        dd = (u16)(dx * dx) + (u16)(dz * dz);
+        d = dd > 255 ? 255 : (u8)dd;
+        if (n < MAX_ROBJ) slot = n++;
+        else {                          /* full: replace the farthest, if this one is nearer */
+            slot = 0;
+            for (k = 1; k < MAX_ROBJ; k++)
+                if (robj_d[k] > robj_d[slot]) slot = k;
+            if (d >= robj_d[slot]) continue;
+        }
+        objs[slot].x = ex * 64 + 32;
+        objs[slot].z = ez * 64 + 32;
+        objs[slot].spr = r_def_spr[S.e_def[i]];
+        robj_d[slot] = d;
     }
     return n;
+}
+
+/* the things for a still picture of view (gx, gz, facing) */
+static u8 collect_things(u8 gx, u8 gz, u8 facing)
+{
+    return collect_things2(gx, gz, facing, gx, gz, facing);
 }
 
 static u8 view_low;                 /* the view on screen is low detail */
@@ -376,7 +420,7 @@ static u8 want_detail(void)
    once both couplings are destroyed). */
 static void refresh_picture(void)
 {
-    u8 n = collect_things();
+    u8 n = collect_things(S.px, S.pz, S.facing);
     u8 low = !want_detail();
     pack_portal(S.couplings >= 2), render_view(S.px, S.pz, S.facing, S.l_flags, objs, n, low ? R_LOW : 0);
     view_low = low;
@@ -405,7 +449,7 @@ static u8 animate_move(void)
     if (!cfg.smooth || turn == step) return 0;       /* step mode, or nothing / both: just draw it */
     if (step && (u8)((S.px - ox) * (S.px - ox) + (S.pz - oz) * (S.pz - oz)) != 1) return 0;   /* not to a neighbour */
     if (turn && ((S.facing - of) & 3) == 2) return 0;                                          /* a half turn */
-    n = collect_things();
+    n = collect_things2(ox, oz, of, S.px, S.pz, S.facing);   /* (seen from either end) */
     /* the destination's palettes first (no picture) */
     pack_portal(S.couplings >= 2), render_view(S.px, S.pz, S.facing, S.l_flags, objs, n, R_LOW | R_PALETTE_ONLY);
     start = frame_count;
@@ -885,7 +929,8 @@ static u16 next_edge(void)
         edge = cur_pad & ~prev_pad;     /* pressed now, not last frame */
         prev_pad = cur_pad;
         if (dbg_req) {                  /* (tests: draw a given view, wait for it) */
-            u8 n = collect_things();
+            u8 n = dbg_req == 1 ? collect_things(dbg_arg[0], dbg_arg[1], dbg_arg[2])
+                               : collect_things2(dbg_arg[0], dbg_arg[1], dbg_arg[2], dbg_arg[4], dbg_arg[5], dbg_arg[6]);
             if (dbg_req == 1)
                 render_view(dbg_arg[0], dbg_arg[1], dbg_arg[2], S.l_flags, objs, n, dbg_arg[3]);
             else
