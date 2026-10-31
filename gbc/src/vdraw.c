@@ -529,6 +529,7 @@ void draw_walls(void)
    ds_h, data rows ds_top .. ds_top + ds_len - 1 at block offset ds_data,
    remap spr_rm[ds_s]) over the picture; 255 texels are holes. Called
    after draw_walls, back to front. Runs with bank 3 mapped */
+static u16 spr_h, spr_dv = 0;          /* the last sprite height, 16384 / it */
 void draw_spr(void)
 {
     u8 b = _current_bank, s = VR.ds_s, top = VR.ds_top, n = VR.ds_len, end;
@@ -548,7 +549,11 @@ void draw_spr(void)
     SWITCH_ROM(b);
     /* the rows whose texture row is top .. end - 1: v(y) = dv / 2 + (y - y0) dv */
     y0 = VIEW_HALF_H - (s16)((h * 7 + 8) >> 4);
-    dv = gb_div_u16(16384, h);
+    if (h != spr_h) {                   /* (a billboard's columns share their height) */
+        spr_h = h;
+        spr_dv = gb_div_u16(16384, h);
+    }
+    dv = spr_dv;
     {
         u16 a = (u16)top << 8, b = (u16)end << 8, h2 = dv >> 1;
         s16 k = a > h2 ? (s16)gb_div_u16(a - h2 + dv - 1, dv) : 0;   /* the first y - y0 at top */

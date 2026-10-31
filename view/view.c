@@ -181,7 +181,14 @@ static u8 col_w[VIEW_W];                /* its index in vw[] (0xFF: none) */
 /* ------------------------------------------------------------ colours */
 /* the Mega Drive's 8 levels per colour channel, as 0..255 */
 static const u8 LEV[8] = {0, 52, 87, 116, 144, 172, 206, 255};
+#if !defined(__CC65__) && VIEW_W >= 128
+/* 9-bit colour -> slot (0: none yet): needed only while view_map_load
+   runs, when col_tex (512 bytes or more) is free - so it lends its room
+   (the Game Boy Color's view RAM is one 8 KB bank) */
+#define slot_of ((u8 *)col_tex)
+#else
 static u8 slot_of[512];                 /* 9-bit colour -> slot (0: none yet) */
+#endif
 
 /* C9: a Mega Drive colour (0000 BBB0 GGG0 RRR0) as 9 bits: R | G << 3 | B << 6 */
 #define C9(c) ((((c) >> 1) & 7) | (((c) >> 2) & 0x38) | (((c) >> 3) & 0x1C0))
@@ -234,6 +241,19 @@ static void fx_cache_load(void);
 #endif
 #endif
 
+#if !defined(VIEW_FX) && !defined(__CC65__)
+/* per prop of the map (the first SCEN_CELLS): its cell, | 0x8000 for a
+   decal (view_map_load), so view_prepare skips a prop whose cell is not
+   seen without reading the prop from the pack */
+#define SCEN_CELLS 136
+static u16 scen_cell[SCEN_CELLS];
+/* the last sprite whose column table was read (0xFF none; view_map_load
+   forgets it): per column (top << 8) | length, so a billboard's columns
+   read the pack once */
+static u8 sc_spr = 0xFF;
+static s16 sc_cols[64];
+#endif
+
 /* view_map_load: makes `map` the map the view draws. Reads its pack
  * (vd_pack into P), builds the palette from scratch: every texture's 32
  * and every sprite's 16 colours get a slot (tex_rm, spr_rm, view_cgram,
@@ -254,6 +274,14 @@ void view_map_load(u8 map)
         tex_addr[i] = P.tex_bank + vd_u32(P.tex_off + 4 * i);
         for (k = 0; k < 32; k++) tex_rm[i][k] = colour_slot(vd_u16(P.tex_pal + 64 * i + 2 * k));
     }
+#if !defined(VIEW_FX) && !defined(__CC65__)
+    sc_spr = 0xFF;                      /* (sprite_col's table: another map's) */
+    for (i = 0; i < P.n_scenery && i < SCEN_CELLS; i++) {
+        s16 w[4];                       /* x, z, sprite slot, info */
+        vd_words(P.scenery + 10 * (u32)i, w, 4);
+        scen_cell[i] = (((u16)w[1] >> 6) << 5 | ((u16)w[0] >> 6)) | (w[3] & 0x78 ? 0x8000 : 0);
+    }
+#endif
     for (i = 0; i < P.n_spr && i < V_MAX_SPR; i++) {
         /* the same for the sprites: 16 colours each */
         spr_addr[i] = P.spr_bank + vd_u32(P.spr_off + 4 * i);
@@ -669,17 +697,32 @@ static void sprite_col(u8 x, u16 hq, u8 c, u8 spr)
 #ifdef FX_DEBUG
     { extern int printf(const char *, ...); printf("col %d %u %d %d\n", x, hq, c, spr); }
 #endif
-    u32 a = P.spr_cols + (u16)spr * 128 + (u16)c * 2;
     u8 top, len;
     u16 off;
 #ifdef VIEW_FX
+    u32 a = P.spr_cols + (u16)spr * 128 + (u16)c * 2;
     if (n_sc >= FX_MAX_SC) return;
     n_sc++;
-#endif
     top = vd_u8(a);
     len = vd_u8(a + 1);
     if (!len) return;
     off = vd_u16(P.spr_coff + (u16)spr * 128 + (u16)c * 2);
+#elif defined(__CC65__)
+    u32 a = P.spr_cols + (u16)spr * 128 + (u16)c * 2;
+    top = vd_u8(a);
+    len = vd_u8(a + 1);
+    if (!len) return;
+    off = vd_u16(P.spr_coff + (u16)spr * 128 + (u16)c * 2);
+#else
+    if (sc_spr != spr) {                /* (another sprite: its table) */
+        vd_words(P.spr_cols + (u16)spr * 128, sc_cols, 64);
+        sc_spr = spr;
+    }
+    top = (u8)((u16)sc_cols[c] >> 8);
+    len = (u8)sc_cols[c];
+    if (!len) return;
+    off = vd_u16(P.spr_coff + (u16)spr * 128 + (u16)c * 2);
+#endif
     ds_x = x;
     ds_h = (hq >> 4) + ((hq & 15) >= 8);       /* ((u32)hq + 8) >> 4 */
     if (!ds_h) return;
@@ -706,9 +749,14 @@ static void sprite_col(u8 x, u16 hq, u8 c, u8 spr)
 static void draw_billboard(struct pthing *p)
 {
     s16 x, c, x1 = p->x1 < strip_x1 ? p->x1 : strip_x1;
-    for (x = p->x0 > strip_x0 ? p->x0 : strip_x0; x < x1; x++) {     /* (its columns in the strip) */
+    s32 v, dv;
+    x = p->x0 > strip_x0 ? p->x0 : strip_x0;    /* (its columns in the strip) */
+    if (x >= x1) return;
+    v = MUL_W(2 * x + 1 - VIEW_W, p->d);       /* (2x + 1 - VIEW_W) d, stepped by 2 d a column */
+    dv = (s32)p->d * 2;
+    for (; x < x1; x++, v += dv) {
         if (p->hq < col_hq[x]) continue;
-        c = (s16)CANVAS_OF(MUL_W(2 * x + 1 - VIEW_W, p->d)) - p->l + 32;
+        c = (s16)CANVAS_OF(v) - p->l + 32;
         if (c >= 0 && c <= 63) sprite_col((u8)x, p->hq, (u8)c, p->spr);
     }
 }
@@ -1456,6 +1504,12 @@ void view_prepare(void)                 /* (everything but the drawing: view_dra
     build_vis(view);
     n_pt = 0;
     for (k = 0; k < P.n_scenery; k++) {
+        /* (a prop that is not a decal, in a cell not seen: add_billboard
+           would drop it - not read at all) */
+        if (k < SCEN_CELLS) {
+            u16 c = scen_cell[k];
+            if (!(c & 0x8000) && !(vis[c >> 3] & (1 << (c & 7)))) continue;
+        }
         /* x, z, sprite slot, info, hiding cell (-1: never hidden) */
         vd_words(P.scenery + 10 * (u32)k, s, 5);
         if (s[4] >= 0 && (S.static_hidden[(u16)s[4] >> 3] & (1 << (s[4] & 7)))) continue;
@@ -1463,9 +1517,14 @@ void view_prepare(void)                 /* (everything but the drawing: view_dra
         else add_billboard(s[0], s[1], (u8)s[2]);
     }
     for (k = 0; k < n_ents; k++) {
-        u8 fl = S.e_flags[k], d = S.e_def[k];
+        u8 fl = S.e_flags[k], d = S.e_def[k], x;
         if (!(fl & F_LINKED) || d == 0xFF) continue;
-        add_billboard((s16)S.e_x[k] * 64 + 32, (s16)S.e_z[k] * 64 + 32, vd_u8(P.def_spr + d));   /* at its cell's centre */
+        x = S.e_x[k];
+        {
+            u16 c = ((u16)S.e_z[k] << 5) | x;   /* (its cell not seen: dropped by add_billboard anyway) */
+            if (!(vis[c >> 3] & (1 << (c & 7)))) continue;
+        }
+        add_billboard((s16)x * 64 + 32, (s16)S.e_z[k] * 64 + 32, vd_u8(P.def_spr + d));   /* at its cell's centre */
     }
     sort_things();                      /* far to near */
     PROF(3);
