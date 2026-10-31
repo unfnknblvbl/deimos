@@ -43,6 +43,10 @@
 #include "plat.h"
 #include "../../view/vdata.h"
 
+/* ticks: GBDK's count of vertical blanks (view.c's VIEW_PROF timing
+   points; here in bank 0, so the banked view can call it plainly) */
+u16 ticks(void) { return sys_time; }
+
 /* ------------------------------------------------------------ the ROM's data */
 /* block offset -> its bank (offsets under 4 MB) and its address there:
    bank = DATA_BANK0 + off / 16384 (bits 16..21 of off times 4, plus bits

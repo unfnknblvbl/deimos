@@ -473,18 +473,19 @@ static void src_at(u32 a, u8 n)
     }
 }
 
-/* view.h's hook: the walls of every column (VR.col_h, col_t, col_tex,
-   computed by view.c) into the picture, the rest of each column the
-   backdrop (0). A new map's remaps are made into pixel values first. Runs
-   with bank 3 mapped and leaves it so; the ROM bank is restored */
+/* view.h's hook: the walls of view_draw's columns (VR.strip_x0 ..
+   strip_x1 - 1; VR.col_h, col_t, col_tex, computed by view.c) into the
+   picture, the rest of each column the backdrop (0). A new map's remaps
+   are made into pixel values first. Runs with bank 3 mapped and leaves it
+   so; the ROM bank is restored */
 void draw_walls(void)
 {
-    u8 x, b = _current_bank;
+    u8 x, b = _current_bank, x1 = VR.strip_x1;
     if (vd_conv_map != (u8)VR.cur_map_loaded) {
         vd_conv_remaps();               /* (vdraw_map.c: the remaps -> pixel values) */
         hr_is = 0xFF;                   /* (HR's copy is stale) */
     }
-    for (x = 0; x < VIEW_W; x++) {
+    for (x = VR.strip_x0; x < x1; x++) {
         u16 h = VR.col_h[x], dv;
         s16 y0, y1, k0;
         u8 *col, t;
@@ -609,24 +610,30 @@ static u8 fam_of(const u8 *t)        /* t: the tile's first column, first row */
    bank 3 mapped */
 void vd_tiles(void)
 {
-    u8 tx, ty, f[12];
-    for (tx = 0; tx < 16; tx++) {
-        u8 *c0;
-        SWITCH_RAM(FB_BANK + (tx >> 3));
-        c0 = FB_COL(tx * 8);
-        for (ty = 0; ty < 12; ty++) {
-            vs_src = (u16)(c0 + ty * 8 + 7);    /* (the tile's last row, first column) */
-            vs_dst = (u16)(buf + ty * 16 + 16); /* (the end of its 16 bytes in buf) */
-            tile8();                    /* (8 x 8 pixels -> a Game Boy tile) */
-            f[ty] = fam_of(c0 + ty * 8);
-        }
-        SWITCH_RAM(TILE_BANK);
-        memcpy((u8 *)0xA000 + (u16)tx * 192, buf, 192);
-        for (ty = 0; ty < 12; ty++) {
-            u8 *a = (u8 *)0xA000 + VD_ATTR + ty * 16 + tx;
-            a[0] = 2 + f[ty] + (ty >= 6 ? 3 : 0);   /* (tile rows 6..11 are below the horizon: picture row 48) */
-            a[192] = a[0] | 0x08;       /* (the second picture's: VRAM bank 1) */
-        }
+    u8 tx;
+    for (tx = 0; tx < 16; tx++) vd_tiles_col(tx);
+}
+
+/* vd_tiles for column of tiles tx (0..15) alone: its 12 tiles at
+   $A000 + tx * 192 in bank 6 and its attributes; leaves bank 3 mapped */
+void vd_tiles_col(u8 tx)
+{
+    u8 ty, f[12];
+    u8 *c0;
+    SWITCH_RAM(FB_BANK + (tx >> 3));
+    c0 = FB_COL(tx * 8);
+    for (ty = 0; ty < 12; ty++) {
+        vs_src = (u16)(c0 + ty * 8 + 7);    /* (the tile's last row, first column) */
+        vs_dst = (u16)(buf + ty * 16 + 16); /* (the end of its 16 bytes in buf) */
+        tile8();                        /* (8 x 8 pixels -> a Game Boy tile) */
+        f[ty] = fam_of(c0 + ty * 8);
+    }
+    SWITCH_RAM(TILE_BANK);
+    memcpy((u8 *)0xA000 + (u16)tx * 192, buf, 192);
+    for (ty = 0; ty < 12; ty++) {
+        u8 *a = (u8 *)0xA000 + VD_ATTR + ty * 16 + tx;
+        a[0] = 2 + f[ty] + (ty >= 6 ? 3 : 0);   /* (tile rows 6..11 are below the horizon: picture row 48) */
+        a[192] = a[0] | 0x08;           /* (the second picture's: VRAM bank 1) */
     }
     SWITCH_RAM(VIEW_BANK);
 }

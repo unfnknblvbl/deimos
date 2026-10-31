@@ -91,6 +91,13 @@ void view_map_load(u8 map);
 /* draws the view from the state S (the player's cell and facing, the
    doors, the things) */
 void view_render(void);
+/* the same in two parts (the fixed camera, not on the SNES): view_prepare
+   works out the walls and the things; view_draw(x0, x1) draws columns
+   x0 .. x1 - 1 of it (the platform's draw_walls draws strip_x0 ..
+   strip_x1 - 1). Strips drawn in any order make the same picture. */
+void view_prepare(void);
+void view_draw(u8 x0, u8 x1);
+extern u8 strip_x0, strip_x1;
 
 /* the map's palette: view_n_colours slots used from 32; the floor and
    ceiling colours; per texture its 32 colours' slots, per sprite its 16 */

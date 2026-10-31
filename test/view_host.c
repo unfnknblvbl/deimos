@@ -142,10 +142,15 @@ static void column(u8 x, u16 h, u32 data, u8 top, u8 len, const u8 *rm, u8 sprit
 /* view.h's hooks: every wall column (the buffer cleared first), one sprite column */
 void draw_walls(void)
 {
-    u8 x;
-    memset(fb, 0, sizeof fb);
-    for (x = 0; x < VIEW_W; x++)
+    u8 x, x0 = 0, x1 = VIEW_W, y;
+#ifndef VIEW_FX
+    x0 = strip_x0;                      /* (the fixed camera: view_draw's strip) */
+    x1 = strip_x1;
+#endif
+    for (x = x0; x < x1; x++) {
+        for (y = 0; y < FB_ROWS; y++) fb[FB_OFF(x, y)] = 0;     /* (the backdrop) */
         if (col_h[x]) column(x, col_h[x], col_tex[x], 0, 64, tex_rm[col_t[x]], 0);
+    }
 }
 
 void draw_spr(void)
@@ -197,6 +202,16 @@ int main(int argc, char **argv)
     if (argc >= 11) {                   /* the free camera: cx cz angle */
         view_camera((s16)atoi(argv[8]), (s16)atoi(argv[9]), (u8)atoi(argv[10]));
         view_render_cam();
+    } else
+#endif
+#ifndef VIEW_FX
+    if (getenv("VIEW_STRIPS")) {        /* (a test: drawn 8 columns at a time, from the middle out) */
+        u8 k, n = VIEW_W / 8;
+        view_prepare();
+        for (k = 0; k < n; k++) {
+            u8 st = (k & 1) ? n / 2 + k / 2 : n / 2 - 1 - k / 2;
+            view_draw(st * 8, st * 8 + 8);
+        }
     } else
 #endif
     view_render();                      /* (view.c: calls draw_walls, draw_spr) */

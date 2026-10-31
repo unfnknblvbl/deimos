@@ -496,22 +496,42 @@ static void project_walls(u16 pvs)
  * t the position along the wall (t8_of, 0..255). */
 static void column_params(void)
 {
-    s16 x;
-    for (x = 0; x < VIEW_W; x++) {
+    u8 x = 0;
+    /* (m2 and num2 are linear in x: along a run of columns of the same
+       wall they are stepped by 2 da and -2 dd, in 16 bits as m2_at and
+       num2_at keep them, so the same values without a product a column) */
+    while (x < VIEW_W) {
+        u8 wi = col_w[x];
         const struct vwall *w;
-        u8 t8, t;
-        s16 u;
-        if (col_w[x] == 0xFF || col_hq[x] < 8) {
-            col_h[x] = 0;
+        u16 m2, n2, dm, dn;
+        u32 base;
+        u8 t;
+        if (wi == 0xFF) {
+            col_h[x++] = 0;
             continue;
         }
-        w = &vw[col_w[x]];
-        t8 = t8_of(m2_at(x, w->da, w->la), num2_at(x, w->dd, w->dl));
-        u = (w->ua + (((s16)t8 * w->du) >> 8)) & 63;
+        w = &vw[wi];
+        m2 = (u16)m2_at(x, w->da, w->la);
+        n2 = (u16)num2_at(x, w->dd, w->dl);
+        dm = (u16)w->da << 1;
+        dn = (u16)w->dd << 1;
         t = tex_map[w->tex];
-        col_h[x] = (u16)(((u32)col_hq[x] + 8) >> 4);
-        col_t[x] = t;
-        col_tex[x] = tex_addr[t] + (u16)u * 64;
+        base = tex_addr[t];
+        do {
+            u16 hq = col_hq[x];
+            if (hq < 8)
+                col_h[x] = 0;
+            else {
+                u8 t8 = t8_of((s16)m2, (s16)n2);
+                u8 u = (u8)((w->ua + (((s16)t8 * w->du) >> 8)) & 63);
+                col_h[x] = (u16)(((u32)hq + 8) >> 4);
+                col_t[x] = t;
+                col_tex[x] = base + (u16)u * 64;
+            }
+            m2 += dm;
+            n2 -= dn;
+            x++;
+        } while (x < VIEW_W && col_w[x] == wi);
     }
 }
 #endif
@@ -530,6 +550,10 @@ u16 vprof[6];
 u16 vlog[64][4];
 u8 vlog_n;
 #endif
+
+/* the columns view_draw draws: strip_x0 .. strip_x1 - 1 (set by it; the
+   whole view unless the picture is drawn a strip at a time) */
+u8 strip_x0, strip_x1;
 
 #ifndef __CC65__
 /* ------------------------------------------------------------ things */
@@ -613,6 +637,21 @@ static void add_decal(s16 x, s16 z, u8 spr, u16 info)
     p->decal = 1;
     p->spr = spr;
     p->hq = dm > 1 ? (u16)DIV_L16(HQ_NUM, dm) : 0xFFFF;
+    /* projected now, once (the picture may be drawn a strip at a time):
+       its view-space ends in ax .. bz, its columns in x0 .. x1 (none:
+       x1 = x0) and its c in d (high half), l (low half) */
+    if (!project(p->ax, p->az, p->bx, p->bz)) {
+        p->x0 = p->x1 = 0;
+        return;
+    }
+    p->ax = q_da;
+    p->az = q_la;
+    p->bx = q_db;
+    p->bz = q_lb;
+    p->x0 = q_x0;
+    p->x1 = q_x1;
+    p->d = (s16)(q_c >> 16);
+    p->l = (s16)(u16)q_c;
 }
 
 /* sprite spr's canvas column c at screen column x, height from hq
@@ -666,8 +705,8 @@ static void sprite_col(u8 x, u16 hq, u8 c, u8 spr)
  * column's ray crosses the sprite's plane, from its left edge (0..63). */
 static void draw_billboard(struct pthing *p)
 {
-    s16 x, c;
-    for (x = p->x0; x < p->x1; x++) {
+    s16 x, c, x1 = p->x1 < strip_x1 ? p->x1 : strip_x1;
+    for (x = p->x0 > strip_x0 ? p->x0 : strip_x0; x < x1; x++) {     /* (its columns in the strip) */
         if (p->hq < col_hq[x]) continue;
         c = (s16)CANVAS_OF(MUL_W(2 * x + 1 - VIEW_W, p->d)) - p->l + 32;
         if (c >= 0 && c <= 63) sprite_col((u8)x, p->hq, (u8)c, p->spr);
@@ -681,13 +720,22 @@ static void draw_billboard(struct pthing *p)
 static void draw_decal(struct pthing *p)
 {
     s16 x, dd, dl;
-    if (!project(p->ax, p->az, p->bx, p->bz)) return;
+    if (p->x1 <= p->x0 || p->x1 <= strip_x0 || p->x0 >= strip_x1) return;    /* (nothing in the strip) */
+    q_da = p->ax;                       /* (the projection add_decal made) */
+    q_la = p->az;
+    q_db = p->bx;
+    q_lb = p->bz;
+    q_x0 = p->x0;
+    q_x1 = p->x1;
+    q_c = ((s32)p->d << 16) | (u16)p->l;
     dd = q_db - q_da;
     dl = q_lb - q_la;
     hq_ramp();
     for (x = q_x0; x < q_x1; x++, q_hq += q_step) {
         u16 h = (u16)(q_hq >> 8);
         u8 t8;
+        if (x < strip_x0) continue;     /* (the strip's columns only) */
+        if (x >= strip_x1) break;
         if (!h || (u32)h + (h >> 6) < col_hq[x]) continue;      /* decals win ties */
         t8 = t8_of(m2_at(x, q_da, q_la), num2_at(x, dd, dl));
         sprite_col((u8)x, h, t8 >> 2, p->spr);
@@ -1336,15 +1384,20 @@ void view_render_cam(void)
     fx_draw();
 }
 #else
-/* view_render (fixed-camera build): draws the view from the player's
- * cell and facing. Loads the map if S.map changed; sets the portal's
+/* view_render / view_prepare (fixed-camera build): draws the view from
+ * the player's cell and facing (view_prepare: all but the drawing, which
+ * view_draw does, a strip of columns at a time if wanted). Loads the map if S.map changed; sets the portal's
  * texture swaps; places the camera 16 units behind the cell's centre;
  * the walls (vcore.s's vc_walls on the SNES, else project_walls and
  * column_params) then draw_walls; then the things: the scenery not taken
  * away and every linked entity with a def, those in the view's vis
  * cells, sorted far to near and drawn (vcore.s's vc_things on the
  * SNES). PROF(n) mark the stages for profiling builds. */
+#ifdef __CC65__
 void view_render(void)
+#else
+void view_prepare(void)                 /* (everything but the drawing: view_draw draws) */
+#endif
 {
     u8 f = S.facing & 3, i;
     u16 view = (((u16)S.pz << 5) + S.px) * 4 + f, k;    /* this (cell, facing) */
@@ -1374,16 +1427,9 @@ void view_render(void)
     vc_lflags = S.l_flags;
     vc_walls();                         /* vcore.s: col_hq ... col_tex */
     PROF(1);
-#else
-    project_walls(vd_u16(P.pvs_index + 2 * (u32)view));     /* this view's pvs list */
-    PROF(1);
-    column_params();
-#endif
     PROF(2);
     draw_walls();                       /* the platform draws the columns */
     PROF(3);
-
-#ifdef __CC65__
     {
         u16 at = vd_u16(P.vis_index + 2 * (u32)view);
         vc_vis = at == 0xFFFF ? 0xFFFFFFFFUL : P.vis + 2 * (u32)at;
@@ -1401,7 +1447,12 @@ void view_render(void)
     vc_nents = n_ents;
     PROF(4);
     vc_things();                        /* vcore.s: lists, sorts and draws them */
+    PROF(5);
 #else
+    project_walls(vd_u16(P.pvs_index + 2 * (u32)view));     /* this view's pvs list */
+    PROF(1);
+    column_params();
+    PROF(2);
     build_vis(view);
     n_pt = 0;
     for (k = 0; k < P.n_scenery; k++) {
@@ -1417,13 +1468,34 @@ void view_render(void)
         add_billboard((s16)S.e_x[k] * 64 + 32, (s16)S.e_z[k] * 64 + 32, vd_u8(P.def_spr + d));   /* at its cell's centre */
     }
     sort_things();                      /* far to near */
-    PROF(4);
+    PROF(3);
+#endif
+}
+
+#ifndef __CC65__
+/* view_draw: the prepared view's columns x0 .. x1 - 1 (VIEW_W at most):
+ * the walls (the platform's draw_walls, which draws strip_x0 ..
+ * strip_x1 - 1), then the things far to near. Drawing the strips of a
+ * view one after another gives the same picture as drawing it whole. */
+void view_draw(u8 x0, u8 x1)
+{
+    u8 i;
+    strip_x0 = x0;
+    strip_x1 = x1;
+    draw_walls();
     for (i = 0; i < n_pt; i++) {
         struct pthing *p = &pt[pt_order[i]];
         if (p->decal) draw_decal(p);
         else draw_billboard(p);
     }
-#endif
-    PROF(5);
 }
+
+/* view_render: the whole view (view_prepare, then view_draw of every column) */
+void view_render(void)
+{
+    view_prepare();
+    view_draw(0, VIEW_W);
+    PROF(4);
+}
+#endif
 #endif

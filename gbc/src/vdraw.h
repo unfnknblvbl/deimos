@@ -15,4 +15,5 @@
 extern u8 vd_conv_map;                  /* the map whose colours the remaps hold (255: none yet) */
 void vd_init(void);                     /* the picture's rows outside the view cleared, once */
 void vd_tiles(void);                    /* the picture -> 192 tiles and their palettes, in bank 6 */
+void vd_tiles_col(u8 tx);               /* the same for column of tiles tx (0..15) alone */
 #endif

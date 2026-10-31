@@ -635,20 +635,34 @@ static u16 action_bits(u8 a)
     return BUTTON_BITS[cfg.key[a]];
 }
 
-/* the options' menu: each action and its button, DEFAULTS, DONE */
+/* the options' menu: each action and its button, then (the fixed
+   camera: not the GBA's or the Virtual Boy's free camera) DRAW VIEW,
+   OUTWARD or AT ONCE, then DEFAULTS, DONE */
+#ifdef VIEW_FX
+#define OPT_DRAW 0xFF                   /* (no DRAW VIEW line) */
+#define OPT_DEFAULTS N_ACTIONS
+#else
+#define OPT_DRAW N_ACTIONS
+#define OPT_DEFAULTS (N_ACTIONS + 1)
+#endif
+#define OPT_DONE (OPT_DEFAULTS + 1)
+#define N_OPT (OPT_DONE + 1)
 static void options_draw(u8 cur)
 {
     char (*lines)[21] = menu_lines;     /* (one buffer for the menus: the work RAM is short) */
-    const char *items[8];
+    const char *items[N_OPT];
     u8 i, k;
-    for (i = 0; i < 8; i++) {
+    for (i = 0; i < N_OPT; i++) {
         const char *a, *b;
         char *d = lines[i];
         if (i < N_ACTIONS) {
             a = ACT_NAMES[i] ? ACT_NAMES[i] : gtext(TX_NOTEBOOK_ITEM);     /* (0: the game's word) */
             b = BUTTON_NAMES[cfg.key[i]];
+        } else if (i == OPT_DRAW) {
+            a = "DRAW VIEW";
+            b = cfg.outward ? "OUTWARD" : "AT ONCE";
         } else {
-            a = i == N_ACTIONS ? "DEFAULTS" : "DONE";
+            a = i == OPT_DEFAULTS ? "DEFAULTS" : "DONE";
             b = "";
         }
         for (k = 0; k < 20; k++) d[k] = ' ';
@@ -657,7 +671,7 @@ static void options_draw(u8 cur)
         for (k = 0; b[k] && 11 + k < 20; k++) d[11 + k] = b[k];
         items[i] = d;
     }
-    menu_draw(gtext(TX_OPTIONS_ITEM), items, 8, cur, 3, cur < N_ACTIONS ? "PRESS A BUTTON TO SET" : "A:CHANGE  START:DONE");
+    menu_draw(gtext(TX_OPTIONS_ITEM), items, N_OPT, cur, 3, cur < N_ACTIONS ? "PRESS A BUTTON TO SET" : "A:CHANGE  START:DONE");
 }
 
 /* the options: up / down choose, on an action any of the 7 buttons sets
@@ -672,8 +686,8 @@ static void options_screen(void)
     for (;;) {
         u16 e = next_edge();
         if (e & PAD_START) break;
-        if (e & PAD_UP) cur = cur ? cur - 1 : 7;
-        else if (e & PAD_DOWN) cur = cur < 7 ? cur + 1 : 0;
+        if (e & PAD_UP) cur = cur ? cur - 1 : N_OPT - 1;
+        else if (e & PAD_DOWN) cur = cur < N_OPT - 1 ? cur + 1 : 0;
         else if (cur < N_ACTIONS) {
             for (b = 0; b < N_BUTTONS; b++)
                 if (e & BUTTON_BITS[b]) {
@@ -687,8 +701,9 @@ static void options_screen(void)
                 eng_turn_seq++;         /* (the press counts as handled for the tests) */
                 continue;
             }
-        } else if (cur == N_ACTIONS && (e & PAD_A)) settings_defaults();   /* (save.c: the default buttons) */
-        else if (cur == N_ACTIONS + 1 && (e & PAD_A)) break;
+        } else if (cur == OPT_DRAW && (e & (PAD_A | PAD_LEFT | PAD_RIGHT))) cfg.outward ^= 1;
+        else if (cur == OPT_DEFAULTS && (e & PAD_A)) settings_defaults();  /* (save.c: the default settings) */
+        else if (cur == OPT_DONE && (e & PAD_A)) break;
         else {
             eng_turn_seq++;
             continue;

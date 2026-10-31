@@ -53,6 +53,7 @@
 #include "vdraw.h"
 #include "version.h"
 #include "view_api.h"                   /* (view_gb.c's functions, banked: view.h's prototypes are not) */
+#include "save_api.h"                    /* (cfg: the settings) */
 #ifdef VIEW_PROF
 #include "../../view/vdata.h"
 #include "view_ram.h"
@@ -110,8 +111,10 @@ static u8 pal_dirty;                    /* palbuf to be written at the next vert
            1 $9C00)
    J_FLIP  show the BG map arg (0 $9800, 1 $9C00): LCDC bit 3
    J_WIN   the window at line arg (0: off)
-   J_PAL   palbuf to the palette RAM */
-enum { J_DMA = 1, J_ATTR, J_FLIP, J_WIN, J_PAL };
+   J_PAL   palbuf to the palette RAM
+   J_ACOL  the view's palettes of one column of tiles (src: 0..15) into
+           map arg (the outward drawing, a column at a time) */
+enum { J_DMA = 1, J_ATTR, J_FLIP, J_WIN, J_PAL, J_ACOL };
 struct job {
     u8 kind, sbank, vbank, arg;
     u16 src, dst, len;
@@ -214,6 +217,13 @@ static void run_jobs(void)
             SWITCH_RAM(TILE_BANK);
             VBK_REG = 1;
             for (r = 0; r < 12; r++, src += 16, dst += 32) gdma(src, dst, 16);  /* (a map row is 32 bytes) */
+        } else if (j->kind == J_ACOL) {     /* a column of the view's palettes: 12 bytes */
+            u8 r, *src = (u8 *)0xA000 + VD_ATTR + (j->arg ? 192 : 0) + j->src;
+            u8 *dst = (u8 *)((j->arg ? 0x9C00 : 0x9800) + MAP_ROW0 * 32 + 32 + j->src);
+            if (ly > 150) break;
+            SWITCH_RAM(TILE_BANK);
+            VBK_REG = 1;
+            for (r = 0; r < 12; r++, src += 16, dst += 32) *dst = *src;
         } else if (j->kind == J_FLIP) {
             if (j->arg) LCDC_REG |= 0x08;   /* (LCDC bit 3: the BG map at $9C00) */
             else LCDC_REG &= ~0x08;
@@ -252,7 +262,6 @@ void wait_vblank(void) BANKED
     pad = pad_read();                   /* (pad.c: the buttons as SNES bits, or the test's script) */
 }
 
-u16 ticks(void) { return sys_time; }    /* (GBDK's count of vertical blanks) */
 
 /* a job queued (see enum above); when the ring is full, frames pass until
    there is room */
@@ -798,8 +807,27 @@ static void upload_picture(void)
    colours go to the palettes with its first picture */
 void gfx_view(void) BANKED
 {
+    static const u8 OUTWARD[16] = {7, 8, 6, 9, 5, 10, 4, 11, 3, 12, 2, 13, 1, 14, 0, 15};
     if (scr_mode != 2) return;
     jobs_flush();                       /* (bank 6's tiles: no job reads them now) */
+    /* drawn outward (the option, as the Master System's): from the middle
+       column of tiles out, each into the picture shown as soon as it is
+       done - not with a box up, nor for a new map (its colours change) */
+    if (cfg.outward && !box_up && pal_map == (u8)S.map) {
+        u8 k;
+        SWITCH_RAM(3);                  /* (the view's variables) */
+        view_prepare();                 /* (view.c: the walls and the things worked out) */
+        for (k = 0; k < 16; k++) {
+            u8 tx = OUTWARD[k];
+            view_draw(tx * 8, tx * 8 + 8);  /* (its 8 columns) */
+            vd_tiles_col(tx);               /* (its 12 tiles and palettes, bank 6) */
+            job(J_DMA, TILE_BANK, 0xA000 + (u16)tx * 192, shown, 0x8800 + (u16)tx * 192, 192, 0);
+            job(J_ACOL, 0, tx, 0, 0, 0, shown);
+            SWITCH_RAM(3);              /* (a full job ring waited a frame: run_jobs leaves bank 1) */
+        }
+        SWITCH_RAM(1);                  /* (the level back for the core) */
+        return;
+    }
 #ifdef VIEW_PROF                        /* (build.sh XDEFS=-DVIEW_PROF: the frames each part takes) */
     {
         u16 t0 = sys_time;

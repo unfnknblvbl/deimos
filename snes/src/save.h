@@ -21,6 +21,8 @@ enum { ACT_USE, ACT_PASS, ACT_MEDKIT, ACT_PREV, ACT_NEXT, ACT_NOTES, N_ACTIONS }
 /* the settings saved in the battery RAM (block 0) */
 struct settings {
     u8 key[N_ACTIONS];              /* button index (ui.c) of each action */
+    u8 outward;                     /* 1: the view drawn from the middle out, a strip at a time (the
+                                       fixed-camera ports that do it: the SNES, the Game Boy Color) */
 };
 extern struct settings cfg;         /* the settings in use */
 

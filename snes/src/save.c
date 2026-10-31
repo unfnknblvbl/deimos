@@ -86,6 +86,7 @@ void settings_defaults(void)
 {
     u8 i;
     for (i = 0; i < N_ACTIONS; i++) cfg.key[i] = default_keys[i];
+    cfg.outward = 1;
 }
 
 /* cfg = the saved settings if they are valid and every action has its own
@@ -99,6 +100,7 @@ void settings_load(void)
             if (t.key[i] >= N_BUTTONS || (used & (1 << t.key[i]))) bad = 1;
             else used |= 1 << t.key[i];
         }
+        if (t.outward > 1) bad = 1;
         if (!bad) {
             cfg = t;
             return;
